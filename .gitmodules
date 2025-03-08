@@ -1,0 +1,19 @@
+[submodule "core"]
+	path = core
+	url = https://github.com/yourusername/emp-redis-core.git
+
+[submodule "hub"]
+	path = hub
+	url = https://github.com/yourusername/emp-redis-hub.git
+
+[submodule "worker"]
+	path = worker
+	url = https://github.com/yourusername/emp-redis-worker.git
+
+[submodule "api"]
+	path = api
+	url = https://github.com/yourusername/emp-redis-api.git
+
+[submodule "mock-env"]
+	path = mock-env
+	url = https://github.com/yourusername/emp-redis-mock-env.git
