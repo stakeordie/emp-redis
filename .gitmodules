@@ -9,11 +9,3 @@
 [submodule "worker"]
 	path = worker
 	url = https://github.com/stakeordie/emp-redis-worker.git
-
-[submodule "api"]
-	path = api
-	url = https://github.com/stakeordie/emp-redis-api.git
-
-[submodule "mock-env"]
-	path = mock-env
-	url = https://github.com/stakeordie/emp-redis-mock-env.git
