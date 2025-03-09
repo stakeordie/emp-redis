@@ -1,19 +1,19 @@
 [submodule "core"]
 	path = core
-	url = https://github.com/emprops/emp-redis-core.git
+	url = https://github.com/stakeordie/emp-redis-core.git
 
 [submodule "hub"]
 	path = hub
-	url = https://github.com/emprops/emp-redis-hub.git
+	url = https://github.com/stakeordie/emp-redis-hub.git
 
 [submodule "worker"]
 	path = worker
-	url = https://github.com/emprops/emp-redis-worker.git
+	url = https://github.com/stakeordie/emp-redis-worker.git
 
 [submodule "api"]
 	path = api
-	url = https://github.com/emprops/emp-redis-api.git
+	url = https://github.com/stakeordie/emp-redis-api.git
 
 [submodule "mock-env"]
 	path = mock-env
-	url = https://github.com/emprops/emp-redis-mock-env.git
+	url = https://github.com/stakeordie/emp-redis-mock-env.git

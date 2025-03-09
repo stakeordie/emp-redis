@@ -4,13 +4,15 @@ A distributed job queue and worker system built on Redis pub/sub.
 
 ## Repository Structure
 
-This repository is organized as a monorepo with the following Git submodules:
+This repository is organized as a monorepo with the following components:
 
 - **core/**: Shared core modules for Redis communication and WebSocket handling
+  - **client-types/**: TypeScript type definitions for client-server messages and interactions
 - **hub/**: Redis Hub service that manages job distribution and worker communication
 - **worker/**: Worker service that processes jobs
-- **api/**: API service that provides a frontend interface
-- **mock-env/**: Development environment for testing
+- **apps/**: Application-specific implementations
+  - **redis-monitor/**: A monitoring dashboard for the Redis system
+  - **mock-env/**: Development environment for testing
 
 ## Getting Started
 
@@ -35,15 +37,22 @@ Each service can be run independently:
 
 - Hub: `cd hub && python main.py`
 - Worker: `cd worker && python main.py`
-- API: `cd api && python main.py`
+
+Alternatively, you can use the mock environment to run all services together:
+
+```bash
+cd apps/mock-env
+docker-compose up
+```
 
 ## Architecture
 
 The system uses Redis pub/sub for real-time communication between components:
 
-- The Hub manages job distribution and worker status
-- Workers connect to the Hub to receive and process jobs
-- The API provides a frontend interface for monitoring and job submission
+- The **Hub** manages job distribution and worker status through a WebSocket server on port 8001
+- **Workers** connect directly to the Hub to receive and process jobs
+- **Client applications** connect directly to the Hub's WebSocket server on port 8001 for monitoring and job submission
+- The **Redis Monitor** provides a dashboard for monitoring the system in real-time
 
 ## License
 

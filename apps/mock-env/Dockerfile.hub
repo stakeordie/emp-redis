@@ -1,0 +1,42 @@
+FROM python:3.9-slim
+
+WORKDIR /app
+
+# Install Redis and Python dependencies
+RUN apt-get update && \
+    apt-get install -y redis-server && \
+    pip install --no-cache-dir fastapi uvicorn websockets aioredis redis
+
+# Create core directory
+RUN mkdir -p /core
+
+# Copy Hub code and core code
+COPY ./hub /app/
+COPY ./core /core/
+
+# Ensure Python can find the core modules
+ENV PYTHONPATH=/app:/core
+
+# Create a symlink to make imports work properly
+RUN ln -s /core/connections.py /app/core_connections.py && \
+    ln -s /core/models.py /app/core_models.py && \
+    ln -s /core/redis_service.py /app/core_redis_service.py && \
+    ln -s /core/routes.py /app/core_routes.py && \
+    ln -s /core/__init__.py /app/core_init.py && \
+    mkdir -p /app/core && \
+    ln -s /core/* /app/core/
+
+# Redis will listen on default port 6379
+# Port 8001 is exposed for direct client connections
+EXPOSE 6379 8001
+
+# Add debugging to show directory contents
+RUN echo "HUB container setup" && \
+    echo "Contents of /app:" && ls -la /app && \
+    echo "Contents of /core:" && ls -la /core && \
+    echo "Python version:" && python --version && \
+    echo "Python path:" && python -c "import sys; print(sys.path)"
+
+# Start Redis server and FastAPI application
+# Using host 0.0.0.0 to ensure the service is accessible from outside the container
+CMD ["bash", "-c", "redis-server --daemonize yes && echo 'Directory contents:' && ls -la /app && echo '/core contents:' && ls -la /core && uvicorn main:app --host 0.0.0.0 --port 8001"]

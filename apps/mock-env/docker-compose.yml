@@ -1,0 +1,51 @@
+version: '3'
+
+services:
+  # Hub Container - Redis API + Redis DB
+  # Clients will connect directly to this service on port 8001
+  hub:
+    build:
+      context: ../..  # Root of the monorepo
+      dockerfile: ./apps/mock-env/Dockerfile.hub
+    ports:
+      - "8001:8001"  # Redis API
+      - "6380:6379"  # Redis DB (mapped to different host port)
+    environment:
+      - PYTHONPATH=/app:/core  # Ensure core modules can be imported
+    networks:
+      - redis-network
+
+  # Worker Containers
+  worker1:
+    build:
+      context: ../..  # Root of the monorepo
+      dockerfile: ./apps/mock-env/Dockerfile.worker
+    environment:
+      - MACHINE_ID=worker1
+      - NUM_WORKERS=1
+      - REDIS_API_HOST=hub
+      - REDIS_API_PORT=8001
+      - PYTHONPATH=/app:/core  # Ensure core modules can be imported
+    networks:
+      - redis-network
+    depends_on:
+      - hub
+
+  worker2:
+    build:
+      context: ../..  # Root of the monorepo
+      dockerfile: ./apps/mock-env/Dockerfile.worker
+    environment:
+      - MACHINE_ID=worker2
+      - NUM_WORKERS=4
+      - REDIS_API_HOST=hub
+      - REDIS_API_PORT=8001
+      - PYTHONPATH=/app:/core  # Ensure core modules can be imported
+    networks:
+      - redis-network
+    depends_on:
+      - hub
+
+networks:
+  redis-network:
+    driver: bridge
