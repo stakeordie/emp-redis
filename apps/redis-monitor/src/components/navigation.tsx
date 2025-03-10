@@ -58,6 +58,15 @@ export function Navigation() {
           >
             WebSocket Debug
           </Link>
+          <Link 
+            href="/connections" 
+            className={cn(
+              "px-3 py-2 rounded hover:bg-gray-700",
+              pathname === '/connections' && "bg-gray-700"
+            )}
+          >
+            Connections
+          </Link>
         </div>
       </div>
     </nav>

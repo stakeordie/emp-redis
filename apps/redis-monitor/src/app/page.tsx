@@ -80,7 +80,7 @@ export default function Home() {
       </div>
       
       {/* Quick Links */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Link href="/dashboard" className="block p-6 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 transition-colors">
           <h2 className="text-xl font-semibold mb-2 text-blue-700">System Monitor</h2>
           <p className="text-blue-600 mb-4">
@@ -95,6 +95,14 @@ export default function Home() {
             Monitor WebSocket connections and messages in real-time.
           </p>
           <span className="text-purple-700 font-medium">Open WebSocket Debug →</span>
+        </Link>
+        
+        <Link href="/connections" className="block p-6 bg-green-50 hover:bg-green-100 rounded-lg border border-green-200 transition-colors">
+          <h2 className="text-xl font-semibold mb-2 text-green-700">Connection Monitor</h2>
+          <p className="text-green-600 mb-4">
+            Check the status of system connections and run connectivity tests.
+          </p>
+          <span className="text-green-700 font-medium">Open Connection Monitor →</span>
         </Link>
       </div>
     </div>

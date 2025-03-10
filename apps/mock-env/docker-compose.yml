@@ -1,9 +1,8 @@
-version: '3'
-
 services:
   # Hub Container - Redis API + Redis DB
   # Clients will connect directly to this service on port 8001
   hub:
+    container_name: hub
     build:
       context: ../..  # Root of the monorepo
       dockerfile: ./apps/mock-env/Dockerfile.hub
@@ -14,9 +13,15 @@ services:
       - PYTHONPATH=/app:/core  # Ensure core modules can be imported
     networks:
       - redis-network
+    volumes:
+      - ../../hub:/app/hub  # Mount local hub directory to /app/hub in container
+      - ../../core:/app/core  # Mount shared core code'
+    profiles:
+      - dev
 
   # Worker Containers
   worker1:
+    container_name: worker1
     build:
       context: ../..  # Root of the monorepo
       dockerfile: ./apps/mock-env/Dockerfile.worker
@@ -30,8 +35,14 @@ services:
       - redis-network
     depends_on:
       - hub
+    volumes:
+      - ../../worker:/app/worker  # Mount local worker directory to /app/worker in container
+      - ../../core:/app/core  # Mount shared core code
+    profiles:
+      - dev
 
   worker2:
+    container_name: worker2
     build:
       context: ../..  # Root of the monorepo
       dockerfile: ./apps/mock-env/Dockerfile.worker
@@ -45,6 +56,11 @@ services:
       - redis-network
     depends_on:
       - hub
+    volumes:
+      - ../../worker:/app/worker  # Mount local worker directory to /app/worker in container
+      - ../../core:/app/core  # Mount shared core code
+    profiles:
+      - dev
 
 networks:
   redis-network:
