@@ -111,7 +111,7 @@ const config = defineConfig({
             { text: "Overview", link: "/diagrams/process" },
             { text: "Architecture", link: "/diagrams/architecture" },
             { text: "Process", link: "/diagrams/process" },
-            { text: "Function Process ", link: "/diagrams/function-process" },
+            { text: "Function Process", link: "/diagrams/function-process" },
           ],
         },
       ],

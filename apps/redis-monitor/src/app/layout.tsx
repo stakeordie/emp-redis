@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { Navigation } from "@/components/navigation";
+import { RedisMonitorProvider } from "@/lib/context/RedisMonitorContext";
 import "./globals.css";
 
 // Use Inter font as our primary font
@@ -25,10 +26,12 @@ export default function RootLayout({
       <body
         className={`${inter.variable} font-sans antialiased min-h-screen bg-gray-50`}
       >
-        <Navigation />
-        <main className="container mx-auto py-6 px-4">
-          {children}
-        </main>
+        <RedisMonitorProvider>
+          <Navigation />
+          <main className="container mx-auto py-6 px-4">
+            {children}
+          </main>
+        </RedisMonitorProvider>
       </body>
     </html>
   );

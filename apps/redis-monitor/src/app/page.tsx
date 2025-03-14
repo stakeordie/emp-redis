@@ -12,29 +12,34 @@ import { getWebSocketManager } from '@/lib/websocket';
  * of the Redis Monitor application.
  */
 export default function Home() {
-  const { stats, setConnectionStatus } = useAppStore();
-  const [isClient, setIsClient] = useState(false);
-  
-  // Initialize WebSocket connection on client-side only
+  const { stats, setConnectionState } = useAppStore();
+  const [isMonitor, setIsMonitor] = useState(false);
+  console.log('🔍 Dashboard: Monitor-side state:', isMonitor);
+  // Initialize client-side state only
   useEffect(() => {
-    setIsClient(true);
+    setIsMonitor(true);
     
-    const wsManager = getWebSocketManager();
-    
-    wsManager.connect();
-    
-    // Update connection status
-    const checkConnection = () => {
-      setConnectionStatus(wsManager.isConnected() ? 'connected' : 'disconnected');
+    // Just monitor connection status without initiating a connection
+    const checkConnectionStatus = () => {
+      const monitorManager = getWebSocketManager('monitor');
+      
+      console.log("MMANAGER: ", monitorManager)
+      console.log("Stats: ", stats)
+
+      // Only update the UI state based on the current connection status
+      setConnectionState('monitor', { 
+        connected: monitorManager.isConnected(),
+        status: monitorManager.isConnected() ? 'connected' : 'disconnected'
+      });
     };
     
-    const intervalId = setInterval(checkConnection, 1000);
-    
+    const intervalId = setInterval(checkConnectionStatus, 1000);
+
+
     return () => {
       clearInterval(intervalId);
-      wsManager.disconnect();
     };
-  }, [setConnectionStatus]);
+  }, [setConnectionState]);
   
   return (
     <div className="max-w-4xl mx-auto">
@@ -51,10 +56,10 @@ export default function Home() {
         <div className="bg-white p-6 rounded-lg shadow-md">
           <h2 className="text-lg font-semibold mb-2">Workers</h2>
           <div className="flex justify-between items-center">
-            <span className="text-3xl font-bold">{isClient ? stats.workers.total : '-'}</span>
+            <span className="text-3xl font-bold">{isMonitor ? stats.workers.total : '-'}</span>
             <div className="flex flex-col text-sm text-gray-500">
-              <span>Active: {isClient ? stats.workers.active : '-'}</span>
-              <span>Idle: {isClient ? stats.workers.idle : '-'}</span>
+              <span>Active: {isMonitor ? stats.workers.active : '-'}</span>
+              <span>Idle: {isMonitor ? stats.workers.idle : '-'}</span>
             </div>
           </div>
         </div>
@@ -62,11 +67,11 @@ export default function Home() {
         <div className="bg-white p-6 rounded-lg shadow-md">
           <h2 className="text-lg font-semibold mb-2">Jobs</h2>
           <div className="flex justify-between items-center">
-            <span className="text-3xl font-bold">{isClient ? stats.jobs.total : '-'}</span>
+            <span className="text-3xl font-bold">{isMonitor ? stats.jobs.total : '-'}</span>
             <div className="flex flex-col text-sm text-gray-500">
-              <span>Pending: {isClient ? stats.jobs.pending : '-'}</span>
-              <span>Processing: {isClient ? stats.jobs.processing : '-'}</span>
-              <span>Completed: {isClient ? stats.jobs.completed : '-'}</span>
+              <span>Pending: {isMonitor ? stats.jobs.pending : '-'}</span>
+              <span>Processing: {isMonitor ? stats.jobs.processing : '-'}</span>
+              <span>Completed: {isMonitor ? stats.jobs.completed : '-'}</span>
             </div>
           </div>
         </div>
@@ -74,7 +79,7 @@ export default function Home() {
         <div className="bg-white p-6 rounded-lg shadow-md">
           <h2 className="text-lg font-semibold mb-2">Clients</h2>
           <div className="flex justify-between items-center">
-            <span className="text-3xl font-bold">{isClient ? stats.clients.total : '-'}</span>
+            <span className="text-3xl font-bold">{isMonitor ? stats.clients.total : '-'}</span>
           </div>
         </div>
       </div>
