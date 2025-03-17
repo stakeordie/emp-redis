@@ -94,6 +94,7 @@ class Messages {
      * @returns {Object} - Formatted submit job message
      */
     static createSubmitJobMessage(jobType, priority, payload, timestamp) {
+        console.log('Creating submit job message:', { jobType, priority, payload, timestamp: this.getTimestamp(timestamp) })
         return {
             type: this.TYPE.SUBMIT_JOB,
             job_type: jobType,

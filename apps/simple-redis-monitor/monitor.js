@@ -171,7 +171,6 @@ function connect() {
     }
     
     // Log connection attempt with IDs
-    console.log(`Connecting with monitor ID: ${monitorId}, client ID: ${clientId}, and worker ID: ${workerId}`);
     addLogEntry(`Initializing connections with timestamp-based IDs (${new Date(timestamp).toLocaleTimeString()})`, 'info');
     
     // Connect monitor socket
@@ -428,9 +427,6 @@ function updateConnectionUI() {
             elements.workerIdDisplay.textContent = 'Not connected';
         }
     }
-    
-    // Log connection status changes
-    console.log(`Connection status update: ${statusDetails.join(', ')}`);
     
     // Update connection status indicator and text with null checks
     if (elements.statusIndicator) {
@@ -824,7 +820,6 @@ function processMessage(data, source) {
                     break;
                 default:
                     // Log unknown message types with more detail
-                    console.log(`Unhandled ${source} message type:`, rawMessage.type, rawMessage);
                     addLogEntry(`Received unhandled ${source} message type: ${rawMessage.type}`, 'warning');
                     // Store unhandled message types for debugging
                     if (!state.unhandledMessageTypes) {
@@ -889,14 +884,6 @@ function handleRawMessage(message, source = 'unknown') {
  */
 function updateStats(statsData) {
     try {
-        // Log the stats data for debugging with more detail
-        console.log('Updating stats with data:', sta=tsData);
-        console.log('Stats data structure:', JSON.stringify(statsData, null, 2));
-        
-        // Log specific job-related structures
-        console.log('Jobs data:', statsData.jobs);
-        console.log('Jobs list exists?', statsData.jobs && statsData.jobs.list ? 'Yes' : 'No');
-        console.log('Jobs active_jobs exists?', statsData.jobs && statsData.jobs.active_jobs ? 'Yes' : 'No');
         
         // Extract stats from the response
         const queues = statsData.queues || {};
@@ -929,7 +916,6 @@ function updateStats(statsData) {
         // Update job information if available
         // Check for active_jobs array instead of list object
         if (statsData.jobs && statsData.jobs.active_jobs && Array.isArray(statsData.jobs.active_jobs)) {
-            console.log('[DEBUG] Processing active_jobs array:', statsData.jobs.active_jobs);
             
             // Process each job in the active_jobs array
             statsData.jobs.active_jobs.forEach(jobData => {
@@ -940,8 +926,6 @@ function updateStats(statsData) {
                     return; // Skip this job
                 }
                 
-                console.log(`[$$$$$$$$$$$$$$$DEBUG] Processing job ${jobId} with data:`, jobData);
-                
                 // Update or add job to state
                 state.jobs[jobId] = {
                     ...state.jobs[jobId],
@@ -951,8 +935,6 @@ function updateStats(statsData) {
                     priority: parseInt(jobData.priority || 0),
                     position: jobData.position || parseInt(jobData.priority || 0)  // Use priority as position if position is not available
                 };
-                
-                console.log(`[DEBUG] Updated state for job ${jobId}:`, state.jobs[jobId]);
             });
         } else {
             console.log('[DEBUG] No active_jobs array found in stats data');
@@ -1036,7 +1018,7 @@ function handleAckMessage(parsedMessage, rawMessage, source = 'unknown') {
         addLogEntry(`Job submission acknowledged via ${source} connection (ID: ${originalId})`, 'success');
     } else if (originalType === 'stats_broadcast') {
         // For stats broadcasts, don't log to avoid cluttering the UI
-        console.log(`Received acknowledgment for stats broadcast via ${source}: ${originalId}`);
+        //console.log(`Received acknowledgment for stats broadcast via ${source}: ${originalId}`);
     } else {
         // For other message types, show a normal info message
         addLogEntry(`Received acknowledgment for ${originalType} message via ${source} (ID: ${originalId})`, 'info');
@@ -1060,8 +1042,6 @@ function handleStatsBroadcast(parsedMessage, rawMessage, source = 'unknown') {
     
     // Log the received broadcast with detailed information
     addLogEntry(`Received stats broadcast with ${Object.keys(workers).length} workers and ${connections.clients ? connections.clients.length : 0} clients`, 'info');
-    console.log('Stats broadcast details:', message);
-    console.log('Active workers:', system.workers.active_workers);
     
     // Update workers in state
     state.workers = {};
@@ -1078,7 +1058,6 @@ function handleStatsBroadcast(parsedMessage, rawMessage, source = 'unknown') {
             // Add any additional worker data that might be useful
             lastSeen: new Date().toLocaleTimeString()
         };
-        console.log(`Updated worker ${workerId} in state:`, state.workers[workerId]);
     });
     
     // Update client connections
@@ -1127,7 +1106,6 @@ function handleStatsBroadcast(parsedMessage, rawMessage, source = 'unknown') {
         
         // Process active jobs if available
         if (system.jobs && system.jobs.active_jobs && Array.isArray(system.jobs.active_jobs)) {
-            console.log('[DEBUG] Processing active_jobs array from stats broadcast:', system.jobs.active_jobs);
             
             // First, separate jobs into priority levels
             const jobsByPriority = {};
@@ -1141,14 +1119,12 @@ function handleStatsBroadcast(parsedMessage, rawMessage, source = 'unknown') {
             
             // Get priority levels and sort them in descending order (highest priority first)
             const priorityLevels = Object.keys(jobsByPriority).map(Number).sort((a, b) => b - a);
-            console.log('[DEBUG] Priority levels in descending order:', priorityLevels);
             
             // Process jobs in priority order, then by creation time within each priority
             let position = 1; // Start positions at 1
             
             // Process each priority level in descending order
             priorityLevels.forEach(priority => {
-                console.log(`[DEBUG] Processing jobs with priority ${priority}`);
                 
                 // Sort jobs within this priority by creation time (oldest first)
                 jobsByPriority[priority].sort((a, b) => {
@@ -1164,13 +1140,9 @@ function handleStatsBroadcast(parsedMessage, rawMessage, source = 'unknown') {
                         return; // Skip this job
                     }
                     
-                    console.log(`[DEBUG] Processing job ${jobId} with data:`, jobData);
-                    console.log(`[DEBUG] Raw priority value for job ${jobId}:`, jobData.priority, typeof jobData.priority);
                     
                     // Parse the priority value
                     const parsedPriority = parseInt(jobData.priority || 0);
-                    console.log(`[DEBUG] Parsed priority value for job ${jobId}:`, parsedPriority, typeof parsedPriority);
-                    console.log(`[DEBUG] Assigning position ${position} to job ${jobId}`);
                     
                     // Update or add job to state with explicit field mapping
                     state.jobs[jobId] = {
@@ -1184,7 +1156,6 @@ function handleStatsBroadcast(parsedMessage, rawMessage, source = 'unknown') {
                         updatedAt: jobData.updated_at ? new Date(jobData.updated_at * 1000) : new Date()
                     };
                     
-                    console.log(`[DEBUG] Updated state for job ${jobId}:`, state.jobs[jobId]);
                 });
             });
         } else {
@@ -1289,7 +1260,7 @@ function handleJobCompleted(message, source = 'unknown') {
 /**
  * Handle job failed message
  * @param {Object} parsedMessage - Parsed job failed message
- * @param {Object} rawMessage - Raw message object (fallback)
+ * @param {Object} rawMessage - Raw message object (fallback)=
  * @param {string} source - Source of the message ('monitor' or 'client')
  */
 function handleJobFailed(parsedMessage, rawMessage, source = 'unknown') {
@@ -1401,7 +1372,6 @@ function handleErrorMessage(message, source = 'unknown') {
  */
 function submitJob() {
     // Debug logging
-    console.log('Submit job function called');
     
     if (!state.clientConnected) {
         addLogEntry('Cannot submit job: Client connection not active', 'error');
@@ -1412,12 +1382,7 @@ function submitJob() {
         // Get job details from form
         const jobType = elements.jobType.value;
         
-        // Debug logging for priority value
-        console.log('Job priority element:', elements.jobPriority);
-        console.log('Job priority value:', elements.jobPriority.value);
-        
         const priority = parseInt(elements.jobPriority.value, 10);
-        console.log('Parsed priority:', priority);
         
         let payload;
         
@@ -1435,9 +1400,6 @@ function submitJob() {
         // Add a message ID for tracking
         message.message_id = `job-submit-${Date.now()}`;
         
-        // Debug logging for message
-        console.log('Job submission message:', message);
-        
         // Send message through the client connection
         state.clientSocket.send(JSON.stringify(message));
         
@@ -1445,6 +1407,7 @@ function submitJob() {
         if (!state.pendingRequests) {
             state.pendingRequests = {};
         }
+        
         state.pendingRequests[message.message_id] = {
             type: message.type,
             timestamp: message.timestamp,
@@ -1536,7 +1499,6 @@ function updateUI() {
             
             // Add accepting jobs indicator
 
-            console.log('Worker data:', worker);
             const acceptingJobsClass = worker.is_accepting_jobs ? 'status-active' : 'status-error';
             const acceptingJobsText = worker.is_accepting_jobs ? 'Yes' : 'No';
             
@@ -1556,19 +1518,14 @@ function updateUI() {
     }
     
     // Update jobs table
-    console.log('State jobs before filtering:', state.jobs);
     
     const activeJobs = Object.values(state.jobs).filter(job => job.status === 'pending' || job.status === 'processing');
-    console.log('Filtered active jobs:', activeJobs);
-    
+
     elements.jobsTableBody.innerHTML = '';
     
     if (activeJobs.length > 0) {
         elements.jobsTableContainer.classList.remove('hidden');
         elements.noJobsMessage.classList.add('hidden');
-        
-        // Log all active jobs for debugging
-        console.log('[DEBUG] Active jobs in updateUI:', activeJobs);
         
         // Sort jobs by created_at timestamp (oldest first)
         activeJobs.sort((a, b) => {
@@ -1576,18 +1533,12 @@ function updateUI() {
             const aCreatedAt = a.created_at || 0;
             const bCreatedAt = b.created_at || 0;
             
-            console.log(`[DEBUG] Sorting jobs: ${a.id} (${aCreatedAt}) vs ${b.id} (${bCreatedAt})`);
-            
             // Sort by created_at (oldest first)
             return aCreatedAt - bCreatedAt;
         });
         
-        console.log('[DEBUG] Jobs sorted by created_at:', activeJobs.map(job => ({ id: job.id, created_at: job.created_at })));
-        
         activeJobs.forEach(job => {
             // Log individual job data for debugging
-            console.log(`[DEBUG] Processing job ${job.id}:`, job);
-            console.log(`[DEBUG] Job priority for ${job.id}:`, job.priority, typeof job.priority);
             
             const row = document.createElement('tr');
             
@@ -1609,18 +1560,17 @@ function updateUI() {
             
             // Use job_type, fallback to type, never show "unknown"
             // Force priority to be a number and log it
-            console.log(`[DEBUG] Job data for ${job.id} before display:`, job);
-            console.log(`[DEBUG] Raw priority value in updateUI for ${job.id}:`, job.priority, typeof job.priority);
+
             const displayPriority = parseInt(job.priority || 0);
-            console.log(`[DEBUG] Display priority for ${job.id}:`, displayPriority, typeof displayPriority);
+
             
             // Get the raw created_at timestamp
             const rawCreatedAt = job.created_at || 'N/A';
-            console.log(`[DEBUG] Raw created_at for ${job.id}:`, rawCreatedAt);
+
             
             // Get the JavaScript Date object string representation
             const createdAtStr = job.createdAt ? job.createdAt.toString() : 'N/A';
-            console.log(`[DEBUG] Created date string for ${job.id}:`, createdAtStr);
+
             
             row.innerHTML = `
                 <td>${job.id}</td>
