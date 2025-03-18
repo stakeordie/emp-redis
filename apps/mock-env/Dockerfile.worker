@@ -3,25 +3,23 @@ FROM python:3.10.11-slim
 WORKDIR /app
 
 # Install dependencies
-RUN pip install --no-cache-dir fastapi uvicorn websockets aiohttp redis
+RUN pip install --no-cache-dir fastapi uvicorn websockets aiohttp redis python-dotenv
 
-# Create core directory
-RUN mkdir -p /core
-
-# Copy Worker code and core code
+# Copy Worker code, core code, and .env file
 COPY ./worker /app/
-COPY ./core /core/
+COPY ./core /app/core/
+COPY ./worker/.env /app/.env
 
 # Ensure Python can find the core modules
-ENV PYTHONPATH=/app:/core
+ENV PYTHONPATH=/app
 
 # Add debugging to show directory contents
 RUN echo "Worker container setup" && \
     echo "Contents of /app:" && ls -la /app && \
-    echo "Contents of /core:" && ls -la /core && \
+    echo "Contents of /app/core:" && ls -la /app/core && \
     echo "Python version:" && python --version && \
     echo "Python path:" && python -c "import sys; print(sys.path)"
 
 # Start the worker process with environment variables
 # Workers will connect directly to the hub service
-CMD ["bash", "-c", "echo 'Directory contents:' && ls -la /app && echo '/core contents:' && ls -la /core && python main.py --worker-id \"$MACHINE_ID-worker-1\""]
+CMD ["bash", "-c", "echo 'Directory contents:' && ls -la /app && echo '/app/core contents:' && ls -la /app/core && python main.py --worker-id \"$MACHINE_ID-worker-1\""]

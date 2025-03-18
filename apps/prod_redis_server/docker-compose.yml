@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  redis-hub:
+    image: emprops/redis_server:latest
+    container_name: redis-hub
+    restart: unless-stopped
+    ports:
+      - "8001:8001"  # Redis API
+      - "6379:6379"  # Redis DB
+    volumes:
+      - redis-data:/data
+      - ./config/.env:/app/.env
+    environment:
+      - PYTHONPATH=/app
+    networks:
+      - redis-network
+
+networks:
+  redis-network:
+    driver: bridge
+
+volumes:
+  redis-data:
+    driver: local

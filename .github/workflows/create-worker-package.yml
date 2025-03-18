@@ -1,0 +1,97 @@
+name: Create Worker Package
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'worker/**'
+      - 'core/**'
+  workflow_dispatch:  # Allow manual triggering
+
+jobs:
+  build-package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Create worker package
+        run: |
+          # Create temporary directory
+          TEMP_DIR=$(mktemp -d)
+          PACKAGE_DIR="$TEMP_DIR/emp-redis-worker"
+          mkdir -p "$PACKAGE_DIR/worker"
+          mkdir -p "$PACKAGE_DIR/core/core_types"
+          mkdir -p "$PACKAGE_DIR/core/interfaces"
+          mkdir -p "$PACKAGE_DIR/core/utils"
+          
+          # Copy only the necessary files
+          cp -r worker/* "$PACKAGE_DIR/worker/"
+          cp core/message_models.py "$PACKAGE_DIR/core/"
+          cp -r core/core_types/* "$PACKAGE_DIR/core/core_types/"
+          cp -r core/interfaces/* "$PACKAGE_DIR/core/interfaces/"
+          cp -r core/utils/* "$PACKAGE_DIR/core/utils/"
+          cp .env.example "$PACKAGE_DIR/.env.example"
+          
+          # Create a README
+          cat > "$PACKAGE_DIR/README.md" << 'EOF'
+          # EmProps Redis Worker
+          
+          This package contains a single worker component for the EmProps Redis system.
+          
+          ## Setup
+          
+          1. Copy `.env.example` to `.env` and configure it:
+             - Set REDIS_API_HOST to the hostname of your Redis Hub
+             - Set REDIS_API_PORT to the port of your Redis Hub (default: 8001)
+             - Set WORKER_ID to a unique identifier for this worker
+             - Set WEBSOCKET_AUTH_TOKEN to match the token configured on the Redis Hub
+          
+          2. Run the worker:
+             ```
+             python worker/main.py
+             ```
+          
+          ## Environment Variables
+          
+          - REDIS_API_HOST: The hostname of the Redis Hub
+          - REDIS_API_PORT: The port of the Redis Hub (default: 8001)
+          - WORKER_ID: Unique identifier for this worker
+          EOF
+          
+          # Create the tarball
+          cd "$TEMP_DIR"
+          tar -czf emp-redis-worker.tar.gz emp-redis-worker
+          
+          # Move to workspace
+          mv emp-redis-worker.tar.gz $GITHUB_WORKSPACE/
+          
+          # Clean up
+          rm -rf "$TEMP_DIR"
+          
+          echo "Worker package created: emp-redis-worker.tar.gz"
+
+      - name: Get version info
+        id: version
+        run: |
+          COMMIT_SHA=$(git rev-parse --short HEAD)
+          TIMESTAMP=$(date +%Y%m%d%H%M%S)
+          echo "version=${TIMESTAMP}-${COMMIT_SHA}" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: worker-${{ steps.version.outputs.version }}
+          name: Worker Package ${{ steps.version.outputs.version }}
+          body: |
+            Worker package for EmProps Redis system.
+            
+            Built from commit: ${{ github.sha }}
+            Timestamp: ${{ steps.version.outputs.version }}
+          files: |
+            emp-redis-worker.tar.gz
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

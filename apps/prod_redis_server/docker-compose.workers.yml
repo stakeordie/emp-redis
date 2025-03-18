@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  # Worker Containers - connecting to production hub
+  worker1:
+    container_name: prod-worker1
+    build:
+      context: ../../
+      dockerfile: ./apps/prod_redis_server/Dockerfile.worker
+    environment:
+      - REDIS_API_HOST=redis-hub  # This should be changed to your production hub hostname or IP
+      - REDIS_API_PORT=8001
+      - WORKER_ID=prod-worker1
+      - WEBSOCKET_AUTH_TOKEN=${WEBSOCKET_AUTH_TOKEN:-your-secure-token-here}
+      - PYTHONPATH=/app
+    networks:
+      - redis-network
+    restart: unless-stopped
+
+  worker2:
+    container_name: prod-worker2
+    build:
+      context: ../../
+      dockerfile: ./apps/prod_redis_server/Dockerfile.worker
+    environment:
+      - REDIS_API_HOST=redis-hub  # This should be changed to your production hub hostname or IP
+      - REDIS_API_PORT=8001
+      - WORKER_ID=prod-worker2
+      - WEBSOCKET_AUTH_TOKEN=${WEBSOCKET_AUTH_TOKEN:-your-secure-token-here}
+      - PYTHONPATH=/app
+    networks:
+      - redis-network
+    restart: unless-stopped
+
+  worker3:
+    container_name: prod-worker3
+    build:
+      context: ../../
+      dockerfile: ./apps/prod_redis_server/Dockerfile.worker
+    environment:
+      - REDIS_API_HOST=redis-hub  # This should be changed to your production hub hostname or IP
+      - REDIS_API_PORT=8001
+      - WORKER_ID=prod-worker3
+      - WEBSOCKET_AUTH_TOKEN=${WEBSOCKET_AUTH_TOKEN:-your-secure-token-here}
+      - PYTHONPATH=/app
+    networks:
+      - redis-network
+    restart: unless-stopped
+
+  worker4:
+    container_name: prod-worker4
+    build:
+      context: ../../
+      dockerfile: ./apps/prod_redis_server/Dockerfile.worker
+    environment:
+      - REDIS_API_HOST=redis-hub  # This should be changed to your production hub hostname or IP
+      - REDIS_API_PORT=8001
+      - WORKER_ID=prod-worker4
+      - WEBSOCKET_AUTH_TOKEN=${WEBSOCKET_AUTH_TOKEN:-your-secure-token-here}
+      - PYTHONPATH=/app
+    networks:
+      - redis-network
+    restart: unless-stopped
+
+networks:
+  redis-network:
+    name: redis_network
+    external: true  # Use the same network as the production hub

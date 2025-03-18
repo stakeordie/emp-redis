@@ -10,12 +10,12 @@ services:
       - "8001:8001"  # Redis API
       - "6380:6379"  # Redis DB (mapped to different host port)
     environment:
-      - PYTHONPATH=/app:/core  # Ensure core modules can be imported
+      - PYTHONPATH=/app  # Ensure core modules can be imported
+    env_file:
+      - ../../hub/.env
     networks:
       - redis-network
-    volumes:
-      - ../../hub:/app/hub  # Mount local hub directory to /app/hub in container
-      - ../../core:/app/core  # Mount shared core code'
+    # Volumes removed - rebuild containers when code changes
     profiles:
       - dev
 
@@ -30,14 +30,14 @@ services:
       - NUM_WORKERS=3
       - REDIS_API_HOST=hub
       - REDIS_API_PORT=8001
-      - PYTHONPATH=/app:/core  # Ensure core modules can be imported
+      - PYTHONPATH=/app  # Ensure core modules can be imported
+    env_file:
+      - ../../.env
     networks:
       - redis-network
     depends_on:
       - hub
-    volumes:
-      - ../../worker:/app/worker  # Mount local worker directory to /app/worker in container
-      - ../../core:/app/core  # Mount shared core code
+    # Volumes removed - rebuild containers when code changes
     profiles:
       - dev
 
@@ -51,14 +51,14 @@ services:
       - NUM_WORKERS=4
       - REDIS_API_HOST=hub
       - REDIS_API_PORT=8001
-      - PYTHONPATH=/app:/core  # Ensure core modules can be imported
+      - PYTHONPATH=/app  # Ensure core modules can be imported
+    env_file:
+      - ../../.env
     networks:
       - redis-network
     depends_on:
       - hub
-    volumes:
-      - ../../worker:/app/worker  # Mount local worker directory to /app/worker in container
-      - ../../core:/app/core  # Mount shared core code
+    # Volumes removed - rebuild containers when code changes
     profiles:
       - dev
 
@@ -72,14 +72,14 @@ services:
       - NUM_WORKERS=3
       - REDIS_API_HOST=hub
       - REDIS_API_PORT=8001
-      - PYTHONPATH=/app:/core  # Ensure core modules can be imported
+      - PYTHONPATH=/app  # Ensure core modules can be imported
+    env_file:
+      - ../../.env
     networks:
       - redis-network
     depends_on:
       - hub
-    volumes:
-      - ../../worker:/app/worker  # Mount local worker directory to /app/worker in container
-      - ../../core:/app/core  # Mount shared core code
+    # Volumes removed - rebuild containers when code changes
     profiles:
       - dev
 
@@ -93,14 +93,14 @@ services:
       - NUM_WORKERS=4
       - REDIS_API_HOST=hub
       - REDIS_API_PORT=8001
-      - PYTHONPATH=/app:/core  # Ensure core modules can be imported
+      - PYTHONPATH=/app  # Ensure core modules can be imported
+    env_file:
+      - ../../.env
     networks:
       - redis-network
     depends_on:
       - hub
-    volumes:
-      - ../../worker:/app/worker  # Mount local worker directory to /app/worker in container
-      - ../../core:/app/core  # Mount shared core code
+    # Volumes removed - rebuild containers when code changes
     profiles:
       - dev
 

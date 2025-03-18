@@ -1,0 +1,22 @@
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# Install Python dependencies
+RUN pip install --no-cache-dir websockets asyncio python-dotenv
+
+# Only copy the necessary files for the worker
+COPY ./worker /app/worker/
+COPY ./core/message_models.py /app/core/
+COPY ./core/core_types /app/core/core_types/
+COPY ./core/interfaces /app/core/interfaces/
+COPY ./core/utils /app/core/utils/
+
+# Create a directory for environment configuration
+RUN mkdir -p /app/config
+
+# Ensure Python can find the core modules
+ENV PYTHONPATH=/app
+
+# Start the worker
+CMD ["python", "-m", "worker.main"]
