@@ -170,8 +170,13 @@ class MessageHandler(MessageHandlerInterface):
             case "stay_alive":
                 # Respond with a simple acknowledgment
                 # WebSocket protocol handles connection keepalive automatically
-                response = {"type": "acknowledgment", "timestamp": time.time()}
-                await websocket.send_text(json.dumps(response))
+                # Using ResponseJobStatusMessage for the acknowledgment
+                response = ResponseJobStatusMessage(
+                    job_id="keep-alive",  # Using a special ID for keep-alive messages
+                    status="acknowledged",
+                    message="Connection is alive"
+                )
+                await self.connection_manager.send_to_client(client_id, response)
             case _:
                 # Handle unrecognized message type
                 error_message = ErrorMessage(error=f"Unsupported message type: {message_type}")

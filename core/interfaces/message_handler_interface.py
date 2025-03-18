@@ -6,7 +6,7 @@ from fastapi import FastAPI, WebSocket
 
 # Import base message types for type safety
 from ..core_types.base_messages import BaseMessage
-
+from .message_models import RegisterWorkerMessage
 class MessageHandlerInterface(ABC):
     """
     Interface defining the contract for handling  message types.
@@ -76,7 +76,7 @@ class MessageHandlerInterface(ABC):
         pass
     
     @abstractmethod
-    async def handle_register_worker(self, worker_id: str, message: BaseMessage) -> None:
+    async def handle_register_worker(self, worker_id: str, message: RegisterWorkerMessage) -> None:
         """
         Handle worker registration.
         
