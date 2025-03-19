@@ -98,7 +98,19 @@ class MessageType(Enum):
     JOB_RESPONSE = "job_response"
     JOB_STATUS = "job_status"
 
-class MessageModels:
+class MessageModelsInterface:
+    """Interface for message models"""
+    @staticmethod
+    def create_heartbeat_message(worker_id, status, current_job_id=None):
+        """Create heartbeat message"""
+        pass
+        
+    @staticmethod
+    def create_worker_status_message(worker_id, status, capabilities):
+        """Create worker status message"""
+        pass
+
+class MessageModels(MessageModelsInterface):
     """Simple implementation of MessageModels"""
     @staticmethod
     def create_heartbeat_message(worker_id: str, status: str, current_job_id: Optional[str] = None) -> Dict[str, Any]:
