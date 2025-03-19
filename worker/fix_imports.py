@@ -139,6 +139,14 @@ class ConnectorInterface(ABC):
         """Clean up resources when worker is shutting down"""
         pass
 ''')
+                
+    # Create a symbolic link to connector_loader.py if it doesn't exist
+    dst_connector_loader = os.path.join(current_dir, "connector_loader.py")
+    if not os.path.exists(dst_connector_loader):
+        src_connector_loader = os.path.join(parent_dir, "worker", "connector_loader.py")
+        if os.path.exists(src_connector_loader):
+            print(f"Copying {src_connector_loader} to {dst_connector_loader}")
+            shutil.copy2(src_connector_loader, dst_connector_loader)
     
     # Copy message_models.py from parent core/models to worker core/models
     # Try different possible locations
