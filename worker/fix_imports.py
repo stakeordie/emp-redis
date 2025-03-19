@@ -257,7 +257,7 @@ def update_imports(file_path):
     # Special handling for MessageModelsInterface
     if "MessageModelsInterface" in content and "class MessageModelsInterface" not in content:
         # Add MessageModelsInterface class definition
-        interface_def = """
+        interface_def = '''
 # Added MessageModelsInterface definition
 class MessageModelsInterface:
     """Interface for message models"""
@@ -271,7 +271,7 @@ class MessageModelsInterface:
         """Create worker status message"""
         pass
 
-"""
+'''
         # Insert the interface definition before the first class definition
         if "class " in content:
             insert_pos = content.find("class ")
