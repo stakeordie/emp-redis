@@ -1,29 +1,12 @@
 #!/usr/bin/env python3
 # Connector loader for the EmProps Redis Worker
 import os
-import sys
 import importlib
 import importlib.util
-import logging
 from typing import Dict, List, Any, Type
 
-# Setup basic logging in case core.utils.logger is not available
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
-
-# Try to import ConnectorInterface
-try:
-    from connector_interface import ConnectorInterface
-except ImportError as e:
-    logger.error(f"Error importing ConnectorInterface: {e}")
-    sys.exit(1)
-
-# Try to import logger from core.utils.logger, fall back to basic logger if not available
-try:
-    from core.utils.logger import logger
-    logger.info("Successfully imported logger from core.utils.logger")
-except ImportError:
-    logger.info("Using fallback logger")
+from connector_interface import ConnectorInterface
+from core.utils.logger import logger
 
 def load_connectors() -> Dict[str, ConnectorInterface]:
     """Load connectors based on the CONNECTORS environment variable

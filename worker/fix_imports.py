@@ -156,14 +156,66 @@ class BaseMessage:
 ''')
     
     # Copy logger.py from parent core/utils to worker core/utils
-    src_logger = os.path.join(parent_dir, "core", "utils", "logger.py")
+    # Try different possible locations
+    possible_logger_paths = [
+        os.path.join(parent_dir, "core", "utils", "logger.py"),
+        os.path.join(parent_dir, "core", "logger.py")
+    ]
+    
+    src_logger = None
+    for path in possible_logger_paths:
+        if os.path.exists(path):
+            src_logger = path
+            break
+    
     dst_logger = os.path.join(utils_dir, "logger.py")
-    if os.path.exists(src_logger):
+    
+    if src_logger:
         print(f"Copying {src_logger} to {dst_logger}")
         shutil.copy2(src_logger, dst_logger)
     else:
-        print(f"Error: logger.py not found at {src_logger}")
-        return False
+        print("Error: logger.py not found in any expected location")
+        # Create a simple logger.py
+        print("Creating a simple logger.py")
+        with open(dst_logger, "w") as f:
+            f.write('''
+# Simple logger implementation
+import logging
+import os
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
+# Create logger
+logger = logging.getLogger('worker')
+
+# Set log level from environment variable if available
+log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
+logger.setLevel(getattr(logging, log_level, logging.INFO))
+
+def setup_logger(name=None, level=None):
+    """Setup logger with specified name and level
+    
+    Args:
+        name (str, optional): Logger name. Defaults to None.
+        level (str, optional): Log level. Defaults to None.
+        
+    Returns:
+        logging.Logger: Configured logger
+    """
+    if name is None:
+        return logger
+        
+    _logger = logging.getLogger(name)
+    
+    if level is not None:
+        _logger.setLevel(getattr(logging, level.upper(), logging.INFO))
+    
+    return _logger
+''')
     
     # Update imports in copied files to make them work locally
     update_imports(dst_message_models)
@@ -181,9 +233,26 @@ def update_imports(file_path):
         content = f.read()
     
     # Replace imports to make them work locally
-    content = content.replace("from .core_types.base_messages", "from .base_messages")
-    content = content.replace("from .interfaces.message_models_interface", "# from .interfaces.message_models_interface")
-    content = content.replace("from .utils.logger", "from ..utils.logger")
+    replacements = [
+        # Base messages imports
+        ("from .core_types.base_messages", "from .base_messages"),
+        ("from core.core_types.base_messages", "from .base_messages"),
+        
+        # Interface imports (comment out if not available)
+        ("from .interfaces.message_models_interface", "# from .interfaces.message_models_interface"),
+        ("from core.interfaces.message_models_interface", "# from core.interfaces.message_models_interface"),
+        
+        # Logger imports
+        ("from .utils.logger", "from ..utils.logger"),
+        ("from core.utils.logger", "from ..utils.logger"),
+        
+        # Other potential imports
+        ("from core.models.", "from ."),
+        ("from core.utils.", "from ..utils."),
+    ]
+    
+    for old, new in replacements:
+        content = content.replace(old, new)
     
     with open(file_path, "w") as f:
         f.write(content)
