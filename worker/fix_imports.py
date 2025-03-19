@@ -254,6 +254,31 @@ def update_imports(file_path):
     for old, new in replacements:
         content = content.replace(old, new)
     
+    # Special handling for MessageModelsInterface
+    if "MessageModelsInterface" in content and "class MessageModelsInterface" not in content:
+        # Add MessageModelsInterface class definition
+        interface_def = """
+# Added MessageModelsInterface definition
+class MessageModelsInterface:
+    """Interface for message models"""
+    @staticmethod
+    def create_heartbeat_message(worker_id, status, current_job_id=None):
+        """Create heartbeat message"""
+        pass
+        
+    @staticmethod
+    def create_worker_status_message(worker_id, status, capabilities):
+        """Create worker status message"""
+        pass
+
+"""
+        # Insert the interface definition before the first class definition
+        if "class " in content:
+            insert_pos = content.find("class ")
+            content = content[:insert_pos] + interface_def + content[insert_pos:]
+        else:
+            content = interface_def + content
+    
     with open(file_path, "w") as f:
         f.write(content)
 
