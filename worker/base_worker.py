@@ -44,7 +44,7 @@ class BaseWorker:
         
         # Redis Hub WebSocket URL
         protocol = "wss" if self.use_ssl else "ws"
-        self.redis_ws_url = f"{protocol}://{self.redis_host}:{self.redis_port}/ws/worker?token={self.auth_token}"
+        self.redis_ws_url = f"{protocol}://{self.redis_host}:{self.redis_port}/ws/worker/{self.worker_id}?token={self.auth_token}"
         
         # Debug prints
         print(f"Debug - REDIS_API_HOST: {self.redis_host}")
