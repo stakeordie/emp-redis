@@ -62,7 +62,7 @@ def main():
             f.write("# Auto-generated __init__.py file\n")
     
     # Copy message_models.py from parent core/models to worker core/models
-    src_message_models = os.path.join(parent_dir, "core", "models", "message_models.py")
+    src_message_models = os.path.join(parent_dir, "core", "message_models.py")
     dst_message_models = os.path.join(models_dir, "message_models.py")
     if os.path.exists(src_message_models):
         print(f"Copying {src_message_models} to {dst_message_models}")
