@@ -16,12 +16,6 @@ def main():
     parent_dir = os.path.dirname(current_dir)
     print(f"Parent directory: {parent_dir}")
     
-    # Create a simple message_models.py if it doesn't exist
-    create_simple_message_models()
-    
-    # Create a simple logger.py if it doesn't exist
-    create_simple_logger()
-    
     # Check if core directory exists in parent
     core_dir = os.path.join(parent_dir, "core")
     if not os.path.exists(core_dir):
@@ -68,14 +62,64 @@ def main():
             f.write("# Auto-generated __init__.py file\n")
     
     # Copy message_models.py from parent core/models to worker core/models
-    src_message_models = os.path.join(parent_dir, "core", "message_models.py")
+    # Try different possible locations
+    possible_message_models_paths = [
+        os.path.join(parent_dir, "core", "models", "message_models.py"),
+        os.path.join(parent_dir, "core", "message_models.py")
+    ]
+    
+    src_message_models = None
+    for path in possible_message_models_paths:
+        if os.path.exists(path):
+            src_message_models = path
+            break
+    
     dst_message_models = os.path.join(models_dir, "message_models.py")
-    if os.path.exists(src_message_models):
+    
+    if src_message_models:
         print(f"Copying {src_message_models} to {dst_message_models}")
         shutil.copy2(src_message_models, dst_message_models)
     else:
-        print(f"Error: message_models.py not found at {src_message_models}")
-        return False
+        print("Error: message_models.py not found in any expected location")
+        # Create a simple message_models.py
+        print("Creating a simple message_models.py")
+        with open(dst_message_models, "w") as f:
+            f.write('''
+# Simple message models implementation
+import asyncio
+from enum import Enum
+from typing import Dict, List, Any, Optional
+
+class MessageType(Enum):
+    """Message type enum"""
+    HEARTBEAT = "heartbeat"
+    STATUS = "status"
+    JOB_REQUEST = "job_request"
+    JOB_RESPONSE = "job_response"
+    JOB_STATUS = "job_status"
+
+class MessageModels:
+    """Simple implementation of MessageModels"""
+    @staticmethod
+    def create_heartbeat_message(worker_id: str, status: str, current_job_id: Optional[str] = None) -> Dict[str, Any]:
+        return {
+            "type": MessageType.HEARTBEAT.value,
+            "worker_id": worker_id,
+            "status": status,
+            "current_job_id": current_job_id,
+            "timestamp": asyncio.get_event_loop().time()
+        }
+    
+    @staticmethod
+    def create_worker_status_message(worker_id: str, status: str, capabilities: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "type": MessageType.STATUS.value,
+            "worker_id": worker_id,
+            "status": status,
+            "capabilities": capabilities,
+            "timestamp": asyncio.get_event_loop().time()
+        }
+''')
     
     # Copy base_messages.py from parent core/core_types to worker core/models
     src_base_messages = os.path.join(parent_dir, "core", "core_types", "base_messages.py")
