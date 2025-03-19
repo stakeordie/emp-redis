@@ -33,11 +33,17 @@ WORKER_ID = os.environ.get("WORKER_ID", f"worker-{uuid.uuid4().hex[:8]}")
 HEARTBEAT_INTERVAL = int(os.environ.get("HEARTBEAT_INTERVAL", "20"))
 # Authentication token
 WEBSOCKET_AUTH_TOKEN = os.environ.get("WEBSOCKET_AUTH_TOKEN", "")
+# SSL connection
+USE_SSL = os.environ.get("USE_SSL", "false").lower() in ("true", "1", "yes")
 
 # WebSocket connection to Redis Hub
-base_url = f"ws://{REDIS_API_HOST}:{REDIS_API_PORT}/ws/worker/{WORKER_ID}"
+protocol = "wss" if USE_SSL else "ws"
+base_url = f"{protocol}://{REDIS_API_HOST}:{REDIS_API_PORT}/ws/worker/{WORKER_ID}"
 # Add authentication token if provided
 REDIS_HUB_WS_URL = f"{base_url}?token={WEBSOCKET_AUTH_TOKEN}" if WEBSOCKET_AUTH_TOKEN else base_url
+
+# Log connection details
+logger.info(f"Connecting to Redis Hub at {REDIS_HUB_WS_URL} (SSL: {USE_SSL})")
 
 # Worker capabilities
 WORKER_CAPABILITIES = {
@@ -334,7 +340,7 @@ async def process_job(websocket, job_message: Union[BaseMessage, Dict]):
                     await send_progress_update(websocket, job_id, progress, "finalizing", "Finalizing image")
                 
                 # Simulate processing time for this step
-                await asyncio.sleep(1)
+                await asyncio.sleep(3)
             
             result = {"status": "success", "output": f"Processed image in job {job_id}"}
             
@@ -376,7 +382,7 @@ async def process_job(websocket, job_message: Union[BaseMessage, Dict]):
                 elif step == 7:
                     await send_progress_update(websocket, job_id, progress, "finalizing", "Preparing final report")
                 
-                await asyncio.sleep(1)
+                await asyncio.sleep(2)
             
             result = {"status": "success", "output": f"Analyzed data in job {job_id}"}
             

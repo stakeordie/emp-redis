@@ -19,32 +19,9 @@ from core.utils.logger import logger
 
 logger.info("IT WORKS")
 
-# Background task for stale job cleanup
-async def stale_job_cleanup_task():
-    """Periodically check for and clean up stale jobs"""
-    # Run cleanup every 5 minutes (300 seconds)
-    cleanup_interval = int(os.environ.get("JOB_CLEANUP_INTERVAL", 300))
-    # Max heartbeat age - default 10 minutes (600 seconds)
-    max_heartbeat_age = int(os.environ.get("MAX_WORKER_HEARTBEAT_AGE", 600))
-    
-    while True:
-        try:
-            # Wait first to allow system to stabilize on startup
-            await asyncio.sleep(cleanup_interval)
-            
-            # Run cleanup
-            redis_service = RedisService()
-            redis_service.cleanup_stale_jobs(max_heartbeat_age)
-            
-        except Exception:
-            # Continue running even if there's an error
-            pass
-
 # FastAPI startup and shutdown event handling
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Start background tasks
-    cleanup_task = asyncio.create_task(stale_job_cleanup_task())
     
     # Create MessageBroker instance with all required components
     message_broker = MessageBroker()
@@ -58,9 +35,7 @@ async def lifespan(app: FastAPI):
     yield
     
     # Shutdown tasks
-    cleanup_task.cancel()
     try:
-        await cleanup_task
         await message_broker.stop_background_tasks()
     except asyncio.CancelledError:
         pass

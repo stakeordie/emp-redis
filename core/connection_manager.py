@@ -99,10 +99,9 @@ class ConnectionManager(ConnectionManagerInterface):
                 # Remove from local tracking
                 del self.worker_connections[worker_id]
             
-            # Update status to disconnected instead of removing
-            # This helps with UI display while maintaining disconnection state
+            # Remove worker from status tracking so it doesn't appear in the UI
             if worker_id in self.worker_status:
-                self.worker_status[worker_id] = "disconnected"
+                del self.worker_status[worker_id]
             
             if worker_id in self.worker_last_heartbeat:
                 del self.worker_last_heartbeat[worker_id]

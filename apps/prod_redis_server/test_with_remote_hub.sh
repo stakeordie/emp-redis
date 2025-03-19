@@ -3,10 +3,11 @@
 # Script to test workers with a remote production hub
 
 # Default values
-HUB_HOST="redis-hub"
-HUB_PORT="8001"
+HUB_HOST="redisserver-production.up.railway.app"
+HUB_PORT="443"
 AUTH_TOKEN="your-secure-token-here"
 WORKER_COUNT=2
+USE_SSL=true
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -27,9 +28,13 @@ while [[ $# -gt 0 ]]; do
       WORKER_COUNT="${1#*=}"
       shift
       ;;
+    --no-ssl)
+      USE_SSL=false
+      shift
+      ;;
     *)
       echo "Unknown parameter: $1"
-      echo "Usage: $0 [--host=HOST] [--port=PORT] [--token=TOKEN] [--workers=COUNT]"
+      echo "Usage: $0 [--host=HOST] [--port=PORT] [--token=TOKEN] [--workers=COUNT] [--no-ssl]"
       exit 1
       ;;
   esac
@@ -56,6 +61,7 @@ for i in $(seq 1 $WORKER_COUNT); do
       - WORKER_ID=remote-worker$i
       - WEBSOCKET_AUTH_TOKEN=$AUTH_TOKEN
       - PYTHONPATH=/app
+      - USE_SSL=$USE_SSL
     restart: unless-stopped
 EOF
 done

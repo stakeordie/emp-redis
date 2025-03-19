@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  # Worker Containers connecting to remote Redis Hub
+  remote-worker1:
+    container_name: remote-worker1
+    build:
+      context: ../..  # Root of the monorepo
+      dockerfile: ./apps/mock-env/Dockerfile.worker
+    environment:
+      - MACHINE_ID=remote-worker1
+      - NUM_WORKERS=2
+      - REDIS_API_HOST=redisserver-production.up.railway.app
+      - REDIS_API_PORT=443
+      - USE_SSL=true
+      - WEBSOCKET_AUTH_TOKEN=3u8sdj5389fj3kljsf90u
+      - PYTHONPATH=/app  # Ensure core modules can be imported
+    env_file:
+      - ../../.env
+    networks:
+      - redis-remote-network
+    # Volumes removed - rebuild containers when code changes
+    profiles:
+      - remote
+
+  remote-worker2:
+    container_name: remote-worker2
+    build:
+      context: ../..  # Root of the monorepo
+      dockerfile: ./apps/mock-env/Dockerfile.worker
+    environment:
+      - MACHINE_ID=remote-worker2
+      - NUM_WORKERS=2
+      - REDIS_API_HOST=redisserver-production.up.railway.app
+      - REDIS_API_PORT=443
+      - USE_SSL=true
+      - WEBSOCKET_AUTH_TOKEN=3u8sdj5389fj3kljsf90u
+      - PYTHONPATH=/app  # Ensure core modules can be imported
+    env_file:
+      - ../../.env
+    networks:
+      - redis-remote-network
+    # Volumes removed - rebuild containers when code changes
+    profiles:
+      - remote
+
+networks:
+  redis-remote-network:
+    driver: bridge

@@ -44,6 +44,7 @@ const state = {
 const elements = {
     // Connection controls
     websocketUrl: document.getElementById('websocket-url'),
+    authToken: document.getElementById('auth-token'),
     // Connection info display elements
     connectionInfo: document.getElementById('connection-info'),
     monitorIdDisplay: document.getElementById('monitor-id-display'),
@@ -137,7 +138,12 @@ function init() {
  */
 function connect() {
     // Get base URL from form
-    const baseUrl = elements.websocketUrl.value || 'ws://localhost:8001';
+    const baseUrl = elements.websocketUrl.value || 'wss://redisserver-production.up.railway.app';
+    console.log('Base URL:', baseUrl);
+    
+    // Get auth token if provided
+    const authToken = elements.authToken ? elements.authToken.value : '3u8sdj5389fj3kljsf90u';
+    console.log('Using auth token:', authToken);
     
     // Generate timestamp for unique IDs
     const timestamp = Date.now();
@@ -166,29 +172,47 @@ function connect() {
         elements.clientIdDisplay.textContent = clientId;
     }
     
-    if (elements.workerIdDisplay) {
-        elements.workerIdDisplay.textContent = workerId;
-    }
+
     
     // Log connection attempt with IDs
     addLogEntry(`Initializing connections with timestamp-based IDs (${new Date(timestamp).toLocaleTimeString()})`, 'info');
     
     // Connect monitor socket
-    connectMonitorSocket(baseUrl, monitorId);
+    connectMonitorSocket(baseUrl, monitorId, authToken);
     
     // Connect client socket
-    connectClientSocket(baseUrl, clientId);
+    connectClientSocket(baseUrl, clientId, authToken);
     
     // Connect worker socket
-    connectWorkerSocket(baseUrl, workerId);
+    connectWorkerSocket(baseUrl, workerId, authToken);
 }
 
 /**
  * Connect the monitor socket for receiving system updates
+ * @param {string} baseUrl - Base WebSocket URL
+ * @param {string} monitorId - Monitor connection ID
+ * @param {string} authToken - Authentication token
  */
-function connectMonitorSocket(baseUrl, monitorId) {
-    // Format the WebSocket URL with the monitor path
-    const monitorUrl = `${baseUrl}/ws/monitor/${monitorId}`;
+function connectMonitorSocket(baseUrl, monitorId, authToken) {
+    // Determine protocol (wss for https, ws for http)
+    const protocol = baseUrl.startsWith('https://') ? 'wss' : 'ws';
+    
+    // Extract host and port from baseUrl
+    let host = baseUrl;
+    // Remove protocol prefix if present
+    if (host.startsWith('http://')) host = host.substring(7);
+    if (host.startsWith('https://')) host = host.substring(8);
+    if (host.startsWith('ws://')) host = host.substring(5);
+    if (host.startsWith('wss://')) host = host.substring(6);
+    
+    // Format the WebSocket URL with the monitor path - exactly like worker code
+    const base_url = `${protocol}://${host}/ws/monitor/${monitorId}`;
+    
+    // Add authentication token if provided - exactly like worker code
+    const monitorUrl = authToken ? `${base_url}?token=${encodeURIComponent(authToken)}` : base_url;
+    
+    // Log the URL we're connecting to
+    console.log('Monitor URL:', monitorUrl);
     
     addLogEntry(`Connecting monitor socket as '${monitorId}'...`, 'info');
     
@@ -229,10 +253,30 @@ function connectMonitorSocket(baseUrl, monitorId) {
 
 /**
  * Connect the client socket for job submission
+ * @param {string} baseUrl - Base WebSocket URL
+ * @param {string} clientId - Client connection ID
+ * @param {string} authToken - Authentication token
  */
-function connectClientSocket(baseUrl, clientId) {
-    // Format the WebSocket URL with the client path
-    const clientUrl = `${baseUrl}/ws/client/${clientId}`;
+function connectClientSocket(baseUrl, clientId, authToken) {
+    // Determine protocol (wss for https, ws for http)
+    const protocol = baseUrl.startsWith('https://') ? 'wss' : 'ws';
+    
+    // Extract host and port from baseUrl
+    let host = baseUrl;
+    // Remove protocol prefix if present
+    if (host.startsWith('http://')) host = host.substring(7);
+    if (host.startsWith('https://')) host = host.substring(8);
+    if (host.startsWith('ws://')) host = host.substring(5);
+    if (host.startsWith('wss://')) host = host.substring(6);
+    
+    // Format the WebSocket URL with the client path - exactly like worker code
+    const base_url = `${protocol}://${host}/ws/client/${clientId}`;
+    
+    // Add authentication token if provided - exactly like worker code
+    const clientUrl = authToken ? `${base_url}?token=${encodeURIComponent(authToken)}` : base_url;
+    
+    // Log the URL we're connecting to
+    console.log('Client URL:', clientUrl);
     
     addLogEntry(`Connecting client socket as '${clientId}'...`, 'info');
     
@@ -273,10 +317,30 @@ function connectClientSocket(baseUrl, clientId) {
 
 /**
  * Connect the worker socket for job notifications
+ * @param {string} baseUrl - Base WebSocket URL
+ * @param {string} workerId - Worker connection ID
+ * @param {string} authToken - Authentication token
  */
-function connectWorkerSocket(baseUrl, workerId) {
-    // Format the WebSocket URL with the worker path
-    const workerUrl = `${baseUrl}/ws/worker/${workerId}`;
+function connectWorkerSocket(baseUrl, workerId, authToken) {
+    // Determine protocol (wss for https, ws for http)
+    const protocol = baseUrl.startsWith('https://') ? 'wss' : 'ws';
+    
+    // Extract host and port from baseUrl
+    let host = baseUrl;
+    // Remove protocol prefix if present
+    if (host.startsWith('http://')) host = host.substring(7);
+    if (host.startsWith('https://')) host = host.substring(8);
+    if (host.startsWith('ws://')) host = host.substring(5);
+    if (host.startsWith('wss://')) host = host.substring(6);
+    
+    // Format the WebSocket URL with the worker path - exactly like worker code
+    const base_url = `${protocol}://${host}/ws/worker/${workerId}`;
+    
+    // Add authentication token if provided - exactly like worker code
+    const workerUrl = authToken ? `${base_url}?token=${encodeURIComponent(authToken)}` : base_url;
+    
+    // Log the URL we're connecting to
+    console.log('Worker URL:', workerUrl);
     
     addLogEntry(`Connecting worker socket as '${workerId}'...`, 'info');
     

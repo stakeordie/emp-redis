@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 # Interface for message handling
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Union, TYPE_CHECKING
 from fastapi import FastAPI, WebSocket
+
+# Use TYPE_CHECKING to avoid circular imports
+if TYPE_CHECKING:
+    from ..message_models import RegisterWorkerMessage
 
 # Import base message types for type safety
 from ..core_types.base_messages import BaseMessage
-from .message_models import RegisterWorkerMessage
+# Avoid importing RegisterWorkerMessage to prevent circular imports
 class MessageHandlerInterface(ABC):
     """
     Interface defining the contract for handling  message types.
@@ -76,7 +80,7 @@ class MessageHandlerInterface(ABC):
         pass
     
     @abstractmethod
-    async def handle_register_worker(self, worker_id: str, message: RegisterWorkerMessage) -> None:
+    async def handle_register_worker(self, worker_id: str, message: "RegisterWorkerMessage") -> None:
         """
         Handle worker registration.
         
