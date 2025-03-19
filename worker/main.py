@@ -5,19 +5,9 @@ import sys
 import logging
 from dotenv import load_dotenv
 
-# Add parent directory to path for imports
-parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-print(f"Current directory: {os.getcwd()}")
-print(f"Adding to Python path: {parent_dir}")
-sys.path.insert(0, parent_dir)
-
-# Also add the current directory to the path
-current_dir = os.path.dirname(os.path.abspath(__file__))
-print(f"Also adding to Python path: {current_dir}")
-sys.path.insert(0, current_dir)
-
-# Print the Python path for debugging
-print(f"Python path: {sys.path}")
+# Setup imports
+from setup_imports import setup_imports
+setup_imports()
 
 # Import worker components
 from base_worker import BaseWorker

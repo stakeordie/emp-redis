@@ -5,6 +5,11 @@ import importlib
 import importlib.util
 from typing import Dict, List, Any, Type
 
+# Setup imports
+from setup_imports import setup_imports
+setup_imports()
+
+# Import required modules
 from connector_interface import ConnectorInterface
 from core.utils.logger import logger
 
