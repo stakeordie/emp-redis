@@ -1,17 +1,75 @@
 #!/usr/bin/env python3
 # Base worker for the EmProps Redis Worker
 import os
+import sys
 import json
 import asyncio
 import uuid
 import websockets
+import logging
 from typing import Dict, List, Any, Optional, Union, cast
 from enum import Enum, auto
 
-from connector_interface import ConnectorInterface
-from connector_loader import load_connectors, get_worker_capabilities
-from core.utils.logger import logger
-from core.models.message_models import MessageModels, MessageType
+# Setup basic logging in case core.utils.logger is not available
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+# Try to import required modules, exit if critical ones are missing
+try:
+    from connector_interface import ConnectorInterface
+except ImportError as e:
+    logger.error(f"Error importing ConnectorInterface: {e}")
+    sys.exit(1)
+
+try:
+    from connector_loader import load_connectors, get_worker_capabilities
+except ImportError as e:
+    logger.error(f"Error importing connector_loader: {e}")
+    sys.exit(1)
+
+# Try to import logger from core.utils.logger, fall back to basic logger if not available
+try:
+    from core.utils.logger import logger
+    logger.info("Successfully imported logger from core.utils.logger")
+except ImportError:
+    logger.info("Using fallback logger")
+
+# Try to import message models, create simple versions if not available
+try:
+    from core.models.message_models import MessageModels, MessageType
+    logger.info("Successfully imported message models")
+except ImportError as e:
+    logger.warning(f"Error importing message models: {e}. Using fallback implementation.")
+    
+    class MessageType(Enum):
+        """Message type enum"""
+        HEARTBEAT = "heartbeat"
+        STATUS = "status"
+        JOB_REQUEST = "job_request"
+        JOB_RESPONSE = "job_response"
+        JOB_STATUS = "job_status"
+    
+    class MessageModels:
+        """Simple fallback implementation of MessageModels"""
+        @staticmethod
+        def create_heartbeat_message(worker_id: str, status: str, current_job_id: Optional[str] = None) -> Dict[str, Any]:
+            return {
+                "type": MessageType.HEARTBEAT.value,
+                "worker_id": worker_id,
+                "status": status,
+                "current_job_id": current_job_id,
+                "timestamp": asyncio.get_event_loop().time()
+            }
+        
+        @staticmethod
+        def create_worker_status_message(worker_id: str, status: str, capabilities: Dict[str, Any]) -> Dict[str, Any]:
+            return {
+                "type": MessageType.STATUS.value,
+                "worker_id": worker_id,
+                "status": status,
+                "capabilities": capabilities,
+                "timestamp": asyncio.get_event_loop().time()
+            }
 
 class WorkerStatus(Enum):
     """Worker status enum"""

@@ -16,6 +16,12 @@ def main():
     parent_dir = os.path.dirname(current_dir)
     print(f"Parent directory: {parent_dir}")
     
+    # Create a simple message_models.py if it doesn't exist
+    create_simple_message_models()
+    
+    # Create a simple logger.py if it doesn't exist
+    create_simple_logger()
+    
     # Check if core directory exists in parent
     core_dir = os.path.join(parent_dir, "core")
     if not os.path.exists(core_dir):
