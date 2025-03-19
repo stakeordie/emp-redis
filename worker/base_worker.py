@@ -46,6 +46,12 @@ class BaseWorker:
         protocol = "wss" if self.use_ssl else "ws"
         self.redis_ws_url = f"{protocol}://{self.redis_host}:{self.redis_port}/ws/worker?token={self.auth_token}"
         
+        # Debug prints
+        print(f"Debug - REDIS_API_HOST: {self.redis_host}")
+        print(f"Debug - REDIS_API_PORT: {self.redis_port}")
+        print(f"Debug - USE_SSL: {self.use_ssl}")
+        print(f"Debug - Redis WebSocket URL: {self.redis_ws_url}")
+        
         # Initialize MessageModels for message parsing
         self.message_models = MessageModels()
         
