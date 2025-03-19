@@ -5,13 +5,17 @@ import sys
 import logging
 from dotenv import load_dotenv
 
-# Setup imports
-from setup_imports import setup_imports
-setup_imports()
+# Add the parent directory to the Python path
+parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, parent_dir)
+
+# Add the current directory to the Python path
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, current_dir)
 
 # Import worker components
 from base_worker import BaseWorker
-from core.utils.logger import setup_logger, logger
+from core.utils.logger import setup_logging, logger
 
 def setup_simulation_environment():
     """Setup environment variables for simulation mode"""
@@ -44,7 +48,7 @@ if __name__ == "__main__":
         
         # Setup logging
         log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
-        setup_logger(level=getattr(logging, log_level))
+        setup_logging()
         
         # Setup simulation environment
         setup_simulation_environment()

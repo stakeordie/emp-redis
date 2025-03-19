@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
 # Connector loader for the EmProps Redis Worker
 import os
+import sys
 import importlib
 import importlib.util
 from typing import Dict, List, Any, Type
 
-# Setup imports
-from setup_imports import setup_imports
-setup_imports()
+# Add the parent directory to the Python path
+parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, parent_dir)
+
+# Add the current directory to the Python path
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, current_dir)
 
 # Import required modules
 from connector_interface import ConnectorInterface

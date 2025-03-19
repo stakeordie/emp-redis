@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # Base worker for the EmProps Redis Worker
 import os
+import sys
 import json
 import asyncio
 import uuid
@@ -8,15 +9,19 @@ import websockets
 from typing import Dict, List, Any, Optional, Union, cast
 from enum import Enum, auto
 
-# Setup imports
-from setup_imports import setup_imports
-setup_imports()
+# Add the parent directory to the Python path
+parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, parent_dir)
+
+# Add the current directory to the Python path
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, current_dir)
 
 # Import required modules
 from connector_interface import ConnectorInterface
 from connector_loader import load_connectors, get_worker_capabilities
 from core.utils.logger import logger
-from core.models.message_models import MessageModels, MessageType
+from core.message_models import MessageModels, MessageType
 
 class WorkerStatus(Enum):
     """Worker status enum"""
