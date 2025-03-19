@@ -60,6 +60,24 @@ class ComfyUIConnector(ConnectorInterface):
             "supports_images": True
         }
     
+    def get_connection_status(self) -> Dict[str, Any]:
+        """Get the current connection status of the connector
+        
+        Returns:
+            Dict[str, Any]: Connection status information
+        """
+        return {
+            "connected": self.connected,
+            "service": "comfyui",
+            "details": {
+                "host": self.host,
+                "port": self.port,
+                "client_id": self.client_id,
+                "ws_url": self.ws_url,
+                "last_prompt_id": self.prompt_id
+            }
+        }
+    
     async def connect(self) -> bool:
         """Connect to ComfyUI WebSocket server
         

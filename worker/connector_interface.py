@@ -34,6 +34,18 @@ class ConnectorInterface(ABC):
         pass
     
     @abstractmethod
+    def get_connection_status(self) -> Dict[str, Any]:
+        """Get the current connection status of the connector
+        
+        Returns:
+            Dict[str, Any]: Connection status information including:
+                - connected (bool): Whether the connector is currently connected
+                - service (str): The name of the service (e.g., "comfyui")
+                - details (Dict[str, Any]): Additional service-specific details
+        """
+        pass
+    
+    @abstractmethod
     async def process_job(self, websocket, job_id: str, payload: Dict[str, Any], send_progress_update) -> Dict[str, Any]:
         """Process a job
         

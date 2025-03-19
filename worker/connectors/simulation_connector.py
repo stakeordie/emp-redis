@@ -49,6 +49,23 @@ class SimulationConnector(ConnectorInterface):
             "steps": self.steps
         }
     
+    def get_connection_status(self) -> Dict[str, Any]:
+        """Get the current connection status of the connector
+        
+        Returns:
+            Dict[str, Any]: Connection status information
+        """
+        # Simulation connector is always connected
+        return {
+            "connected": True,
+            "service": "simulation",
+            "details": {
+                "job_type": self.job_type,
+                "processing_time": self.processing_time,
+                "steps": self.steps
+            }
+        }
+    
     async def process_job(self, websocket, job_id: str, payload: Dict[str, Any], send_progress_update) -> Dict[str, Any]:
         """Process a simulated job
         

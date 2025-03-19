@@ -49,14 +49,71 @@ class BaseWorker:
         self.status = WorkerStatus.IDLE
         self.current_job_id = None
     
+    def get_connector_statuses(self) -> Dict[str, Any]:
+        """Get connection status for all connectors
+        
+        Returns:
+            Dict[str, Any]: Dictionary of connector statuses
+        """
+        connector_statuses = {}
+        for connector in self.connectors:
+            try:
+                status = connector.get_connection_status()
+                connector_statuses[status["service"]] = status
+            except Exception as e:
+                logger.error(f"Error getting connection status for connector: {str(e)}")
+                # Add error status for this connector
+                connector_statuses[connector.get_job_type()] = {
+                    "connected": False,
+                    "service": connector.get_job_type(),
+                    "details": {"error": str(e)}
+                }
+        return connector_statuses
+    
+    async def send_status_update(self, websocket):
+        """Send worker status update to Redis Hub
+        
+        Args:
+            websocket: The WebSocket connection to the Redis Hub
+        """
+        try:
+            # Get connection status for all connectors
+            connector_statuses = self.get_connector_statuses()
+            
+            # Create worker status message
+            status_message = self.message_models.create_worker_status_message(
+                worker_id=self.worker_id,
+                status=self.status.name.lower(),
+                capabilities={
+                    **self.capabilities,
+                    "connector_statuses": connector_statuses
+                }
+            )
+            
+            # Send status message
+            await websocket.send(json.dumps(status_message))
+            logger.debug(f"Sent status update with connector statuses")
+        except Exception as e:
+            logger.error(f"Error sending status update: {str(e)}")
+    
     async def send_heartbeat(self, websocket):
         """Send heartbeat messages to keep the connection alive
         
         Args:
             websocket: The WebSocket connection to the Redis Hub
         """
+        status_interval = 5  # Send full status every 5 heartbeats
+        counter = 0
+        
         while True:
             try:
+                # Increment counter
+                counter += 1
+                
+                # Every status_interval heartbeats, send a full status update
+                if counter % status_interval == 0:
+                    await self.send_status_update(websocket)
+                
                 # Create heartbeat message
                 heartbeat_message = self.message_models.create_heartbeat_message(
                     worker_id=self.worker_id,
