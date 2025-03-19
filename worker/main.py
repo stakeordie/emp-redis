@@ -43,8 +43,19 @@ def setup_simulation_environment():
 
 if __name__ == "__main__":
     try:
-        # Load environment variables from .env file
-        load_dotenv()
+        # Print current working directory
+        print(f"Current working directory: {os.getcwd()}")
+        print(f"Looking for .env file at: {os.path.join(os.getcwd(), '.env')}")
+        
+        # Load environment variables from .env file using absolute path
+        env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
+        print(f"Loading .env from absolute path: {env_path}")
+        load_dotenv(dotenv_path=env_path)
+        
+        # Print environment variables for debugging
+        print(f"REDIS_API_HOST: {os.environ.get('REDIS_API_HOST', 'not set')}")
+        print(f"REDIS_API_PORT: {os.environ.get('REDIS_API_PORT', 'not set')}")
+        print(f"USE_SSL: {os.environ.get('USE_SSL', 'not set')}")
         
         # Setup logging
         log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
