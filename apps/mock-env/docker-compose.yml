@@ -4,13 +4,13 @@ services:
   hub:
     container_name: hub
     build:
-      context: ../..  # Root of the monorepo
+      context: ../.. # Root of the monorepo
       dockerfile: ./apps/mock-env/Dockerfile.hub
     ports:
-      - "8001:8001"  # Redis API
-      - "6380:6379"  # Redis DB (mapped to different host port)
+      - "8001:8001" # Redis API
+      - "6380:6379" # Redis DB (mapped to different host port)
     environment:
-      - PYTHONPATH=/app  # Ensure core modules can be imported
+      - PYTHONPATH=/app # Ensure core modules can be imported
     env_file:
       - ../../hub/.env
     networks:
@@ -23,16 +23,14 @@ services:
   worker1:
     container_name: worker1
     build:
-      context: ../..  # Root of the monorepo
+      context: ../.. # Root of the monorepo
       dockerfile: ./apps/mock-env/Dockerfile.worker
     environment:
-      - MACHINE_ID=worker1
-      - NUM_WORKERS=3
-      - REDIS_API_HOST=hub
-      - REDIS_API_PORT=8001
-      - PYTHONPATH=/app  # Ensure core modules can be imported
+      - WORKER_ID=worker1
+      - CONNECTORS=image_processing,simulation
+      - PYTHONPATH=/app # Ensure core modules can be imported
     env_file:
-      - ../../.env
+      - ../../worker/.env.example
     networks:
       - redis-network
     depends_on:
@@ -44,16 +42,14 @@ services:
   worker2:
     container_name: worker2
     build:
-      context: ../..  # Root of the monorepo
+      context: ../.. # Root of the monorepo
       dockerfile: ./apps/mock-env/Dockerfile.worker
     environment:
-      - MACHINE_ID=worker2
-      - NUM_WORKERS=4
-      - REDIS_API_HOST=hub
-      - REDIS_API_PORT=8001
-      - PYTHONPATH=/app  # Ensure core modules can be imported
+      - CONNECTORS=image_processing,simulation
+      - WORKER_ID=worker2
+      - PYTHONPATH=/app # Ensure core modules can be imported
     env_file:
-      - ../../.env
+      - ../../worker/.env.example
     networks:
       - redis-network
     depends_on:
@@ -65,16 +61,14 @@ services:
   worker3:
     container_name: worker3
     build:
-      context: ../..  # Root of the monorepo
+      context: ../.. # Root of the monorepo
       dockerfile: ./apps/mock-env/Dockerfile.worker
     environment:
-      - MACHINE_ID=worker3
-      - NUM_WORKERS=3
-      - REDIS_API_HOST=hub
-      - REDIS_API_PORT=8001
-      - PYTHONPATH=/app  # Ensure core modules can be imported
+      - CONNECTORS=simulation,image_processing
+      - WORKER_ID=worker3
+      - PYTHONPATH=/app # Ensure core modules can be imported
     env_file:
-      - ../../.env
+      - ../../worker/.env.example
     networks:
       - redis-network
     depends_on:
@@ -86,16 +80,14 @@ services:
   worker4:
     container_name: worker4
     build:
-      context: ../..  # Root of the monorepo
+      context: ../.. # Root of the monorepo
       dockerfile: ./apps/mock-env/Dockerfile.worker
     environment:
-      - MACHINE_ID=worker4
-      - NUM_WORKERS=4
-      - REDIS_API_HOST=hub
-      - REDIS_API_PORT=8001
-      - PYTHONPATH=/app  # Ensure core modules can be imported
+      - CONNECTORS=simulation,image_processing
+      - WORKER_ID=worker4
+      - PYTHONPATH=/app # Ensure core modules can be imported
     env_file:
-      - ../../.env
+      - ../../worker/.env.example
     networks:
       - redis-network
     depends_on:

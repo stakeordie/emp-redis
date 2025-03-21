@@ -41,7 +41,7 @@ def setup_logging():
     app_logger.addHandler(console_handler)
     
     # Print startup message
-    app_logger.info(f"Logger initialized at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    # app_logger.info(f"Logger initialized at {time.strftime('%Y-%m-%d %H:%M:%S')}")
     
     return app_logger
 

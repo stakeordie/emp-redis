@@ -190,19 +190,6 @@ class RedisServiceInterface(ABC):
         pass
     
     @abstractmethod
-    def cleanup_stale_jobs(self, max_heartbeat_age: int = 600) -> int:
-        """
-        Clean up stale jobs.
-        
-        Args:
-            max_heartbeat_age: Maximum age in seconds for a worker heartbeat
-            
-        Returns:
-            int: Number of jobs cleaned up
-        """
-        pass
-    
-    @abstractmethod
     def cleanup_stale_claims(self, max_claim_age: int = 30) -> int:
         """
         Clean up stale job claims.

@@ -40,9 +40,16 @@ const state = {
     pendingRequests: {}
 };
 
+// Connection URLs
+const CONNECTION_URLS = {
+    railway: "wss://redisserver-production.up.railway.app",
+    local: "ws://localhost:8001"
+};
+
 // DOM Elements
 const elements = {
     // Connection controls
+    connectionType: document.getElementById('connection-type'),
     websocketUrl: document.getElementById('websocket-url'),
     authToken: document.getElementById('auth-token'),
     // Connection info display elements
@@ -88,6 +95,19 @@ const elements = {
 };
 
 /**
+ * Update WebSocket URL based on connection type
+ */
+function updateWebSocketUrl() {
+    const connectionType = elements.connectionType.value;
+    elements.websocketUrl.value = CONNECTION_URLS[connectionType];
+    
+    // If we're already connected, show a warning about changing connection
+    if (state.monitorConnected) {
+        addLogEntry('warning', 'Connection change detected. Disconnect and reconnect to apply changes.');
+    }
+}
+
+/**
  * Initialize the application
  */
 function init() {
@@ -95,6 +115,10 @@ function init() {
     elements.connectBtn.addEventListener('click', connect);
     elements.disconnectBtn.addEventListener('click', disconnect);
     elements.submitJobBtn.addEventListener('click', submitJob);
+    elements.connectionType.addEventListener('change', updateWebSocketUrl);
+    
+    // Initialize WebSocket URL based on default connection type
+    updateWebSocketUrl();
     
     // Add worker subscription event listeners
     if (elements.subscribeBtn) {
@@ -151,12 +175,12 @@ function connect() {
     // Create IDs with the specified format using timestamps
     const clientId = `client-id-${timestamp}`;
     const monitorId = `monitor-id-${timestamp}`;
-    const workerId = `worker-simulator-${timestamp}`;
+    //##const workerId = `worker-simulator-${timestamp}`;
     
     // Store IDs in state for reference
     state.clientId = clientId;
     state.monitorId = monitorId;
-    state.workerId = workerId;
+    //##state.workerId = workerId;
     
     // Show connection info display
     if (elements.connectionInfo) {
@@ -184,7 +208,7 @@ function connect() {
     connectClientSocket(baseUrl, clientId, authToken);
     
     // Connect worker socket
-    connectWorkerSocket(baseUrl, workerId, authToken);
+    //##onnectWorkerSocket(baseUrl, workerId, authToken);
 }
 
 /**
@@ -1119,6 +1143,8 @@ function handleStatsBroadcast(parsedMessage, rawMessage, source = 'unknown') {
             connectedAt: Date.now(), // We don't have the exact time, so use current time
             jobsProcessed: workerData.jobs_processed || 0,
             is_accepting_jobs: system.workers.active_workers.find(w => w.id === workerId) !== undefined,
+            // Include worker capabilities
+            capabilities: workerData.capabilities || {},
             // Add any additional worker data that might be useful
             lastSeen: new Date().toLocaleTimeString()
         };
@@ -1565,6 +1591,7 @@ function updateUI() {
 
             const acceptingJobsClass = worker.is_accepting_jobs ? 'status-active' : 'status-error';
             const acceptingJobsText = worker.is_accepting_jobs ? 'Yes' : 'No';
+            const capabilitiesHtml = worker.capabilities.supported_job_types ? JSON.stringify(worker.capabilities.supported_job_types) : 'None';
             
             row.innerHTML = `
                 <td>${worker.id}</td>
@@ -1572,6 +1599,7 @@ function updateUI() {
                 <td><span class="status ${acceptingJobsClass}">${acceptingJobsText}</span></td>
                 <td>${formatRelativeTime(worker.connectedAt)}</td>
                 <td>${worker.jobsProcessed || 0}</td>
+                <td>${capabilitiesHtml}</td>
             `;
             
             elements.workersTableBody.appendChild(row);

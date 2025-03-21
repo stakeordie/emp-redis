@@ -5,18 +5,26 @@ services:
   remote-worker1:
     container_name: remote-worker1
     build:
-      context: ../..  # Root of the monorepo
+      context: ../.. # Root of the monorepo
       dockerfile: ./apps/mock-env/Dockerfile.worker
     environment:
-      - MACHINE_ID=remote-worker1
-      - NUM_WORKERS=2
+      # Core worker configuration
+      - WORKER_ID=remote-worker1
       - REDIS_API_HOST=redisserver-production.up.railway.app
       - REDIS_API_PORT=443
       - USE_SSL=true
       - WEBSOCKET_AUTH_TOKEN=3u8sdj5389fj3kljsf90u
-      - PYTHONPATH=/app  # Ensure core modules can be imported
+      - HEARTBEAT_INTERVAL=20
+      - LOG_LEVEL=INFO
+      - PYTHONPATH=/app # Ensure core modules can be imported
+      
+      # Connector configuration
+      - CONNECTORS=simulation
+      - SIMULATION_JOB_TYPE=image_processing
+      - SIMULATION_PROCESSING_TIME=10
+      - SIMULATION_STEPS=5
     env_file:
-      - ../../.env
+      - ../../worker/.env.example
     networks:
       - redis-remote-network
     # Volumes removed - rebuild containers when code changes
@@ -26,18 +34,25 @@ services:
   remote-worker2:
     container_name: remote-worker2
     build:
-      context: ../..  # Root of the monorepo
+      context: ../.. # Root of the monorepo
       dockerfile: ./apps/mock-env/Dockerfile.worker
     environment:
-      - MACHINE_ID=remote-worker2
-      - NUM_WORKERS=2
-      - REDIS_API_HOST=redisserver-production.up.railway.app
-      - REDIS_API_PORT=443
+      # Core worker configuration
+      - WORKER_ID=remote-worker2
+      - REDIS_WS_URL=wss://redisserver-production.up.railway.app
       - USE_SSL=true
       - WEBSOCKET_AUTH_TOKEN=3u8sdj5389fj3kljsf90u
-      - PYTHONPATH=/app  # Ensure core modules can be imported
+      - HEARTBEAT_INTERVAL=20
+      - LOG_LEVEL=INFO
+      - PYTHONPATH=/app # Ensure core modules can be imported
+      
+      # Connector configuration
+      - CONNECTORS=simulation
+      - SIMULATION_JOB_TYPE=image_processing
+      - SIMULATION_PROCESSING_TIME=10
+      - SIMULATION_STEPS=5
     env_file:
-      - ../../.env
+      - ../../worker/.env.example
     networks:
       - redis-remote-network
     # Volumes removed - rebuild containers when code changes

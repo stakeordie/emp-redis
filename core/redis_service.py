@@ -12,7 +12,7 @@ from .utils.logger import logger
 from .interfaces import RedisServiceInterface
 
 # Import dotenv with type ignore for missing stubs
-from dotenv import load_dotenv  # type: ignore
+from dotenv import load_dotenv
 
 # Redis configuration
 # Using Redis URL as the standard connection method
@@ -427,38 +427,64 @@ class RedisService(RedisServiceInterface):
         Returns:
             bool: True if registration was successful, False otherwise
         """
-        worker_key = f"{WORKER_PREFIX}{worker_id}"
-        
-        # Initialize worker info from capabilities or create empty dict
-        worker_info = capabilities or {}
-        
-        # Add worker info with current timestamp
-        current_time = time.time()
-        worker_info["registered_at"] = current_time
-        worker_info["last_heartbeat"] = current_time
-        worker_info["status"] = "idle"
-        worker_info["current_job_id"] = ""
-        worker_info["jobs_processed"] = worker_info.get("jobs_processed", 0)
-        worker_info["last_job_completed_at"] = worker_info.get("last_job_completed_at", 0)
-        worker_info["updated_at"] = current_time
-        
-        # Ensure supported_job_types is stored as a string for Redis compatibility
-        if "supported_job_types" in worker_info and isinstance(worker_info["supported_job_types"], list):
-            worker_info["supported_job_types"] = json.dumps(worker_info["supported_job_types"])
-        
-        # Add worker to hash storage
-        self.client.hset(worker_key, mapping=worker_info)
-        
-        # Set TTL for worker key (24 hours by default)
-        self.client.expire(worker_key, 86400)  # 24 hours in seconds
-        
-        # Add worker to tracking sets
-        self.client.sadd("workers:all", worker_id)
-        
-        # Add to idle workers set since all workers start as idle
-        self.client.sadd("workers:idle", worker_id)
-        
-        return True
+        try:
+            if worker_id.startswith("worker"):
+                worker_key = f"{WORKER_PREFIX}{worker_id}"
+            else:
+                worker_key = f"{WORKER_PREFIX}worker{worker_id}"
+            # Log the original capabilities received
+            # logger.info(f"[REDIS-REG] Registering worker {worker_id} with capabilities: {capabilities}")
+            
+            # Initialize worker info from capabilities or create empty dict
+            worker_info = capabilities or {}
+
+                # Convert boolean values to strings
+            for key, value in list(worker_info.items()):
+                if isinstance(value, bool):
+                    worker_info[key] = str(value)
+                elif isinstance(value, (int, float)):
+                    worker_info[key] = str(value)
+            
+            # Log supported job types before any modification
+            # if "supported_job_types" in worker_info:
+            #     logger.info(f"[REDIS-EXO] Worker {worker_id} original supported_job_types: {worker_info.get('supported_job_types')}")
+            # else:
+            #     logger.warning(f"[REDIS-EXO] Worker {worker_id} has no supported_job_types in capabilities")
+            
+            # Add worker info with current timestamp
+            current_time = time.time()
+            worker_info["registered_at"] = current_time
+            worker_info["last_heartbeat"] = current_time
+            worker_info["status"] = "idle"
+            worker_info["current_job_id"] = ""
+            worker_info["jobs_processed"] = worker_info.get("jobs_processed", 0)
+            worker_info["last_job_completed_at"] = worker_info.get("last_job_completed_at", 0)
+            worker_info["updated_at"] = current_time
+            logger.info(f"[redis_service.py register_worker] 2 ")
+            # Ensure supported_job_types is stored as a string for Redis compatibility
+            if "supported_job_types" in worker_info:
+                if isinstance(worker_info["supported_job_types"], list):
+                    worker_info["supported_job_types"] = json.dumps(worker_info["supported_job_types"])
+                elif not isinstance(worker_info["supported_job_types"], str):
+                    worker_info["supported_job_types"] = str(worker_info["supported_job_types"])
+                # logger.info(f"[REDIS-EXO] Converting supported_job_types list to JSON string for worker {worker_id}")
+                # logger.info(f"[REDIS-EXO] Converted supported_job_types: {worker_info['supported_job_types']}")
+            
+            # Add worker to hash storage
+            logger.info(f"[redis_service.py register_worker] {self.client.hgetall(worker_key)} Worker key: {worker_key} Worker info: {worker_info}")
+            self.client.hset(worker_key, mapping=worker_info)
+
+            # Set TTL for worker key (24 hours by default)
+            self.client.expire(worker_key, 86400)  # 24 hours in seconds
+            # Add worker to tracking sets
+            self.client.sadd("workers:all", worker_id)
+            
+            # Add to idle workers set since all workers start as idle
+            self.client.sadd("workers:idle", worker_id)
+            return True
+        except Exception as e:
+            logger.error(f"[redis_service.py register_worker] Error registering worker {worker_id}: {str(e)}")
+            return False
         
     def worker_heartbeat(self, worker_id: str) -> bool:
         """
@@ -472,7 +498,7 @@ class RedisService(RedisServiceInterface):
         """
         # This is now a no-op since worker heartbeats are tracked in memory by ConnectionManager
         # We always return True to maintain compatibility with existing code
-        logger.debug(f"Worker heartbeat recorded for {worker_id} (in-memory only)")
+        # logger.debug(f"Worker heartbeat recorded for {worker_id} (in-memory only)")
         return True
         
     def update_worker_heartbeat(self, worker_id: str, status: Optional[str] = None, 
@@ -489,11 +515,11 @@ class RedisService(RedisServiceInterface):
         """
         # This is now a no-op since worker heartbeats are tracked in memory by ConnectionManager
         # We always return True to maintain compatibility with existing code
-        logger.debug(f"Worker heartbeat received for {worker_id} (in-memory only)")
+        # logger.debug(f"Worker heartbeat received for {worker_id} (in-memory only)")
         
         # If status is provided, log it for debugging purposes
-        if status is not None:
-            logger.debug(f"Worker {worker_id} status updated to {status} (in-memory only)")
+        # if status is not None:
+        #     logger.debug(f"Worker {worker_id} status updated to {status} (in-memory only)")
             
         return True
         
@@ -501,7 +527,7 @@ class RedisService(RedisServiceInterface):
         """Check if a worker exists (in-memory only, no longer uses Redis)"""
         # This is now a no-op that always returns True
         # The actual worker existence check is handled by ConnectionManager
-        logger.debug(f"Worker existence check for {worker_id} (in-memory only)")
+        # logger.debug(f"Worker existence check for {worker_id} (in-memory only)")
         return True
     
     def update_worker_status(self, worker_id: str, status: str, job_id: Optional[str] = None, 
@@ -519,11 +545,11 @@ class RedisService(RedisServiceInterface):
         """
         # This is now a no-op since worker status is tracked in memory by ConnectionManager
         # We always return True to maintain compatibility with existing code
-        logger.debug(f"Worker status update for {worker_id} to {status} (in-memory only)")
+        # logger.debug(f"Worker status update for {worker_id} to {status} (in-memory only)")
         
         # If job_id is provided, log it for debugging purposes
-        if job_id is not None:
-            logger.debug(f"Worker {worker_id} assigned to job {job_id} (in-memory only)")
+        # if job_id is not None:
+        #     logger.debug(f"Worker {worker_id} assigned to job {job_id} (in-memory only)")
             
         return True
         
@@ -596,7 +622,7 @@ class RedisService(RedisServiceInterface):
                     # Increment counter
                     reassigned_count += 1
                     
-                    logger.info(f"Reassigned job {job_id} from disconnected worker {worker_id}")
+                    # logger.info(f"Reassigned job {job_id} from disconnected worker {worker_id}")
             
             return reassigned_count
             
@@ -605,19 +631,17 @@ class RedisService(RedisServiceInterface):
             return 0
             
     def mark_stale_workers(self, max_heartbeat_age: int = 60) -> List[str]:
-        """
-        Mark workers without recent heartbeats as disconnected and reassign their jobs.
+    # Use environment variable if not explicitly provided
+        max_heartbeat_age = int(os.getenv('MAX_WORKER_HEARTBEAT_AGE', 60))
         
-        Args:
-            max_heartbeat_age: Maximum age of heartbeat in seconds (default: 60 seconds)
-            
-        Returns:
-            List of worker IDs that were marked as disconnected
-        """
+        logger.debug(f"Using max_heartbeat_age: {max_heartbeat_age}")
+
         try:
             current_time = time.time()
             stale_workers = []
             worker_keys = self.client.keys(f"{WORKER_PREFIX}*")
+
+            logger.info(f"[redis_service.py mark_stale_workers] max_heartbeat_age: {max_heartbeat_age}")
             
             for worker_key in worker_keys:
                 # Convert bytes to string if needed
@@ -627,6 +651,7 @@ class RedisService(RedisServiceInterface):
                 # Get worker status and last heartbeat
                 worker_status_bytes = self.client.hget(worker_key, "status")
                 last_heartbeat_bytes = self.client.hget(worker_key, "last_heartbeat")
+                logger.debug(f"RedisService.py mark_stale_workers: Worker {worker_id} status: {worker_status_bytes}, last heartbeat: {last_heartbeat_bytes}")
                 
                 # Skip if worker doesn't have status or heartbeat (shouldn't happen)
                 if not worker_status_bytes or not last_heartbeat_bytes:
@@ -638,6 +663,7 @@ class RedisService(RedisServiceInterface):
                 
                 # Calculate heartbeat age
                 heartbeat_age = current_time - last_heartbeat
+                logger.debug(f"RedisService.py mark_stale_workers: Worker {worker_id} heartbeat age: {heartbeat_age}")
                 
                 # Skip workers already marked as disconnected
                 if worker_status == "disconnected":
@@ -651,15 +677,15 @@ class RedisService(RedisServiceInterface):
                     self.client.hset(worker_key, "disconnect_reason", "Stale heartbeat")
                     
                     # Reassign any jobs assigned to this worker
-                    reassigned_count = self.reassign_worker_jobs(worker_id)
+                    # reassigned_count = self.reassign_worker_jobs(worker_id)
                     
-                    if reassigned_count > 0:
-                        logger.info(f"Reassigned {reassigned_count} jobs from stale worker {worker_id}")
+                    # if reassigned_count > 0:
+                    #     logger.info(f"Reassigned {reassigned_count} jobs from stale worker {worker_id}")
                     
                     # Add to list of stale workers
                     stale_workers.append(worker_id)
                     
-                    logger.info(f"Marked worker {worker_id} as disconnected due to stale heartbeat (age: {heartbeat_age:.1f}s)")
+                    # logger.info(f"Marked worker {worker_id} as disconnected due to stale heartbeat (age: {heartbeat_age:.1f}s)")
             
             return stale_workers
             
@@ -791,11 +817,11 @@ class RedisService(RedisServiceInterface):
                     # Add detailed information for active jobs (pending, active, failed)
                     if job_status in ["pending", "active", "failed"]:
                         # Add detailed debug logging to trace the priority field
-                        print(f"[DEBUG] Job data from Redis for job {job_id}: {job_data}")
+                        #print(f"[DEBUG] Job data from Redis for job {job_id}: {job_data}")
                         
                         # Extract and log the priority value specifically
                         raw_priority = job_data.get("priority", "NOT_FOUND")
-                        print(f"[DEBUG] Raw priority value for job {job_id}: {raw_priority} (type: {type(raw_priority)})")
+                        #print(f"[DEBUG] Raw priority value for job {job_id}: {raw_priority} (type: {type(raw_priority)})")
                         
                         # Add detailed job information with priority field
                         # Check both job_type and type fields for backward compatibility
@@ -811,18 +837,17 @@ class RedisService(RedisServiceInterface):
                         }
                         
                         # Log the final job_info object that will be sent to the frontend
-                        print(f"[DEBUG] Final job_info for job {job_id}: {job_info}")
+                        #print(f"[DEBUG] Final job_info for job {job_id}: {job_info}")
                         stats["jobs"]["active_jobs"].append(job_info)
             
             # Worker stats
             worker_keys = self.client.keys(f"{WORKER_PREFIX}*")
             stats["workers"]["total"] = len(worker_keys)
-            
             # Worker status counts and detailed worker information
             for worker_key in worker_keys:
                 # Extract worker ID from Redis key
                 worker_id = worker_key.replace(WORKER_PREFIX, "")  # Already a string with decode_responses=True
-                
+                #logger.debug(f"[DEBUGSTATES] Worker ID: {worker_id}")
                 # Get all worker data
                 worker_data = self.client.hgetall(worker_key)
                 
@@ -850,70 +875,10 @@ class RedisService(RedisServiceInterface):
             print(f"Error in request_stats: {str(e)}")
         
         # Log the final stats structure before returning it
-        print(f"[DEBUG] Final stats structure: {stats}")
-        print(f"[DEBUG] Jobs structure: {stats['jobs']}")
+        #print(f"[DEBUG] Final stats structure: {stats}")
+        #print(f"[DEBUG] Jobs structure: {stats['jobs']}")
         
         return stats
-    
-    def cleanup_stale_jobs(self, max_heartbeat_age: int = 600) -> int:
-        """Clean up stale jobs from workers that have disappeared"""
-        current_time = time.time()
-        stale_count = 0
-        
-        # Get all worker information
-        worker_keys = self.client.keys(f"{WORKER_PREFIX}*")
-        
-        for worker_key in worker_keys:
-            worker_id = worker_key.replace(f"{WORKER_PREFIX}", "")
-            # Get worker details from Redis and convert to proper dictionary
-            redis_result = self.client.hgetall(worker_key)
-            worker_data: Dict[str, Any] = dict(redis_result)
-            
-            # Skip if no heartbeat data
-            if "last_heartbeat" not in worker_data:
-                continue
-                
-            last_heartbeat = float(worker_data["last_heartbeat"])
-            heartbeat_age = current_time - last_heartbeat
-            
-            # Check if worker is stale
-            if heartbeat_age > max_heartbeat_age:
-
-                
-                # Find any jobs assigned to this worker
-                job_keys = self.client.keys(f"{JOB_PREFIX}*")
-                
-                for job_key in job_keys:
-                    job_id = job_key.replace(f"{JOB_PREFIX}", "")
-                    job_worker = self.client.hget(job_key, "worker")
-                    job_status = self.client.hget(job_key, "status")
-                    
-                    # Only reset jobs that are in processing status and assigned to this worker
-                    if job_worker == worker_id and job_status == "processing":
-                        # Get job priority
-                        priority = int(self.client.hget(job_key, "priority") or 0)
-                        
-                        # Reset job status to pending
-                        self.client.hset(job_key, "status", "pending")
-                        self.client.hdel(job_key, "worker")
-                        self.client.hdel(job_key, "started_at")
-                        
-                        # Add back to queue
-                        if priority > 0:
-                            self.client.zadd(PRIORITY_QUEUE, {job_id: priority})
-                        else:
-                            self.client.lpush(STANDARD_QUEUE, job_id)
-                            
-
-                        stale_count += 1
-                
-                # Mark worker as disconnected
-                self.client.hset(worker_key, "status", "disconnected")
-        
-        return stale_count
-    
-    # The mark_stale_workers_out_of_service method has been removed and replaced by mark_stale_workers
-    # which provides more comprehensive handling of stale workers including job reassignment
         
     def notify_idle_workers_of_job(self, job_id: str, job_type: str, job_request_payload: Optional[str] = None) -> List[str]:
         # Parameter is now correctly typed as Optional[str] to match interface
@@ -1009,6 +974,60 @@ class RedisService(RedisServiceInterface):
 
                 return None
     
+    def get_pending_jobs_by_type(self, job_type: str) -> List[Dict[str, Any]]:
+        """
+        Get all pending jobs of a specific type from Redis, sorted by priority and age.
+        
+        This method searches through the priority queue for pending jobs of the specified type.
+        Jobs are returned sorted by priority (highest first) and then by age (oldest first).
+        
+        Args:
+            job_type: The type of job to search for
+            
+        Returns:
+            List[Dict[str, Any]]: List of job data dictionaries for pending jobs of the specified type
+        """
+        try:
+            result_jobs = []
+            
+            # Get all jobs from priority queue
+            priority_jobs = self.client.zrange(PRIORITY_QUEUE, 0, -1, withscores=True, desc=True)
+            # logger.info(f"[JOB-MATCH] Found {len(priority_jobs)} total jobs in priority queue")
+            
+            # Check each job to see if it's pending and of the right type
+            for job_id, composite_score in priority_jobs:
+                job_id_str = job_id  # Already a string with decode_responses=True
+                job_key = f"{JOB_PREFIX}{job_id_str}"
+                
+                # logger.debug(f"[JOB-MATCH] Checking job {job_id_str} in priority queue")
+                # Check if job exists, is pending, and is of the right type
+                pipe = self.client.pipeline()
+                pipe.hget(job_key, "status")
+                pipe.hget(job_key, "job_type")
+                status, current_job_type = pipe.execute()
+                
+                # logger.debug(f"[JOB-MATCH] Job {job_id_str} status: {status}, type: {current_job_type}, job_type: {job_type}, job_type[0]: {job_type[0]}")
+                
+                if status == "pending" and current_job_type == job_type: #AI HELP NEEDS FIXING
+                    # Get all job data
+                    # logger.debug(f"[{job_type} CAPABLE WORKERS FOUND] Job {job_id_str} is pending and of type {job_type}")
+                    job_data = self.client.hgetall(job_key)
+                    if job_data:
+                        job_dict: Dict[str, Any] = job_data
+                        job_dict["id"] = job_id_str  # Add the job ID to the dict
+                        result_jobs.append(job_dict)
+            
+            # if result_jobs:
+            #     logger.info(f"[JOB-MATCH] Found {len(result_jobs)} pending jobs of type {job_type}")
+            # else:
+            #     logger.info(f"[JOB-MATCH] No pending jobs found of type {job_type}")
+                
+            return result_jobs
+            
+        except Exception as e:
+            logger.error(f"[JOB-MATCH] Error in get_pending_jobs_by_type: {str(e)}")
+            return []
+    
     def get_next_pending_job(self) -> Optional[Dict[str, Any]]:
         """Get the next highest priority pending job from Redis
         
@@ -1021,37 +1040,37 @@ class RedisService(RedisServiceInterface):
         """
         try:
             # Check priority queue for pending jobs
-            logger.info("[DEBUG] Checking priority queue for pending jobs")
+            # logger.info("[DEBUG] Checking priority queue for pending jobs")
             
             # Get jobs from priority queue, already sorted by composite score (highest first)
             # This ensures higher priority jobs come first, and within same priority, older jobs come first
             priority_jobs = self.client.zrange(PRIORITY_QUEUE, 0, -1, withscores=True, desc=True)
-            logger.info(f"[DEBUG] Found {len(priority_jobs)} jobs in priority queue: {priority_jobs}")
+            # logger.info(f"[DEBUG] Found {len(priority_jobs)} jobs in priority queue: {priority_jobs}")
             
             # No need to sort again since Redis returns them in the right order
             # Just use the jobs in the order they come from Redis
             sorted_priority_jobs = priority_jobs
-            logger.info(f"[DEBUG] Processing priority jobs in order: {sorted_priority_jobs}")
+            # logger.info(f"[DEBUG] Processing priority jobs in order: {sorted_priority_jobs}")
             
             for job_id, composite_score in sorted_priority_jobs:
                 job_id_str = job_id  # Already a string with decode_responses=True
-                logger.info(f"[DEBUG] Checking job: {job_id_str} with composite score {composite_score}")
+                # logger.info(f"[DEBUG] Checking job: {job_id_str} with composite score {composite_score}")
                 job_key = f"{JOB_PREFIX}{job_id_str}"
                 
                 # Check if job exists and is pending
                 job_status = self.client.hget(job_key, "status")
                 if job_status:
-                    logger.info(f"[DEBUG] Job {job_id_str} status: {job_status}")
+                    # logger.info(f"[DEBUG] Job {job_id_str} status: {job_status}")
                     
                     if job_status == "pending":
-                        logger.info(f"[DEBUG] Found pending job: {job_id_str}")
+                        # logger.info(f"[DEBUG] Found pending job: {job_id_str}")
                         # Get all job data
                         job_data = self.client.hgetall(job_key)
                         if job_data:
                             # With decode_responses=True, all keys and values are already strings
                             job_dict: Dict[str, Any] = job_data
                             job_dict["id"] = job_id_str  # Add the job ID to the dict
-                            logger.info(f"[DEBUG] Returning job data: {job_dict}")
+                            # logger.info(f"[DEBUG] Returning job data: {job_dict}")
                             return job_dict
                         else:
                             logger.info(f"[DEBUG] No job data found for {job_id_str}")
@@ -1059,7 +1078,7 @@ class RedisService(RedisServiceInterface):
                     logger.info(f"[DEBUG] No status found for job {job_id_str}")
             
             # No pending jobs found
-            logger.info("[DEBUG] No pending jobs found in priority queue")
+            # logger.info("[DEBUG] No pending jobs found in priority queue")
             return None
             
         except Exception as e:
@@ -1182,6 +1201,13 @@ class RedisService(RedisServiceInterface):
                 if "supported_job_types" in worker_data and worker_data["supported_job_types"]:
                     try:
                         worker_data["supported_job_types"] = json.loads(worker_data["supported_job_types"])
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+                        
+                # Parse capabilities if present
+                if "capabilities" in worker_data and worker_data["capabilities"]:
+                    try:
+                        worker_data["capabilities"] = json.loads(worker_data["capabilities"])
                     except (json.JSONDecodeError, TypeError):
                         pass
                 

@@ -4,7 +4,7 @@ import json
 import time
 import uuid
 from typing import Dict, Any, Optional, List, TypeVar, Callable, Union
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, validator
 from .interfaces.message_models_interface import MessageModelsInterface
 from .utils.logger import logger
 
@@ -237,6 +237,46 @@ class UnknownMessage(BaseMessage):
     type: str = MessageType.UNKNOWN
     content: str
 
+class WorkerCapabilities(BaseModel):
+    version: str = Field(default="1.0.0")
+    supported_job_types: List[str] = Field(default_factory=list)
+    cpu: Optional[bool] = None
+    memory: Optional[str] = None
+    
+    @validator('supported_job_types', pre=True, always=True)
+    def normalize_job_types(cls, v):
+        # Handle various input types
+        if v is None:
+            return []
+        
+        # If it's a string, try to parse as JSON
+        if isinstance(v, str):
+            try:
+                import json
+                parsed = json.loads(v)
+                if isinstance(parsed, list):
+                    return [str(job_type) for job_type in parsed]
+                return [str(v)]
+            except json.JSONDecodeError:
+                return [str(v)]
+        
+        # If it's a list, ensure all elements are strings
+        if isinstance(v, list):
+            return [str(job_type) for job_type in v]
+        
+        # If it's something else, convert to string
+        return [str(v)]
+    
+    def dict(self, *args, **kwargs):
+        # Override dict method to ensure consistent output
+        base_dict = super().dict(*args, **kwargs)
+        # Ensure supported_job_types is always a list of strings
+        base_dict['supported_job_types'] = [str(jt) for jt in base_dict.get('supported_job_types', [])]
+        return base_dict
+
+    class Config:
+        # Allow extra fields to be flexible with worker-specific capabilities
+        extra = 'allow'
 class MessageModels(MessageModelsInterface):
     """
     Implementation of the MessageModelsInterface.
@@ -338,6 +378,9 @@ class MessageModels(MessageModelsInterface):
                     lambda: RegisterWorkerMessage(
                         type=MessageType.REGISTER_WORKER,
                         worker_id=data.get("worker_id", ""),
+                        capabilities=data.get("capabilities"),
+                        subscribe_to_jobs=data.get("subscribe_to_jobs", True),
+                        status=data.get("status", "idle"),
                         timestamp=data.get("timestamp", time.time())
                     ),
                     message_type
@@ -422,6 +465,16 @@ class MessageModels(MessageModelsInterface):
                         job_type=data.get("job_type", ""),
                         priority=data.get("priority", 0),
                         job_request_payload=data.get("job_request_payload", {}),
+                        timestamp=data.get("timestamp", time.time())
+                    ),
+                    message_type
+                )
+            case MessageType.JOB_COMPLETED_ACK:
+                return self._try_parse_message(
+                    lambda: JobCompletedAckMessage(
+                        type=MessageType.JOB_COMPLETED_ACK,
+                        job_id=data.get("job_id", ""),
+                        worker_id=data.get("worker_id", ""),
                         timestamp=data.get("timestamp", time.time())
                     ),
                     message_type
@@ -826,7 +879,7 @@ class MessageModels(MessageModelsInterface):
         Returns:
             JobNotificationsSubscribedMessage: Job notifications subscribed message model
         """
-        logger.debug(f"[MessageModels] Creating job notifications subscribed message for worker {worker_id}")
+        #logger.debug(f"[MessageModels] Creating job notifications subscribed message for worker {worker_id}")
         return JobNotificationsSubscribedMessage(
             type=MessageType.JOB_NOTIFICATIONS_SUBSCRIBED,
             worker_id=worker_id,

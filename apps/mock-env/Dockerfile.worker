@@ -5,13 +5,15 @@ WORKDIR /app
 # Install dependencies
 RUN pip install --no-cache-dir fastapi uvicorn websockets aiohttp redis python-dotenv
 
-# Copy Worker code, core code, and .env file
+# Copy Worker code, core code, and .env.example file
 COPY ./worker /app/
 COPY ./core /app/core/
-COPY ./worker/.env /app/.env
 
 # Ensure Python can find the core modules
 ENV PYTHONPATH=/app
+
+# Make entrypoint script executable
+RUN chmod +x /app/docker_entrypoint.sh
 
 # Add debugging to show directory contents
 RUN echo "Worker container setup" && \
@@ -21,5 +23,5 @@ RUN echo "Worker container setup" && \
     echo "Python path:" && python -c "import sys; print(sys.path)"
 
 # Start the worker process with environment variables
-# Workers will connect directly to the hub service
-CMD ["bash", "-c", "echo 'Directory contents:' && ls -la /app && echo '/app/core contents:' && ls -la /app/core && python main.py --worker-id \"$MACHINE_ID-worker-1\""]
+# Workers will connect directly to the hub service using the entrypoint script
+ENTRYPOINT ["/app/docker_entrypoint.sh"]

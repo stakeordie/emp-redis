@@ -12,10 +12,16 @@ class SimulationConnector(ConnectorInterface):
     
     def __init__(self):
         """Initialize the simulation connector"""
-        # Get configuration from environment variables
+        # Get configuration from environment variables with SIMULATION_ prefix
         self.job_type = os.environ.get("SIMULATION_JOB_TYPE", "simulation")
         self.processing_time = int(os.environ.get("SIMULATION_PROCESSING_TIME", "10"))
         self.steps = int(os.environ.get("SIMULATION_STEPS", "5"))
+        
+        # Log configuration
+        logger.info(f"[SIMULATION] Connector configuration:")
+        logger.info(f"[SIMULATION] Job type: {self.job_type}")
+        logger.info(f"[SIMULATION] Processing time: {self.processing_time} seconds")
+        logger.info(f"[SIMULATION] Steps: {self.steps}")
     
     def initialize(self) -> bool:
         """Initialize the connector

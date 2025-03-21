@@ -25,10 +25,16 @@ def load_connectors() -> Dict[str, ConnectorInterface]:
         Dict[str, ConnectorInterface]: Dictionary of connector instances by job type
     """
     # Get connector list from environment variable
-    connector_list = os.environ.get("CONNECTORS", "simulation").split(",")
+    connector_env = os.environ.get("CONNECTORS", "simulation")
+    logger.info(f"[CONNECTOR-DEBUG] CONNECTORS environment variable: '{connector_env}'")
+    
+    connector_list = connector_env.split(",")
     connector_list = [c.strip() for c in connector_list if c.strip()]
     
-    logger.info(f"Loading connectors: {connector_list}")
+    # Log Python path for debugging
+    logger.info(f"[CONNECTOR-DEBUG] Python path: {sys.path}")
+    logger.info(f"[CONNECTOR-DEBUG] Current directory: {os.getcwd()}")
+    logger.info(f"[CONNECTOR-DEBUG] Loading connectors: {connector_list}")
     
     # Dictionary to store connector instances by job type
     connectors = {}
@@ -41,17 +47,40 @@ def load_connectors() -> Dict[str, ConnectorInterface]:
         try:
             # Try to import the connector module
             module_name = f"connectors.{connector_name}_connector"
-            module = importlib.import_module(module_name)
+            logger.info(f"[CONNECTOR-DEBUG] Attempting to import module: {module_name}")
+            
+            try:
+                module = importlib.import_module(module_name)
+                logger.info(f"[CONNECTOR-DEBUG] Successfully imported module: {module_name}")
+            except ImportError as e:
+                # Try with worker.connectors prefix
+                alt_module_name = f"worker.connectors.{connector_name}_connector"
+                logger.info(f"[CONNECTOR-DEBUG] Import failed: {str(e)}")
+                logger.info(f"[CONNECTOR-DEBUG] Trying alternate module path: {alt_module_name}")
+                module = importlib.import_module(alt_module_name)
+                logger.info(f"[CONNECTOR-DEBUG] Successfully imported module: {alt_module_name}")
             
             # Find the connector class
+            logger.info(f"[CONNECTOR-DEBUG] Looking for connector class in module: {module.__name__}")
             connector_class = None
+            
+            # Log all classes in the module
+            all_classes = [name for name in dir(module) if isinstance(getattr(module, name), type)]
+            logger.info(f"[CONNECTOR-DEBUG] All classes in module: {all_classes}")
+            
             for attr_name in dir(module):
                 attr = getattr(module, attr_name)
-                if (isinstance(attr, type) and 
-                    issubclass(attr, ConnectorInterface) and 
-                    attr != ConnectorInterface):
-                    connector_class = attr
-                    break
+                if isinstance(attr, type):
+                    logger.info(f"[CONNECTOR-DEBUG] Checking class: {attr_name}, base classes: {attr.__bases__ if hasattr(attr, '__bases__') else 'None'}")
+                    
+                    try:
+                        if (issubclass(attr, ConnectorInterface) and attr != ConnectorInterface):
+                            connector_class = attr
+                            logger.info(f"[CONNECTOR-DEBUG] Found connector class: {attr_name}")
+                            break
+                    except TypeError:
+                        # This happens when attr is not a class
+                        logger.info(f"[CONNECTOR-DEBUG] TypeError checking issubclass for {attr_name}")
             
             if connector_class is None:
                 logger.error(f"Could not find connector class in {module_name}")
@@ -98,19 +127,32 @@ def get_worker_capabilities(connectors: Dict[str, ConnectorInterface]) -> Dict[s
     Returns:
         Dict[str, Any]: Worker capabilities dictionary
     """
+    # Log the connectors being used to build capabilities
+    logger.info(f"[CAPABILITIES-DEBUG] Building worker capabilities with connectors: {list(connectors.keys())}")
+    
+    # Get supported job types
+    supported_job_types = get_supported_job_types(connectors)
+    logger.info(f"[CAPABILITIES-DEBUG] Supported job types from connectors: {supported_job_types}")
+    
     # Base capabilities
     capabilities = {
         "version": "1.0.0",
-        "supported_job_types": get_supported_job_types(connectors),
+        "supported_job_types": supported_job_types,
         "cpu": True,
         "memory": "16GB",
     }
     
     # Add connector-specific capabilities
     for job_type, connector in connectors.items():
+        logger.info(f"[CAPABILITIES-DEBUG] Getting capabilities for connector: {job_type}")
         connector_capabilities = connector.get_capabilities()
+        logger.info(f"[CAPABILITIES-DEBUG] Connector {job_type} capabilities: {connector_capabilities}")
+        
         for key, value in connector_capabilities.items():
             # Add connector prefix to avoid conflicts
             capabilities[f"{job_type}_{key}"] = value
+    
+    # Log the final capabilities
+    logger.info(f"[CAPABILITIES-DEBUG] Final worker capabilities: {capabilities}")
     
     return capabilities
