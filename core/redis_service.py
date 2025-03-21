@@ -98,8 +98,6 @@ class RedisService(RedisServiceInterface):
         self.async_client = None
         self.pubsub = None
         
-
-    
     async def connect_async(self) -> None:
         """
         Connect to Redis asynchronously for pub/sub operations.
@@ -114,7 +112,6 @@ class RedisService(RedisServiceInterface):
             self.async_client = aioredis.from_url(REDIS_URL, decode_responses=True)
             self.pubsub = self.async_client.pubsub()
 
-    
     async def close_async(self) -> None:
         """
         Close the async Redis connection.
@@ -127,7 +124,6 @@ class RedisService(RedisServiceInterface):
         if self.async_client:
             await self.async_client.close()
 
-    
     async def init_redis(self) -> bool:
         """
         Initialize Redis connections and data structures.
@@ -185,7 +181,6 @@ class RedisService(RedisServiceInterface):
         if self.client:
             self.client.close()
 
-    
     # Job operations
     def add_job(self, job_id: str, job_type: str, priority: int, job_request_payload: Union[Dict[str, Any], str], client_id: Optional[str] = None) -> Dict[str, Any]:
         """Add a job to the queue
@@ -631,7 +626,7 @@ class RedisService(RedisServiceInterface):
             return 0
             
     def mark_stale_workers(self, max_heartbeat_age: int = 60) -> List[str]:
-    # Use environment variable if not explicitly provided
+
         max_heartbeat_age = int(os.getenv('MAX_WORKER_HEARTBEAT_AGE', 60))
         
         logger.debug(f"Using max_heartbeat_age: {max_heartbeat_age}")
