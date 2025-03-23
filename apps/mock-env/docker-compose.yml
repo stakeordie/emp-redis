@@ -30,7 +30,7 @@ services:
       - CONNECTORS=image_processing,simulation
       - PYTHONPATH=/app # Ensure core modules can be imported
     env_file:
-      - ../../worker/.env.example
+      - ../../worker/.env
     networks:
       - redis-network
     depends_on:
@@ -49,7 +49,7 @@ services:
       - WORKER_ID=worker2
       - PYTHONPATH=/app # Ensure core modules can be imported
     env_file:
-      - ../../worker/.env.example
+      - ../../worker/.env
     networks:
       - redis-network
     depends_on:
@@ -68,7 +68,7 @@ services:
       - WORKER_ID=worker3
       - PYTHONPATH=/app # Ensure core modules can be imported
     env_file:
-      - ../../worker/.env.example
+      - ../../worker/.env
     networks:
       - redis-network
     depends_on:
@@ -87,7 +87,7 @@ services:
       - WORKER_ID=worker4
       - PYTHONPATH=/app # Ensure core modules can be imported
     env_file:
-      - ../../worker/.env.example
+      - ../../worker/.env
     networks:
       - redis-network
     depends_on:
