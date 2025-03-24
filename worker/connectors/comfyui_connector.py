@@ -4,6 +4,7 @@ import os
 import json
 import asyncio
 import aiohttp
+import base64
 from typing import Dict, Any, Optional, Union, Callable
 
 from connector_interface import ConnectorInterface
@@ -13,32 +14,192 @@ class ComfyUIConnector(ConnectorInterface):
     """Connector for ComfyUI service"""
     
     def __init__(self):
+        # Call the parent class's __init__ method
+        super().__init__()
+        
         """Initialize the ComfyUI connector"""
         # ComfyUI connection settings
         self.host = os.environ.get("COMFYUI_HOST", "localhost")
         self.port = int(os.environ.get("COMFYUI_PORT", "8188"))
         self.use_ssl = os.environ.get("COMFYUI_USE_SSL", "false").lower() in ("true", "1", "yes")
         
+        # Authentication settings
+        self.username = os.environ.get("COMFYUI_USERNAME")
+        self.password = os.environ.get("COMFYUI_PASSWORD")
+        
+        logger.info(f"[comfyui_connector.py __init__] Initializing connector")
+        logger.info(f"[comfyui_connector.py __init__] Username environment variable: {'set' if self.username else 'not set'}")
+
         # ComfyUI WebSocket URL
         protocol = "wss" if self.use_ssl else "ws"
         self.ws_url = f"{protocol}://{self.host}:{self.port}/ws"
-        
-        # ComfyUI connection and state
+
+        self.bearer_token = None
+        # Restore these attributes
         self.ws = None
         self.connected = False
         self.client_id = None
         self.prompt_id = None
         self.session = None
     
-    def initialize(self) -> bool:
+    async def _generate_bearer_token(self):
+        """Async method to generate bearer token"""
+        # Log initial authentication attempt details
+        logger.info("[comfyui_connector.py _generate_bearer_token] Attempting to generate bearer token")
+        logger.info(f"[comfyui_connector.py _generate_bearer_token] Username: {'*' * len(self.username) if self.username else 'Not provided'}")
+        logger.info(f"[comfyui_connector.py _generate_bearer_token] Password: {'*' * len(self.password) if self.password else 'Not provided'}")
+        
+        try:
+            # Use aiohttp for async HTTP request
+            async with aiohttp.ClientSession() as session:
+                # Construct authentication payload
+                credentials = f"{self.username}:{self.password}"
+                encoded_credentials = base64.b64encode(credentials.encode('utf-8')).decode('utf-8')
+                # Construct authentication URL
+                auth_url = f"{'https' if self.use_ssl else 'http'}://{self.host}:{self.port}/api/login"
+
+                headers = {
+                    "Authorization": f"Basic {encoded_credentials}",
+                    "Content-Type": "application/json"
+                }
+                
+                # Log detailed request information
+                logger.info(f"[comfyui_connector.py _generate_bearer_token] Authentication Request Details: {headers}")
+                logger.info(f"[comfyui_connector.py _generate_bearer_token] URL: {auth_url}")
+                
+                # Perform authentication request with detailed logging
+                try:
+                    async with session.post(
+                        auth_url, 
+                        headers=headers, 
+                        raise_for_status=True
+                    ) as response:
+                        # Log full response details
+                        logger.info(f"[comfyui_connector.py _generate_bearer_token] Response Status: {response.status}")
+                        logger.info(f"[comfyui_connector.py _generate_bearer_token] Response Headers: {dict(response.headers)}")
+                        
+                        try:
+                            data = await response.json()
+                            logger.info(f"[comfyui_connector.py _generate_bearer_token] Response Body: {data}")
+                            
+                            # Extract token
+                            token = data.get('token')
+                            
+                            if token:
+                                logger.info("[comfyui_connector.py _generate_bearer_token] Bearer token generated successfully")
+                                return token
+                            else:
+                                logger.error("[comfyui_connector.py _generate_bearer_token Error] No token in authentication response")
+                                return None
+                        except ValueError as json_error:
+                                text_response = await response.text()
+                                logger.error(f"[comfyui_connector.py _generate_bearer_token] JSON Parsing Error: {str(json_error)}")
+                                logger.error(f"[comfyui_connector.py _generate_bearer_token] Raw Response: {text_response}")
+                                return None
+
+                except aiohttp.ClientResponseError as e:
+                    # Log detailed error information
+                    logger.error(f"[comfyui_connector.py _generate_bearer_token Error] Authentication HTTP Error:")
+                    logger.error(f"Status: {e.status}")
+                    logger.error(f"Message: {str(e)}")
+                    return None
+        
+        except Exception as e:
+            logger.error(f"[comfyui_connector.py _generate_bearer_token Error] Token generation error: {str(e)}")
+            return None
+    
+    async def connect(self) -> bool:
+        logger.info(f"[comfyui_connector.py connect()] Attempting to connect to {self.ws_url}")
+        logger.info(f"[comfyui_connector.py connect()] Bearer Token: {self.bearer_token}")
+        logger.info(f"[comfyui_connector.py connect()] Username provided: {'Yes' if self.username else 'No'}")
+
+        self.connected = False
+
+        try:
+            # Generate bearer token if not exists
+            if not self.bearer_token:
+                token = await self._generate_bearer_token()
+                if not token:
+                    logger.error("[comfyui_connector.py connect()] Authentication failed")
+                    return False
+                self.bearer_token = token
+
+            # Log WebSocket connection details
+            logger.info(f"[comfyui_connector.py connect()] WebSocket URL: {self.ws_url}")
+            logger.info(f"[comfyui_connector.py connect()] Authorization Header: {self.bearer_token}")
+            
+            # Close existing session if it exists
+            if hasattr(self, 'session') and self.session:
+                await self.session.close()
+            
+            # Create session if not exists
+            headers = {"Authorization": self.bearer_token}
+
+
+            self.session = aiohttp.ClientSession(headers=headers)
+            
+            # Connect to ComfyUI WebSocket
+            logger.info(f"[comfyui_connector.py connect()] Connecting to ComfyUI at {self.ws_url}")
+
+            try:
+                self.ws = await self.session.ws_connect(
+                    self.ws_url, 
+                    headers={"Authorization": self.bearer_token}
+                )
+                self.connected = True
+            except Exception as e:
+                logger.error(f"[comfyui_connector.py connect()] Error connecting to ComfyUI: {str(e)}")
+                return False
+            
+            # Wait for client_id message
+            async for msg in self.ws:
+                if msg.type == aiohttp.WSMsgType.TEXT:
+                    try:
+                        data = json.loads(msg.data)
+                        if data.get('type') == 'client_id':
+                            self.client_id = data.get('data', {}).get('client_id')
+                            logger.info(f"[comfyui_connector.py connect()] Connected to ComfyUI with client_id: {self.client_id}")
+                            return True
+                    except Exception as e:
+                        logger.error(f"[comfyui_connector.py connect()] Error processing message: {str(e)}")
+                elif msg.type == aiohttp.WSMsgType.ERROR:
+                    logger.error(f"[comfyui_connector.py connect() .ERROR] WebSocket connection closed with exception {self.ws.exception()}")
+                    break
+            
+            return False
+
+        except Exception as e:
+            logger.error(f"[comfyui_connector.py connect() Exception] Error connecting to ComfyUI: {str(e)}")
+            return False
+
+    async def validate_connection(self):
+        """
+        Quick method to check connection without full workflow processing.
+        Can be implemented differently based on ComfyUI's API capabilities.
+        """
+        if not self.connected:
+            await self.connect()
+        
+        # Add a lightweight check, e.g.:
+        # - Ping endpoint
+        # - Check server status
+        # - Validate authentication
+
+    async def initialize(self) -> bool:
         """Initialize the connector
         
         Returns:
             bool: True if initialization was successful, False otherwise
         """
-        logger.info(f"[COMFYUI] Initializing ComfyUI connector")
-        logger.info(f"[COMFYUI] ComfyUI WebSocket URL: {self.ws_url}")
-        return True
+        try:
+        # Optional: Add a timeout or quick connectivity check
+        # Don't block worker startup if connection fails
+            await asyncio.wait_for(self.validate_connection(), timeout=5.0)
+            return True
+        except Exception as e:
+            # Log the issue but don't prevent worker from starting
+            logger.warning(f"Initial connection validation failed: {e}")
+            return True  # Still return True to allow worker to continue
     
     def get_job_type(self) -> str:
         """Get the job type that this connector handles
@@ -78,40 +239,6 @@ class ComfyUIConnector(ConnectorInterface):
             }
         }
     
-    async def connect(self) -> bool:
-        """Connect to ComfyUI WebSocket server
-        
-        Returns:
-            bool: True if connection was successful, False otherwise
-        """
-        try:
-            # Create session if not exists
-            if self.session is None:
-                self.session = aiohttp.ClientSession()
-            
-            # Connect to ComfyUI WebSocket
-            logger.info(f"[COMFYUI] Connecting to ComfyUI at {self.ws_url}")
-            self.ws = await self.session.ws_connect(self.ws_url)
-            self.connected = True
-            
-            # Wait for client_id message
-            async for msg in self.ws:
-                if msg.type == aiohttp.WSMsgType.TEXT:
-                    data = json.loads(msg.data)
-                    if data.get('type') == 'client_id':
-                        self.client_id = data.get('data', {}).get('client_id')
-                        logger.info(f"[COMFYUI] Connected to ComfyUI with client_id: {self.client_id}")
-                        return True
-                elif msg.type == aiohttp.WSMsgType.ERROR:
-                    logger.error(f"[COMFYUI] WebSocket connection closed with exception {self.ws.exception()}")
-                    break
-            
-            return False
-        except Exception as e:
-            logger.error(f"[COMFYUI] Error connecting to ComfyUI: {str(e)}")
-            self.connected = False
-            return False
-    
     async def send_workflow(self, workflow_data: Dict[str, Any]) -> Optional[str]:
         """Send workflow data to ComfyUI
         
@@ -136,6 +263,8 @@ class ComfyUIConnector(ConnectorInterface):
         }
         
         # Send prompt to ComfyUI
+        if self.ws is None:
+            raise Exception("WebSocket connection is not established")
         await self.ws.send_str(json.dumps(prompt_message))
         logger.info(f"[COMFYUI] Sent workflow to ComfyUI")
         
@@ -146,6 +275,8 @@ class ComfyUIConnector(ConnectorInterface):
                 if data.get('type') == 'prompt_queued':
                     self.prompt_id = data.get('data', {}).get('prompt_id')
                     logger.info(f"[COMFYUI] Prompt queued with ID: {self.prompt_id}")
+                    if self.prompt_id is None:
+                        raise Exception("Failed to queue workflow in ComfyUI")
                     return self.prompt_id
             elif msg.type == aiohttp.WSMsgType.ERROR:
                 logger.error(f"[COMFYUI] WebSocket connection closed with exception {self.ws.exception()}")

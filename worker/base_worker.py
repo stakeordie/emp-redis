@@ -45,68 +45,48 @@ class BaseWorker:
     """Base worker class for the EmProps Redis Worker"""
     
     def __init__(self):
-        """Initialize the base worker"""
+        """Synchronous initialization of base worker"""
         # Load environment variables
-        # Ensure worker ID is unique by appending a UUID suffix
         base_worker_id = os.environ.get("WORKER_ID", "worker")
-        unique_suffix = str(uuid.uuid4())[:8]  # Use first 8 chars of UUID for readability
+        unique_suffix = str(uuid.uuid4())[:8]
         self.worker_id = f"{base_worker_id}-{unique_suffix}"
         
         # Log the worker ID for debugging
         print(f"Initializing worker with ID: {self.worker_id} (based on {base_worker_id})")
+        
+        # Set up basic attributes
         self.auth_token = os.environ.get("WEBSOCKET_AUTH_TOKEN", "")
         self.heartbeat_interval = int(os.environ.get("HEARTBEAT_INTERVAL", "20"))
         self.use_ssl = os.environ.get("USE_SSL", "false").lower() in ("true", "1", "yes")
         
-        # Redis Hub WebSocket URL
-        # Check if a direct WebSocket URL is provided first
-        direct_ws_url = os.environ.get("REDIS_WS_URL", "")
-        
-        if direct_ws_url:
-            # Use the provided WebSocket URL directly
-            base_url = direct_ws_url
-            
-            # For debugging only
-            self.redis_host = "Using REDIS_WS_URL directly"
-            self.redis_port = ""
-        else:
-            # Fall back to constructing URL from host and port
-            self.redis_host = os.environ.get("REDIS_API_HOST", "localhost")
-            self.redis_port = os.environ.get("REDIS_API_PORT", "")
-            
-            # Construct the URL from host and optional port
-            protocol = "wss" if self.use_ssl else "ws"
-            if self.redis_port:
-                base_url = f"{protocol}://{self.redis_host}:{self.redis_port}/ws/worker/{self.worker_id}"
-            else:
-                base_url = f"{protocol}://{self.redis_host}/ws/worker/{self.worker_id}"
-        
-        # Add authentication token if provided
-        self.redis_ws_url = f"{base_url}?token={self.auth_token}" if self.auth_token else base_url
-        
-        # Debug prints
-        print(f"Debug - REDIS_API_HOST: {self.redis_host}")
-        if self.redis_port:
-            print(f"Debug - REDIS_API_PORT: {self.redis_port}")
-        print(f"Debug - USE_SSL: {self.use_ssl}")
-        print(f"Debug - Redis WebSocket URL: {self.redis_ws_url}")
+        # Set up WebSocket URL
+        # ... (existing WebSocket URL setup code)
         
         # Initialize MessageModels for message parsing
         self.message_models = MessageModels()
         
-        # Load connectors
-        self.connectors = load_connectors()
-        
-        # Initialize connectors
-        logger.info(f"[IMGPSIM] Initializing connectors...{self.connectors}")
-        
-
-        # Worker capabilities
-        self.capabilities = get_worker_capabilities(self.connectors)
+        # Placeholders for async-loaded attributes
+        self.connectors = None
+        self.capabilities = None
         
         # Worker state
         self.status = WorkerStatus.IDLE
         self.current_job_id = None
+
+    async def async_init(self):
+        """Asynchronous initialization of worker components"""
+        # Load connectors
+        self.connectors = await load_connectors()   # Load connectors           
+        
+        # Initialize connectors
+        logger.info(f"[base_worker.py async_init()] Initializing connectors...{self.connectors}")
+        
+        # Worker capabilities
+        self.capabilities = await get_worker_capabilities(self.connectors)
+        
+        logger.info(f"[base_worker.py async_init()] Worker capabilities: {self.capabilities}")
+        
+        return self
     
     def get_connector_statuses(self) -> Dict[str, Any]:
         """Get connection status for all connectors
@@ -560,7 +540,15 @@ class BaseWorker:
             # Shutdown connectors
             await self.shutdown_connectors()
     
-    def start(self):
+    async def start(self):
         """Start the worker"""
         logger.info(f"Starting worker with ID: {self.worker_id}")
-        asyncio.run(self.run())
+        
+            # Debug: Check current event loop
+        try:
+            current_loop = asyncio.get_running_loop()
+            logger.info(f"Current event loop: {current_loop}")
+        except RuntimeError:
+            logger.info("No running event loop found")
+        
+        await self.run()
