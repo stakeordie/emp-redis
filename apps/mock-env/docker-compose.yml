@@ -96,6 +96,75 @@ services:
     profiles:
       - dev
 
+  # Worker Containers
+  worker1r:
+    container_name: worker1
+    build:
+      context: ../.. # Root of the monorepo
+      dockerfile: ./apps/mock-env/Dockerfile.worker
+    environment:
+      - WORKER_ID=worker1
+      - CONNECTORS=image_processing,simulation
+      - PYTHONPATH=/app # Ensure core modules can be imported
+    env_file:
+      - ../../worker/.env
+    networks:
+      - redis-network
+    # Volumes removed - rebuild containers when code changes
+    profiles:
+      - remote
+
+  worker2r:
+    container_name: worker2
+    build:
+      context: ../.. # Root of the monorepo
+      dockerfile: ./apps/mock-env/Dockerfile.worker
+    environment:
+      - CONNECTORS=image_processing,simulation
+      - WORKER_ID=worker2
+      - PYTHONPATH=/app # Ensure core modules can be imported
+    env_file:
+      - ../../worker/.env
+    networks:
+      - redis-network
+    # Volumes removed - rebuild containers when code changes
+    profiles:
+      - remote
+
+  worker3r:
+    container_name: worker3
+    build:
+      context: ../.. # Root of the monorepo
+      dockerfile: ./apps/mock-env/Dockerfile.worker
+    environment:
+      - CONNECTORS=simulation,image_processing
+      - WORKER_ID=worker3
+      - PYTHONPATH=/app # Ensure core modules can be imported
+    env_file:
+      - ../../worker/.env
+    networks:
+      - redis-network
+    # Volumes removed - rebuild containers when code changes
+    profiles:
+      - remote
+
+  worker4r:
+    container_name: worker4
+    build:
+      context: ../.. # Root of the monorepo
+      dockerfile: ./apps/mock-env/Dockerfile.worker
+    environment:
+      - CONNECTORS=simulation,image_processing
+      - WORKER_ID=worker4
+      - PYTHONPATH=/app # Ensure core modules can be imported
+    env_file:
+      - ../../worker/.env
+    networks:
+      - redis-network
+    # Volumes removed - rebuild containers when code changes
+    profiles:
+      - remote
+
 networks:
   redis-network:
     driver: bridge

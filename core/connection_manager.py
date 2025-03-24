@@ -58,22 +58,28 @@ class ConnectionManager(ConnectionManagerInterface):
         # Set of monitor IDs with their message type filters
         self.monitor_filters: Dict[str, Set[str]] = {}
         
+        # Worker state management
         # Tracks worker status ("idle", "busy", etc.)
         self.worker_status: Dict[str, str] = {}
         
         # Tracks worker capabilities including supported job types
-        # Format: {worker_id: {"supported_job_types": ["job_type1", "job_type2"], ...}}
         self.worker_capabilities: Dict[str, Dict[str, Any]] = {}
         
         # Track worker heartbeats (worker_id -> timestamp)
         self.worker_last_heartbeat: Dict[str, float] = {}
         
+        # Track worker jobs (worker_id -> job_id)
+        self.worker_current_jobs: Dict[str, str] = {}
+        
+        # Track worker registration time and stats
+        self.worker_info: Dict[str, Dict[str, Any]] = {}
+        
         # Reference to MessageHandler for delegating message processing
-        # This will be set by MessageBroker after initialization
         self.message_handler = None
         self.redis_service = None
         
-        pass
+        # Start the worker cleanup task
+        asyncio.create_task(self._cleanup_stale_workers())
         
     # Note: Stale worker detection and cleanup is now handled by the message handler's _mark_stale_workers_task
     # and the Redis service's mark_stale_workers method
@@ -1011,7 +1017,6 @@ class ConnectionManager(ConnectionManagerInterface):
                 # Get supported job types
                 supported_job_types = capabilities_dict.get("supported_job_types", [])
                 
-                # Check if supported_job_types is a string (JSON) that needs parsing
                 if isinstance(supported_job_types, str):
                     try:
                         #logger.info(f"[MONITOR-STATUS] Worker {worker_id} has supported_job_types as string (fallback): {supported_job_types}")
@@ -1235,7 +1240,9 @@ class ConnectionManager(ConnectionManagerInterface):
             capabilities = WorkerCapabilities(**raw_capabilities)
 
             capabilities_dict = capabilities.dict()
-
+            #logger.info(f"[JOB-NOTIFY] Worker {worker_id} capabilities: {capabilities}")
+            
+            # Get supported job types
             supported_job_types = capabilities_dict.get("supported_job_types", [])
             
             if job_type in supported_job_types:
@@ -1524,4 +1531,123 @@ class ConnectionManager(ConnectionManagerInterface):
             
         except Exception as e:
             logger.error(f"[JOB-NOTIFY] Error subscribing worker {worker_id} to job notifications: {str(e)}")
+            return False
+
+    async def _cleanup_stale_workers(self):
+        """Periodically check for and cleanup stale workers"""
+        while True:
+            try:
+                current_time = time.time()
+                stale_workers = []
+                
+                # Check each worker's last heartbeat
+                for worker_id, last_heartbeat in self.worker_last_heartbeat.items():
+                    heartbeat_age = current_time - last_heartbeat
+                    if heartbeat_age > self.WORKER_HEARTBEAT_TIMEOUT:
+                        stale_workers.append(worker_id)
+                        logger.warning(f"Worker {worker_id} is stale (last heartbeat: {heartbeat_age:.1f}s ago)")
+                
+                # Disconnect stale workers
+                for worker_id in stale_workers:
+                    logger.info(f"Disconnecting stale worker {worker_id}")
+                    await self.disconnect_worker(worker_id)
+                    
+                    # If Redis service is available, reassign any jobs from this worker
+                    if self.redis_service:
+                        await self.redis_service.reassign_worker_jobs(worker_id)
+                
+            except Exception as e:
+                logger.error(f"Error in worker cleanup task: {str(e)}")
+                
+            # Wait before next cleanup check
+            await asyncio.sleep(self.CLEANUP_INTERVAL)
+            
+    def register_worker(self, worker_id: str, capabilities: Optional[Dict[str, Any]] = None) -> bool:
+        """Register a worker and store its capabilities
+        
+        Args:
+            worker_id: Unique identifier for the worker
+            capabilities: Optional worker capabilities including supported job types
+            
+        Returns:
+            bool: True if registration was successful
+        """
+        try:
+            current_time = time.time()
+            
+            # Store worker capabilities
+            if capabilities:
+                self.worker_capabilities[worker_id] = capabilities
+            
+            # Initialize worker info
+            self.worker_info[worker_id] = {
+                "registered_at": current_time,
+                "last_heartbeat": current_time,
+                "status": "idle",
+                "current_job_id": "",
+                "jobs_processed": 0,
+                "last_job_completed_at": 0,
+                "updated_at": current_time
+            }
+            
+            # Initialize other worker state
+            self.worker_status[worker_id] = "idle"
+            self.worker_last_heartbeat[worker_id] = current_time
+            
+            logger.info(f"Worker {worker_id} registered successfully")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error registering worker {worker_id}: {str(e)}")
+            return False
+            
+    def get_worker_info(self, worker_id: str) -> Optional[Dict[str, Any]]:
+        """Get information about a worker
+        
+        Args:
+            worker_id: ID of the worker to get information about
+            
+        Returns:
+            Optional[Dict[str, Any]]: Worker information if worker exists, None otherwise
+        """
+        if worker_id not in self.worker_info:
+            return None
+            
+        # Return a copy of the worker info to prevent external modification
+        return dict(self.worker_info[worker_id])
+        
+    def update_worker_status(self, worker_id: str, status: str, job_id: Optional[str] = None) -> bool:
+        """Update worker status and job assignment
+        
+        Args:
+            worker_id: ID of the worker to update
+            status: New status (e.g., "idle", "busy", "disconnected")
+            job_id: Optional ID of the job the worker is processing
+            
+        Returns:
+            bool: True if update was successful
+        """
+        try:
+            if worker_id not in self.worker_info:
+                return False
+                
+            current_time = time.time()
+            
+            # Update status
+            self.worker_status[worker_id] = status
+            self.worker_info[worker_id]["status"] = status
+            self.worker_info[worker_id]["updated_at"] = current_time
+            
+            # Update job assignment
+            if job_id:
+                self.worker_current_jobs[worker_id] = job_id
+                self.worker_info[worker_id]["current_job_id"] = job_id
+            elif status == "idle":
+                self.worker_current_jobs.pop(worker_id, None)
+                self.worker_info[worker_id]["current_job_id"] = ""
+                
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error updating worker {worker_id} status: {str(e)}")
             return False

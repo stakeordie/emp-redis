@@ -57,6 +57,9 @@ class MessageHandler(MessageHandlerInterface):
         self.message_router: MessageRouter = message_router
         self.message_models: MessageModels = message_models
         self._background_tasks: List[asyncio.Task] = []
+        
+        # Set ConnectionManager reference in RedisService
+        self.redis_service.set_connection_manager(connection_manager)
 
     # init_connections method removed as it's now handled by the ConnectionManager directly
 
@@ -71,7 +74,6 @@ class MessageHandler(MessageHandlerInterface):
         # Start the background tasks
         self._background_tasks.append(asyncio.create_task(self._broadcast_stats_task()))
         self._background_tasks.append(asyncio.create_task(self._cleanup_stale_claims_task()))
-        self._background_tasks.append(asyncio.create_task(self._mark_stale_workers_task()))
         self._background_tasks.append(asyncio.create_task(self._monitor_status_update_task()))
         self._background_tasks.append(asyncio.create_task(self._start_redis_listener()))
 
@@ -421,60 +423,31 @@ class MessageHandler(MessageHandlerInterface):
             worker_id: Worker identifier
             message: Worker registration message
         """
-        try:
-            # Extract raw capabilities from the message
-            raw_capabilities = message.capabilities or {}
-            # Validate and normalize capabilities using Pydantic
-            try:
-                capabilities = WorkerCapabilities(**raw_capabilities)
-            except ValidationError as e:
-                logger.error(f"[WORKER-REG] Capabilities validation error for worker {worker_id}: {e}")
-                # Fallback to a minimal capabilities object
-                capabilities = WorkerCapabilities()
-            
-            # Log the validated capabilities
-            #logger.info(f"[WORKER-EXO] Worker {worker_id} validated capabilities: {capabilities.dict()}")
-            # Convert to dictionary for storage
-            capabilities_dict = capabilities.dict()
-            
-            # Store worker capabilities in memory
-            self.connection_manager.worker_capabilities[worker_id] = capabilities_dict
-            
-            # Register worker in Redis with validated capabilities
-            self.redis_service.register_worker(worker_id, capabilities_dict)
-
-            # Debug logging before storing capabilities
-            # logger.info(f"[WORKER-EXO] Storing capabilities for worker {worker_id}")
-            # logger.info(f"[WORKER-EXO] Full capabilities object: {capabilities}")
-            # logger.info(f"[WORKER-EXO] Capabilities type: {type(capabilities)}")
-
-            # Set initial status in memory (default is idle)
-            status = message.status if message.status is not None else "idle"
-            self.connection_manager.worker_status[worker_id] = status
-            
-            # Verify storage
-            stored_capabilities = self.connection_manager.worker_capabilities.get(worker_id, {})
-            # logger.info(f"[WORKER-EXO] Verification - Stored capabilities for worker {worker_id}: {stored_capabilities}")
-            if message.subscribe_to_jobs:
-            # Add worker to job notification subscribers
-                self.connection_manager.subscribe_worker_to_job_notifications(worker_id)
-
-                # Send confirmation message
-                confirmation = JobNotificationsSubscribedMessage(worker_id=worker_id)
-                await self.connection_manager.send_to_worker(worker_id, confirmation)
-                #logger.info(f"Worker {worker_id} subscribed to job notifications")
+        # Register worker in ConnectionManager (in-memory)
+        success = self.connection_manager.register_worker(worker_id, message.capabilities)
         
-            # Initialize heartbeat timestamp in connection manager
-            current_time = time.time()
-            self.connection_manager.worker_last_heartbeat[worker_id] = current_time
+        if success:
             # Send registration confirmation
-            response = WorkerRegisteredMessage(worker_id=worker_id)
+            response = WorkerRegisteredMessage(
+                worker_id=worker_id,
+                status="active"
+            )
             await self.connection_manager.send_to_worker(worker_id, response)
             
-        except Exception as e:
-            logger.error(f"[WORKER-REG] Error registering worker {worker_id}: {str(e)}")
-            # Send error message if registration fails
-            error_message = ErrorMessage(error=f"Worker registration failed: {str(e)}")
+            # Subscribe to job notifications if requested
+            if message.subscribe_to_jobs:
+                self.connection_manager.subscribe_worker_to_job_notifications(worker_id)
+                
+                # Send subscription confirmation
+                subscription_response = JobNotificationsSubscribedMessage(worker_id=worker_id)
+                await self.connection_manager.send_to_worker(worker_id, subscription_response)
+            
+            # Broadcast pending jobs to the newly registered worker if it's idle
+            if message.status == "idle":
+                await self.broadcast_pending_jobs_to_idle_workers()
+        else:
+            # Send error if registration failed
+            error_message = ErrorMessage(error=f"Failed to register worker {worker_id}")
             await self.connection_manager.send_to_worker(worker_id, error_message)
 
     async def handle_update_job_progress(self, worker_id: str, message: UpdateJobProgressMessage) -> None:
@@ -543,21 +516,18 @@ class MessageHandler(MessageHandlerInterface):
             worker_id: Worker identifier
             message: Worker heartbeat message
         """
-        # Update heartbeat timestamp in connection manager (in-memory only)
+        # Update heartbeat timestamp in connection manager
         current_time = time.time()
         self.connection_manager.worker_last_heartbeat[worker_id] = current_time
-        logger.debug(f"[handle_worker_heartbeat]: Worker heartbeat received: {worker_id} at {current_time:.0f}")
+        
         # Optionally update worker status if provided
         if message.status:
-            # Update worker status in memory
-            self.connection_manager.worker_status[worker_id] = message.status
-
+            # Update worker status using ConnectionManager's method
+            self.connection_manager.update_worker_status(worker_id, message.status)
+            
             # If worker is idle, broadcast pending jobs
             if message.status == "idle":
                 await self.broadcast_pending_jobs_to_idle_workers()
-
-        # Log heartbeat with timestamp (debug level)
-        #logger.debug(f"Worker heartbeat received: {worker_id} at {current_time:.0f}")
 
     async def handle_worker_status(self, worker_id: str, message: WorkerStatusMessage) -> None:
         """
@@ -569,16 +539,13 @@ class MessageHandler(MessageHandlerInterface):
         """
         # Use 'idle' as default status if message.status is None
         status = message.status if message.status is not None else "idle"
-
-        # Update worker status in memory only
-        self.connection_manager.worker_status[worker_id] = status
-
+        
+        # Update worker status using ConnectionManager's method
+        self.connection_manager.update_worker_status(worker_id, status)
+        
         # If worker is now idle, broadcast pending jobs
         if status == "idle":
-            #logger.info(f"Worker {worker_id} is now idle and ready for jobs")
             await self.broadcast_pending_jobs_to_idle_workers()
-
-        # logger.info(f"Worker status updated: {worker_id}, status: {message.status}")
 
     async def handle_claim_job(self, worker_id: str, message: ClaimJobMessage) -> None:
         """
@@ -960,7 +927,7 @@ class MessageHandler(MessageHandlerInterface):
                             "job_id": job_id,
                             "job_type": job_data.get("job_type", "unknown"),
                             "priority": int(job_data.get("priority", 0)),
-                            "job_request_payload": job_data.get("job_request_payload", {})
+                            "job_request_payload": job_data.get("job_request_payload")
                         }
 
                         # Send notification to idle workers
@@ -977,29 +944,12 @@ class MessageHandler(MessageHandlerInterface):
 
     async def _mark_stale_workers_task(self) -> None:
         """
-        Periodically check for and mark stale workers as disconnected
+        DEPRECATED: Stale worker detection is now handled by ConnectionManager._cleanup_stale_workers
+        This task is kept temporarily for backwards compatibility but does nothing.
         """
         while True:
-            try:
-                # Get stale workers and mark them as disconnected
-                # Use the mark_stale_workers method which handles both identifying stale workers
-                # and updating their status in a single operation
-                stale_workers = self.redis_service.mark_stale_workers()
-
-                if stale_workers and len(stale_workers) > 0:
-                    # logger.info(f"Marked {len(stale_workers)} workers as disconnected due to inactivity")
-
-                    # Update connection manager with disconnected workers
-                    for worker_id in stale_workers:
-                        logger.debug(f"message_handler.py mark_stale_workers: CALLING DISCONNECT WHY STALE? Closing WebSocket connection for worker {worker_id}")
-                        await self.connection_manager.disconnect_worker(worker_id)
-
-            except Exception as e:
-                logger.error(f"Error in stale workers cleanup task: {str(e)}")
-
-            # Sleep before next cleanup
-            await asyncio.sleep(60)  # Check every minute
-
+            await asyncio.sleep(30)  # Sleep to avoid busy loop
+            
     async def _monitor_status_update_task(self) -> None:
         """
         Periodically send system status updates to connected monitors

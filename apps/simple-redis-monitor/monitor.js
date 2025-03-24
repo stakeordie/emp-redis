@@ -218,21 +218,19 @@ function connect() {
  * @param {string} authToken - Authentication token
  */
 function connectMonitorSocket(baseUrl, monitorId, authToken) {
-    // Determine protocol (wss for https, ws for http)
-    const protocol = baseUrl.startsWith('https://') ? 'wss' : 'ws';
+    // Always use wss:// for Railway (production) and ws:// for local
+    const isRailway = elements.connectionType.value === 'railway';
+    const protocol = isRailway ? 'wss' : 'ws';
     
     // Extract host and port from baseUrl
     let host = baseUrl;
-    // Remove protocol prefix if present
-    if (host.startsWith('http://')) host = host.substring(7);
-    if (host.startsWith('https://')) host = host.substring(8);
-    if (host.startsWith('ws://')) host = host.substring(5);
-    if (host.startsWith('wss://')) host = host.substring(6);
+    // Remove any protocol prefix
+    host = host.replace(/^(https?:\/\/|wss?:\/\/)/, '');
     
-    // Format the WebSocket URL with the monitor path - exactly like worker code
+    // Format the WebSocket URL with the monitor path
     const base_url = `${protocol}://${host}/ws/monitor/${monitorId}`;
     
-    // Add authentication token if provided - exactly like worker code
+    // Add authentication token if provided
     const monitorUrl = authToken ? `${base_url}?token=${encodeURIComponent(authToken)}` : base_url;
     
     // Log the URL we're connecting to
@@ -248,30 +246,30 @@ function connectMonitorSocket(baseUrl, monitorId, authToken) {
         state.monitorSocket.addEventListener('open', (event) => {
             state.monitorConnected = true;
             addLogEntry(`Monitor connection established as '${monitorId}'`, 'success');
-            
-            // Update UI if both connections are ready
             updateConnectionUI();
+            
+            // Request initial stats
+            requestStats();
         });
         
         // Listen for messages
         state.monitorSocket.addEventListener('message', handleMonitorMessage);
         
-        // Connection closed
-        state.monitorSocket.addEventListener('close', (event) => {
-            state.monitorConnected = false;
-            addLogEntry('Monitor connection closed', 'warning');
-            updateConnectionUI();
+        // Listen for errors
+        state.monitorSocket.addEventListener('error', (event) => {
+            addLogEntry(`Monitor socket error: ${event}`, 'error');
+            handleDisconnect();
         });
         
-        // Connection error
-        state.monitorSocket.addEventListener('error', (event) => {
-            addLogEntry('Monitor connection error', 'error');
-            state.monitorConnected = false;
-            updateConnectionUI();
+        // Listen for connection close
+        state.monitorSocket.addEventListener('close', (event) => {
+            addLogEntry(`Monitor socket closed: ${event.reason}`, 'warning');
+            handleDisconnect();
         });
         
     } catch (error) {
-        addLogEntry(`Error connecting monitor socket: ${error.message}`, 'error');
+        addLogEntry(`Error creating monitor socket: ${error}`, 'error');
+        handleDisconnect();
     }
 }
 
@@ -282,21 +280,19 @@ function connectMonitorSocket(baseUrl, monitorId, authToken) {
  * @param {string} authToken - Authentication token
  */
 function connectClientSocket(baseUrl, clientId, authToken) {
-    // Determine protocol (wss for https, ws for http)
-    const protocol = baseUrl.startsWith('https://') ? 'wss' : 'ws';
+    // Always use wss:// for Railway (production) and ws:// for local
+    const isRailway = elements.connectionType.value === 'railway';
+    const protocol = isRailway ? 'wss' : 'ws';
     
     // Extract host and port from baseUrl
     let host = baseUrl;
-    // Remove protocol prefix if present
-    if (host.startsWith('http://')) host = host.substring(7);
-    if (host.startsWith('https://')) host = host.substring(8);
-    if (host.startsWith('ws://')) host = host.substring(5);
-    if (host.startsWith('wss://')) host = host.substring(6);
+    // Remove any protocol prefix
+    host = host.replace(/^(https?:\/\/|wss?:\/\/)/, '');
     
-    // Format the WebSocket URL with the client path - exactly like worker code
+    // Format the WebSocket URL with the client path
     const base_url = `${protocol}://${host}/ws/client/${clientId}`;
     
-    // Add authentication token if provided - exactly like worker code
+    // Add authentication token if provided
     const clientUrl = authToken ? `${base_url}?token=${encodeURIComponent(authToken)}` : base_url;
     
     // Log the URL we're connecting to
@@ -312,30 +308,27 @@ function connectClientSocket(baseUrl, clientId, authToken) {
         state.clientSocket.addEventListener('open', (event) => {
             state.clientConnected = true;
             addLogEntry(`Client connection established as '${clientId}'`, 'success');
-            
-            // Update UI if both connections are ready
             updateConnectionUI();
         });
         
         // Listen for messages
         state.clientSocket.addEventListener('message', handleClientMessage);
         
-        // Connection closed
-        state.clientSocket.addEventListener('close', (event) => {
-            state.clientConnected = false;
-            addLogEntry('Client connection closed', 'warning');
-            updateConnectionUI();
+        // Listen for errors
+        state.clientSocket.addEventListener('error', (event) => {
+            addLogEntry(`Client socket error: ${event}`, 'error');
+            handleDisconnect();
         });
         
-        // Connection error
-        state.clientSocket.addEventListener('error', (event) => {
-            addLogEntry('Client connection error', 'error');
-            state.clientConnected = false;
-            updateConnectionUI();
+        // Listen for connection close
+        state.clientSocket.addEventListener('close', (event) => {
+            addLogEntry(`Client socket closed: ${event.reason}`, 'warning');
+            handleDisconnect();
         });
         
     } catch (error) {
-        addLogEntry(`Error connecting client socket: ${error.message}`, 'error');
+        addLogEntry(`Error creating client socket: ${error}`, 'error');
+        handleDisconnect();
     }
 }
 
