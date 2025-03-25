@@ -1160,3 +1160,59 @@ class RedisService(RedisServiceInterface):
             logger.error(f"Error getting worker status: {str(e)}")
             
         return workers_status
+
+        
+    def get_jobs_by_status_type_priority(
+        self, 
+        status: str = None, 
+        job_type: str = None, 
+        min_priority: int = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Retrieve jobs filtered by status, type, and minimum priority
+        
+        Args:
+            status (str, optional): Job status to filter by
+            job_type (str, optional): Job type to filter by
+            min_priority (int, optional): Minimum priority to filter by
+        
+        Returns:
+            List[Dict[str, Any]]: Filtered and sorted list of jobs
+        """
+        try:
+            # Find all job keys
+            job_keys = self.client.keys(f'{JOB_PREFIX}*')
+            
+            # Filter jobs
+            matching_jobs = []
+            for key in job_keys:
+                job_data = self.client.hgetall(key)
+                
+                # Apply filters
+                if (status is None or job_data.get('status') == status) and \
+                (job_type is None or job_data.get('job_type') == job_type) and \
+                (min_priority is None or 
+                    int(job_data.get('priority', 0)) >= min_priority):
+                    
+                    # Add job ID and convert creation time
+                    job_data['job_id'] = key.replace(JOB_PREFIX, '')
+                    job_data['created_at'] = float(job_data.get('created_at', 0))
+                    job_data['priority'] = int(job_data.get('priority', 0))
+                    
+                    matching_jobs.append(job_data)
+            
+            # Sort jobs by priority (descending) and then by creation date (ascending)
+            sorted_jobs = sorted(
+                matching_jobs, 
+                key=lambda x: (-x['priority'], x['created_at'])
+            )
+            
+            # Add position numbers
+            for position, job in enumerate(sorted_jobs, 1):
+                job['position'] = position
+            
+            return sorted_jobs
+        
+        except Exception as e:
+            logger.error(f"[DEBUG] Error in get_jobs_by_status_type_priority: {str(e)}")
+            return []

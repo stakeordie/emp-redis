@@ -18,21 +18,21 @@ class ImageProcessingConnector(ConnectorInterface):
         self.steps = int(os.environ.get("IMAGE_PROCESSING_STEPS", "5"))
         
         # Log configuration
-        logger.info(f"[IMAGE_PROCESSING] Connector configuration:")
-        logger.info(f"[IMAGE_PROCESSING] Job type: {self.job_type}")
-        logger.info(f"[IMAGE_PROCESSING] Processing time: {self.processing_time} seconds")
-        logger.info(f"[IMAGE_PROCESSING] Steps: {self.steps}")
+        logger.info(f"[image_processing_connector.py __init__] Connector configuration:")
+        logger.info(f"[image_processing_connector.py __init__] Job type: {self.job_type}")
+        logger.info(f"[image_processing_connector.py __init__] Processing time: {self.processing_time} seconds")
+        logger.info(f"[image_processing_connector.py __init__] Steps: {self.steps}")
     
-    def initialize(self) -> bool:
+    async def initialize(self) -> bool:
         """Initialize the connector
         
         Returns:
             bool: True if initialization was successful, False otherwise
         """
-        logger.info(f"[IMAGE_PROCESSING] Initializing image processing connector")
-        logger.info(f"[IMAGE_PROCESSING] Job type: {self.job_type}")
-        logger.info(f"[IMAGE_PROCESSING] Processing time: {self.processing_time} seconds")
-        logger.info(f"[IMAGE_PROCESSING] Steps: {self.steps}")
+        logger.info(f"[image_processing_connector.py initialize] Initializing image processing connector")
+        logger.info(f"[image_processing_connector.py initialize] Job type: {self.job_type}")
+        logger.info(f"[image_processing_connector.py initialize] Processing time: {self.processing_time} seconds")
+        logger.info(f"[image_processing_connector.py initialize] Steps: {self.steps}")
         return True
     
     def get_job_type(self) -> str:
@@ -85,7 +85,7 @@ class ImageProcessingConnector(ConnectorInterface):
             Dict[str, Any]: Job result
         """
         try:
-            logger.info(f"[IMAGE_PROCESSING] Processing job {job_id}")
+            logger.info(f"[image_processing_connector.py process_job] Processing job {job_id}")
             
             # Send initial progress update
             await send_progress_update(job_id, 0, "started", f"Starting {self.job_type} job")
@@ -104,7 +104,7 @@ class ImageProcessingConnector(ConnectorInterface):
                 await asyncio.sleep(step_time)
             
             # Return result
-            logger.info(f"[IMAGE_PROCESSING] Job {job_id} completed successfully")
+            logger.info(f"[image_processing_connector.py process_job] Job {job_id} completed successfully")
             return {
                 "status": "success",
                 "output": {
@@ -117,7 +117,7 @@ class ImageProcessingConnector(ConnectorInterface):
                 }
             }
         except Exception as e:
-            logger.error(f"[IMAGE_PROCESSING] Error processing job {job_id}: {str(e)}")
+            logger.error(f"[image_processing_connector.py process_job] Error processing job {job_id}: {str(e)}")
             return {
                 "status": "failed",
                 "error": str(e)
@@ -125,6 +125,6 @@ class ImageProcessingConnector(ConnectorInterface):
     
     async def shutdown(self) -> None:
         """Clean up resources when worker is shutting down"""
-        logger.info("[IMAGE_PROCESSING] Shutting down image processing connector")
+        logger.info("[image_processing_connector.py shutdown] Shutting down image processing connector")
         # No resources to clean up
-        logger.info("[IMAGE_PROCESSING] Image processing connector shut down")
+        logger.info("[] Image processing connector shut down")

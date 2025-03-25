@@ -206,6 +206,8 @@ class MessageHandler(MessageHandlerInterface):
         # We're using dictionary access instead of attribute access because
         # the method signature expects Dict[str, Any] rather than SubmitJobMessage
 
+        # Debug logging
+        logger.debug(f"[message_handler.py  handle_submit_job()] Job Data Values: Job ID: {job_id}, Job Type: {job_type}, Priority: {priority}, Payload: {payload}, Client ID: {client_id}")
         # Add job to Redis
         job_data = self.redis_service.add_job(
             job_id=job_id,
@@ -215,12 +217,34 @@ class MessageHandler(MessageHandlerInterface):
             client_id=client_id
         )
 
+        # Debug logging for job addition
+        logger.debug(f"[message_handler.py  handle_submit_job()] Job added to Redis: {job_data}")
+
         # Send confirmation response
         # Note: We're not directly notifying workers here anymore
         # Worker notification will happen through broadcast_pending_jobs_to_idle_workers
+
+        job_queue = self.redis_service.get_jobs_by_status_type_priority(status='pending', job_type=job_type)
+
+
+        # Debug logging for job queue
+        # logger.debug(f"[message_handler.py  handle_submit_job()] Job queue: {job_queue}")
+
+
+        job = next((job for job in job_queue if job['job_id'] == job_id), None)
+
+        if job is None:
+            logger.error(f"[message_handler.py  handle_submit_job()] Job {job_id} not found in queue")
+            position = -1
+            return
+        else:
+            position = job.get('position', -1)
+
+        logger.debug(f"[message_handler.py  handle_submit_job()] the position is: {position}")
+
         response = JobAcceptedMessage(
             job_id=job_id,
-            position=job_data.get("position", -1),
+            position=position,
             notified_workers=0  # Default to 0 since we're not directly notifying workers
         )
 

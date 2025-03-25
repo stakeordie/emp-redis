@@ -17,7 +17,7 @@ services:
       - redis-network
     # Volumes removed - rebuild containers when code changes
     profiles:
-      - dev
+      - local
 
   # Worker Containers
   worker1:
@@ -28,6 +28,9 @@ services:
     environment:
       - WORKER_ID=worker1
       - CONNECTORS=image_processing,simulation
+      - REDIS_API_HOST=hub
+      - REDIS_API_PORT=8001
+      - USE_SSL=FALSE
       - PYTHONPATH=/app # Ensure core modules can be imported
     env_file:
       - ../../worker/.env
@@ -37,7 +40,7 @@ services:
       - hub
     # Volumes removed - rebuild containers when code changes
     profiles:
-      - dev
+      - local
 
   worker2:
     container_name: worker2
@@ -47,6 +50,9 @@ services:
     environment:
       - CONNECTORS=image_processing,simulation
       - WORKER_ID=worker2
+      - REDIS_API_HOST=hub
+      - REDIS_API_PORT=8001
+      - USE_SSL=FALSE
       - PYTHONPATH=/app # Ensure core modules can be imported
     env_file:
       - ../../worker/.env
@@ -56,7 +62,7 @@ services:
       - hub
     # Volumes removed - rebuild containers when code changes
     profiles:
-      - dev
+      - local
 
   worker3:
     container_name: worker3
@@ -66,6 +72,9 @@ services:
     environment:
       - CONNECTORS=simulation,image_processing
       - WORKER_ID=worker3
+      - REDIS_API_HOST=hub
+      - REDIS_API_PORT=8001
+      - USE_SSL=FALSE
       - PYTHONPATH=/app # Ensure core modules can be imported
     env_file:
       - ../../worker/.env
@@ -75,7 +84,7 @@ services:
       - hub
     # Volumes removed - rebuild containers when code changes
     profiles:
-      - dev
+      - local
 
   worker4:
     container_name: worker4
@@ -83,8 +92,11 @@ services:
       context: ../.. # Root of the monorepo
       dockerfile: ./apps/mock-env/Dockerfile.worker
     environment:
-      - CONNECTORS=simulation,image_processing
+      - CONNECTORS=simulation,image_processing,comfyui
       - WORKER_ID=worker4
+      - REDIS_API_HOST=hub
+      - REDIS_API_PORT=8001
+      - USE_SSL=FALSE
       - PYTHONPATH=/app # Ensure core modules can be imported
     env_file:
       - ../../worker/.env
@@ -94,7 +106,7 @@ services:
       - hub
     # Volumes removed - rebuild containers when code changes
     profiles:
-      - dev
+      - local
 
   # Worker Containers
   worker1r:
@@ -106,7 +118,6 @@ services:
       - WORKER_ID=worker1r
       - CONNECTORS=image_processing,simulation
       - REDIS_API_HOST=redisserver-production.up.railway.app
-      - REDIS_API_PORT=443
       - PYTHONPATH=/app
     env_file:
       - ../../worker/.env
@@ -125,7 +136,6 @@ services:
       - WORKER_ID=worker2r
       - CONNECTORS=image_processing,simulation
       - REDIS_API_HOST=redisserver-production.up.railway.app
-      - REDIS_API_PORT=443
       - PYTHONPATH=/app
     env_file:
       - ../../worker/.env
@@ -144,7 +154,6 @@ services:
       - WORKER_ID=worker3r
       - CONNECTORS=comfyui,image_processing,simulation
       - REDIS_API_HOST=redisserver-production.up.railway.app
-      - REDIS_API_PORT=443
       - PYTHONPATH=/app
     env_file:
       - ../../worker/.env

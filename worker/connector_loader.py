@@ -83,16 +83,17 @@ async def load_connectors() -> Dict[str, ConnectorInterface]:
                         logger.info(f"[connector_loader.py load_connectors()] TypeError checking issubclass for {attr_name}")
             
             if connector_class is None:
-                logger.error(f"Could not find connector class in {module_name}")
+                logger.error(f"[connector_loader.py load_connectors() ERROR] Could not find connector class in {module_name}")
                 continue
             
             # Create connector instance
             connector = connector_class()
+            logger.info(f"[connector_loader.py load_connectors()] Created connector instance: {connector_name}")
             
             # Initialize connector
             success = await connector.initialize() #### THIS IS WHERE CONNECTORS ARE INITIALIZED
             if not success:
-                logger.error(f"Failed to initialize connector: {connector_name}")
+                logger.error(f"[connector_loader.py load_connectors() ERROR] Failed to initialize connector: {connector_name}")
                 continue
             
             # Get job type from connector
@@ -100,10 +101,10 @@ async def load_connectors() -> Dict[str, ConnectorInterface]:
             
             # Add connector to dictionary
             connectors[job_type] = connector #### THIS IS WHERE CONNECTORS ARE ADDED TO THE DICTIONARY
-            logger.info(f"Loaded connector: {connector_name} for job type: {job_type}")
+            logger.info(f"[connector_loader.py load_connectors()] Loaded connector: {connector_name} for job type: {job_type}")
         
         except Exception as e:
-            logger.error(f"Error loading connector {connector_name}: {str(e)}")
+            logger.error(f"[connector_loader.py load_connectors() EXCEPTION] Error loading connector {connector_name}: {str(e)}")
     
     return connectors #### THIS IS WHERE CONNECTOR DICTIONARY IS RETURNED
 

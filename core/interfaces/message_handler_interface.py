@@ -10,7 +10,8 @@ if TYPE_CHECKING:
 
 # Import base message types for type safety
 from ..core_types.base_messages import BaseMessage
-# Avoid importing RegisterWorkerMessage to prevent circular imports
+# Using Any to avoid circular import
+from typing import Dict, Any, Optional, Union
 class MessageHandlerInterface(ABC):
     """
     Interface defining the contract for handling  message types.

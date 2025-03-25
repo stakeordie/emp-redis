@@ -965,7 +965,7 @@ function handleRawMessage(message, source = 'unknown') {
  */
 function updateStats(statsData) {
     try {
-        
+        console.log("Updating stats", statsData);
         // Extract stats from the response
         const queues = statsData.queues || {};
         const jobs = statsData.jobs || {};
@@ -1483,6 +1483,9 @@ function submitJob() {
         // Add a message ID for tracking
         message.message_id = `job-submit-${Date.now()}`;
         
+        // Debug logging
+        console.log('Submitting job:', message);
+        
         // Send message through the client connection
         state.clientSocket.send(JSON.stringify(message));
         
@@ -1656,7 +1659,7 @@ function updateUI() {
             // Get the JavaScript Date object string representation
             const createdAtStr = job.createdAt ? job.createdAt.toString() : 'N/A';
 
-            
+            console.log("adding Job", job);
             row.innerHTML = `
                 <td>${job.id}</td>
                 <td>${job.job_type || job.type || ''}</td>

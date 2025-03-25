@@ -59,8 +59,25 @@ class BaseWorker:
         self.heartbeat_interval = int(os.environ.get("HEARTBEAT_INTERVAL", "20"))
         self.use_ssl = os.environ.get("USE_SSL", "false").lower() in ("true", "1", "yes")
         
-        # Set up WebSocket URL
-        # ... (existing WebSocket URL setup code)
+        direct_ws_url = os.environ.get("REDIS_WS_URL", "")
+
+        if direct_ws_url:
+
+            base_url = direct_ws_url
+
+            self.redis_host = "Using REDIS_WS_URL directly"
+            self.redis_port = ""
+        else:
+            self.redis_host = os.environ.get("REDIS_API_HOST", "localhost")
+            self.redis_port = os.environ.get("REDIS_API_PORT", "")
+
+            protocol = "wss" if self.use_ssl else "ws"
+            if self.redis_port:
+                base_url = f"{protocol}://{self.redis_host}:{self.redis_port}/ws/worker/{self.worker_id}"
+            else:
+                base_url = f"{protocol}://{self.redis_host}/ws/worker/{self.worker_id}"
+            
+        self.redis_ws_url = f"{base_url}?token={self.auth_token}" if self.auth_token else base_url
         
         # Initialize MessageModels for message parsing
         self.message_models = MessageModels()
@@ -94,8 +111,10 @@ class BaseWorker:
         Returns:
             Dict[str, Any]: Dictionary of connector statuses
         """
-        connector_statuses = {}
+        connector_statuses: Dict[str, Any] = {}
         # Iterate over items (job_type, connector) instead of just keys
+        if self.connectors is None:
+            return connector_statuses
         for job_type, connector in self.connectors.items():
             try:
                 status = connector.get_connection_status()
@@ -118,7 +137,7 @@ class BaseWorker:
         """
         try:
             # Get connection status for all connectors
-            connector_statuses = self.get_connector_statuses()
+            connector_statuses: Dict[str, Any] = self.get_connector_statuses()
             
             # Create worker status message using WorkerStatusMessage class
             status_message = WorkerStatusMessage(
@@ -186,6 +205,7 @@ class BaseWorker:
             status: Current job status (default: "processing")
             message: Optional status message
         """
+        logger.debug(f"[base_worker.py send_progress_update]: TESTING")
         try:
             # Create progress update message using UpdateJobProgressMessage class
             progress_message = UpdateJobProgressMessage(
@@ -323,12 +343,15 @@ class BaseWorker:
             websocket: The WebSocket connection to the Redis Hub
             message_obj: The job assigned message object
         """
+
+        logger.info(f"[base_worker.py handle_job_assigned] Received job assigned message: {message_obj}")
+        
         try:
             # Extract job details safely with fallbacks
             if isinstance(message_obj, dict):
                 job_id = message_obj.get("job_id")
                 job_type = message_obj.get("job_type", "unknown")
-                payload = message_obj.get("job_request_payload", {})
+                payload = message_obj.get("params", {})
             else:
                 # Using explicit try/except to handle attribute access safely
                 try:
@@ -342,7 +365,7 @@ class BaseWorker:
                     job_type = "unknown"
                     
                 try:
-                    payload = message_obj.job_request_payload if hasattr(message_obj, "job_request_payload") else {}
+                    payload = message_obj.params if hasattr(message_obj, "params") else {}
                 except (AttributeError, TypeError):
                     payload = {}
             
@@ -506,6 +529,8 @@ class BaseWorker:
     
     async def shutdown_connectors(self):
         """Shutdown all connectors"""
+        if self.connectors is None:
+            return
         for job_type, connector in self.connectors.items():
             try:
                 await connector.shutdown()

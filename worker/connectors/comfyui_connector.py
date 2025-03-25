@@ -42,131 +42,59 @@ class ComfyUIConnector(ConnectorInterface):
         self.prompt_id = None
         self.session = None
     
-    async def _generate_bearer_token(self):
-        """Async method to generate bearer token"""
-        # Log initial authentication attempt details
-        logger.info("[comfyui_connector.py _generate_bearer_token] Attempting to generate bearer token")
-        logger.info(f"[comfyui_connector.py _generate_bearer_token] Username: {'*' * len(self.username) if self.username else 'Not provided'}")
-        logger.info(f"[comfyui_connector.py _generate_bearer_token] Password: {'*' * len(self.password) if self.password else 'Not provided'}")
-        
-        try:
-            # Use aiohttp for async HTTP request
-            async with aiohttp.ClientSession() as session:
-                # Construct authentication payload
-                credentials = f"{self.username}:{self.password}"
-                encoded_credentials = base64.b64encode(credentials.encode('utf-8')).decode('utf-8')
-                # Construct authentication URL
-                auth_url = f"{'https' if self.use_ssl else 'http'}://{self.host}:{self.port}/api/login"
-
-                headers = {
-                    "Authorization": f"Basic {encoded_credentials}",
-                    "Content-Type": "application/json"
-                }
-                
-                # Log detailed request information
-                logger.info(f"[comfyui_connector.py _generate_bearer_token] Authentication Request Details: {headers}")
-                logger.info(f"[comfyui_connector.py _generate_bearer_token] URL: {auth_url}")
-                
-                # Perform authentication request with detailed logging
-                try:
-                    async with session.post(
-                        auth_url, 
-                        headers=headers, 
-                        raise_for_status=True
-                    ) as response:
-                        # Log full response details
-                        logger.info(f"[comfyui_connector.py _generate_bearer_token] Response Status: {response.status}")
-                        logger.info(f"[comfyui_connector.py _generate_bearer_token] Response Headers: {dict(response.headers)}")
-                        
-                        try:
-                            data = await response.json()
-                            logger.info(f"[comfyui_connector.py _generate_bearer_token] Response Body: {data}")
-                            
-                            # Extract token
-                            token = data.get('token')
-                            
-                            if token:
-                                logger.info("[comfyui_connector.py _generate_bearer_token] Bearer token generated successfully")
-                                return token
-                            else:
-                                logger.error("[comfyui_connector.py _generate_bearer_token Error] No token in authentication response")
-                                return None
-                        except ValueError as json_error:
-                                text_response = await response.text()
-                                logger.error(f"[comfyui_connector.py _generate_bearer_token] JSON Parsing Error: {str(json_error)}")
-                                logger.error(f"[comfyui_connector.py _generate_bearer_token] Raw Response: {text_response}")
-                                return None
-
-                except aiohttp.ClientResponseError as e:
-                    # Log detailed error information
-                    logger.error(f"[comfyui_connector.py _generate_bearer_token Error] Authentication HTTP Error:")
-                    logger.error(f"Status: {e.status}")
-                    logger.error(f"Message: {str(e)}")
-                    return None
-        
-        except Exception as e:
-            logger.error(f"[comfyui_connector.py _generate_bearer_token Error] Token generation error: {str(e)}")
-            return None
-    
     async def connect(self) -> bool:
         logger.info(f"[comfyui_connector.py connect()] Attempting to connect to {self.ws_url}")
-        logger.info(f"[comfyui_connector.py connect()] Bearer Token: {self.bearer_token}")
         logger.info(f"[comfyui_connector.py connect()] Username provided: {'Yes' if self.username else 'No'}")
 
         self.connected = False
 
         try:
-            # Generate bearer token if not exists
-            if not self.bearer_token:
-                token = await self._generate_bearer_token()
-                if not token:
-                    logger.error("[comfyui_connector.py connect()] Authentication failed")
-                    return False
-                self.bearer_token = token
+            credentials = f"{self.username}:{self.password}"
+            encoded_credentials = base64.b64encode(credentials.encode('utf-8')).decode('utf-8')
 
+            # Prepare headers
+            headers = {
+                "Authorization": f"Basic {encoded_credentials}",
+                "Upgrade": "websocket",
+                "Connection": "Upgrade",
+                "Sec-WebSocket-Version": "13"
+            }
             # Log WebSocket connection details
             logger.info(f"[comfyui_connector.py connect()] WebSocket URL: {self.ws_url}")
-            logger.info(f"[comfyui_connector.py connect()] Authorization Header: {self.bearer_token}")
+            logger.info(f"[comfyui_connector.py connect()] Authorization Header: {headers['Authorization']}")
             
             # Close existing session if it exists
             if hasattr(self, 'session') and self.session:
                 await self.session.close()
-            
-            # Create session if not exists
-            headers = {"Authorization": self.bearer_token}
 
-
-            self.session = aiohttp.ClientSession(headers=headers)
+            self.session = aiohttp.ClientSession()
+            self.ws = await self.session.ws_connect(
+                self.ws_url,
+                headers=headers
+            )
+            self.connected = True
+            logger.info(f"[comfyui_connector.py connect()] Successfully connected to ComfyUI")
+            return True
+            # except Exception as e:
+            #     logger.error(f"[comfyui_connector.py connect()] Error connecting to ComfyUI: {str(e)}")
+            #     return False
             
-            # Connect to ComfyUI WebSocket
-            logger.info(f"[comfyui_connector.py connect()] Connecting to ComfyUI at {self.ws_url}")
-
-            try:
-                self.ws = await self.session.ws_connect(
-                    self.ws_url, 
-                    headers={"Authorization": self.bearer_token}
-                )
-                self.connected = True
-            except Exception as e:
-                logger.error(f"[comfyui_connector.py connect()] Error connecting to ComfyUI: {str(e)}")
-                return False
+            # # Wait for client_id message
+            # async for msg in self.ws:
+            #     if msg.type == aiohttp.WSMsgType.TEXT:
+            #         try:
+            #             data = json.loads(msg.data)
+            #             if data.get('type') == 'client_id':
+            #                 self.client_id = data.get('data', {}).get('client_id')
+            #                 logger.info(f"[comfyui_connector.py connect()] Connected to ComfyUI with client_id: {self.client_id}")
+            #                 return True
+            #         except Exception as e:
+            #             logger.error(f"[comfyui_connector.py connect()] Error processing message: {str(e)}")
+            #     elif msg.type == aiohttp.WSMsgType.ERROR:
+            #         logger.error(f"[comfyui_connector.py connect() .ERROR] WebSocket connection closed with exception {self.ws.exception()}")
+            #         break
             
-            # Wait for client_id message
-            async for msg in self.ws:
-                if msg.type == aiohttp.WSMsgType.TEXT:
-                    try:
-                        data = json.loads(msg.data)
-                        if data.get('type') == 'client_id':
-                            self.client_id = data.get('data', {}).get('client_id')
-                            logger.info(f"[comfyui_connector.py connect()] Connected to ComfyUI with client_id: {self.client_id}")
-                            return True
-                    except Exception as e:
-                        logger.error(f"[comfyui_connector.py connect()] Error processing message: {str(e)}")
-                elif msg.type == aiohttp.WSMsgType.ERROR:
-                    logger.error(f"[comfyui_connector.py connect() .ERROR] WebSocket connection closed with exception {self.ws.exception()}")
-                    break
-            
-            return False
+            # return False
 
         except Exception as e:
             logger.error(f"[comfyui_connector.py connect() Exception] Error connecting to ComfyUI: {str(e)}")
@@ -177,13 +105,13 @@ class ComfyUIConnector(ConnectorInterface):
         Quick method to check connection without full workflow processing.
         Can be implemented differently based on ComfyUI's API capabilities.
         """
-        if not self.connected:
-            await self.connect()
-        
-        # Add a lightweight check, e.g.:
-        # - Ping endpoint
-        # - Check server status
-        # - Validate authentication
+        try:
+            if not self.connected:
+                await self.connect()
+            return True
+        except Exception as e:
+            logger.error(f"[comfyui_connector.py validate_connection() Exception] Connection failed: {str(e)}")
+            return False
 
     async def initialize(self) -> bool:
         """Initialize the connector
@@ -198,7 +126,7 @@ class ComfyUIConnector(ConnectorInterface):
             return True
         except Exception as e:
             # Log the issue but don't prevent worker from starting
-            logger.warning(f"Initial connection validation failed: {e}")
+            logger.warning(f"[comfyui_connector.py initialize() Exception] Initial connection validation failed: {e}")
             return True  # Still return True to allow worker to continue
     
     def get_job_type(self) -> str:
@@ -257,16 +185,20 @@ class ComfyUIConnector(ConnectorInterface):
         prompt_message = {
             'type': 'prompt',
             'data': {
-                'prompt': workflow_data.get('prompt', {}),
-                'client_id': self.client_id
+                'prompt': workflow_data,
+                'extra_data': {
+                    'client_id': self.client_id  # Include client ID if needed
+                }
             }
         }
         
+        logger.info(f"[comfyui_connector.py send_workflow] Sending workflow to ComfyUI: {prompt_message}")
+
         # Send prompt to ComfyUI
         if self.ws is None:
             raise Exception("WebSocket connection is not established")
         await self.ws.send_str(json.dumps(prompt_message))
-        logger.info(f"[COMFYUI] Sent workflow to ComfyUI")
+        logger.info(f"[comfyui_connector.py send_workflow] Sent workflow to ComfyUI: {prompt_message}")
         
         # Wait for prompt_queued message to get prompt_id
         async for msg in self.ws:
@@ -274,114 +206,102 @@ class ComfyUIConnector(ConnectorInterface):
                 data = json.loads(msg.data)
                 if data.get('type') == 'prompt_queued':
                     self.prompt_id = data.get('data', {}).get('prompt_id')
-                    logger.info(f"[COMFYUI] Prompt queued with ID: {self.prompt_id}")
+                    logger.info(f"[comfyui_connector.py send_workflow] Prompt queued with ID: {self.prompt_id}")
                     if self.prompt_id is None:
                         raise Exception("Failed to queue workflow in ComfyUI")
                     return self.prompt_id
             elif msg.type == aiohttp.WSMsgType.ERROR:
-                logger.error(f"[COMFYUI] WebSocket connection closed with exception {self.ws.exception()}")
+                logger.error(f"[comfyui_connector.py send_workflow] WebSocket connection closed with exception {self.ws.exception()}")
                 raise Exception(f"ComfyUI WebSocket error: {self.ws.exception()}")
         
         raise Exception("Failed to queue workflow in ComfyUI")
     
     async def monitor_progress(self, job_id: str, send_progress_update: Callable) -> Dict[str, Any]:
-        """Monitor ComfyUI job progress and forward updates
+        """
+        Monitor ComfyUI job progress with comprehensive error and state handling
         
         Args:
-            job_id: The ID of the job being processed
-            send_progress_update: Function to send progress updates
-            
+            job_id (str): The ID of the current job
+            send_progress_update (Callable): Function to send progress updates
+        
         Returns:
-            Dict[str, Any]: Job result
+            Dict[str, Any]: Final job result or error details
         """
         if not self.connected or self.ws is None:
             raise Exception("Not connected to ComfyUI")
         
-        # Initialize progress tracking
-        execution_started = False
+        final_result = None
         node_progress = {}
-        overall_progress = 0
-        
-        # Send initial progress update
-        await send_progress_update(job_id, 0, "started", "Starting ComfyUI workflow")
+        execution_started = False
+        job_completed = False
         
         try:
-            # Monitor ComfyUI messages
+            # Send initial progress update
+            await send_progress_update(job_id, 0, "queued", "Waiting for ComfyUI workflow")
+            logger.info(f"[comfyui_connector.py monitor_progress] Workflow queued in ComfyUI")
+            
+            # Use wait_for instead of timeout
             async for msg in self.ws:
-                if msg.type == aiohttp.WSMsgType.TEXT:
-                    data = json.loads(msg.data)
-                    
-                    # Handle different message types from ComfyUI
-                    if data.get('type') == 'executing':
-                        execution_started = True
-                        node_id = data.get('data', {}).get('node')
-                        await send_progress_update(job_id, 10, "processing", f"Executing node {node_id}")
-                    
-                    elif data.get('type') == 'progress':
-                        node_id = data.get('data', {}).get('node')
-                        progress = data.get('data', {}).get('progress', 0)
-                        node_progress[node_id] = progress
-                        
-                        # Calculate overall progress (10-90%)
-                        if node_progress:
-                            avg_progress = sum(node_progress.values()) / len(node_progress)
-                            overall_progress = 10 + int(avg_progress * 80)  # Scale to 10-90%
-                            await send_progress_update(job_id, overall_progress, "processing", 
-                                                     f"Processing workflow ({len(node_progress)} nodes)")
-                    
-                    elif data.get('type') == 'executed':
-                        # A node has completed execution
-                        node_id = data.get('data', {}).get('node')
-                        node_progress[node_id] = 1.0  # Mark as complete
-                        
-                        # Recalculate overall progress
-                        if node_progress:
-                            avg_progress = sum(node_progress.values()) / len(node_progress)
-                            overall_progress = 10 + int(avg_progress * 80)
-                            await send_progress_update(job_id, overall_progress, "processing", 
-                                                     f"Processing workflow ({len(node_progress)} nodes)")
-                    
-                    elif data.get('type') == 'execution_error':
-                        error_msg = data.get('data', {}).get('exception_message', 'Unknown error')
-                        logger.error(f"[COMFYUI] Execution error: {error_msg}")
-                        await send_progress_update(job_id, overall_progress, "error", f"Error: {error_msg}")
-                        return {
-                            "status": "failed",
-                            "error": error_msg
-                        }
-                    
-                    elif data.get('type') == 'execution_cached':
-                        await send_progress_update(job_id, 90, "finalizing", "Using cached results")
-                    
-                    elif data.get('type') == 'status':
-                        status_data = data.get('data', {})
-                        if 'status' in status_data and status_data['status'].get('exec_info', {}).get('queue_remaining', 0) == 0:
-                            # Check if this is our prompt_id and it's completed
-                            history = status_data['status'].get('exec_info', {}).get('executed', [])
-                            if self.prompt_id in history:
-                                # Workflow completed
-                                await send_progress_update(job_id, 100, "completed", "Workflow completed")
-                                
-                                # Get the results from history
-                                result_data = await self.get_results()
-                                return {
-                                    "status": "success",
-                                    "output": result_data
-                                }
-                
-                elif msg.type == aiohttp.WSMsgType.ERROR:
-                    logger.error(f"[COMFYUI] WebSocket connection closed with exception {self.ws.exception()}")
-                    return {
-                        "status": "failed",
-                        "error": f"ComfyUI WebSocket error: {self.ws.exception()}"
-                    }
+                try:
+                    # Timeout for each message receive
+                    if msg.type == aiohttp.WSMsgType.TEXT:
+                        # logger.info(f"[comfyui_connector.py monitor_progress] Received message from ComfyUI: {msg.data}")
+                        # Existing message processing logic...
+                        data = json.loads(msg.data)
+                            
+                        # Forward raw message for full transparency
+                        # await send_progress_update(job_id, 0, "raw_message", json.dumps(data))
+                        # Comprehensive message type handling
+                        if data.get('type') == 'prompt_queued':
+                            logger.debug(f"[comfyui_connector.py monitor_progress] data: {data}")
+                            await send_progress_update(job_id, 5, "queued", "Workflow accepted by ComfyUI")
+                            logger.info(f"[comfyui_connector.py monitor_progress] Workflow accepted by ComfyUI")
+                        elif data.get('type') == 'executing':
+                            execution_started = True
+                            node_id = data.get('data', {}).get('node')
+                            await send_progress_update(job_id, 10, "processing", f"Executing node {node_id}")
+                            logger.debug(f"[comfyui_connector.py monitor_progress] data: {data}")
+                            logger.info(f"[comfyui_connector.py monitor_progress] Executing node {node_id}")
+                        elif data.get('type') == 'progress':
+                            node_id = data.get('data', {}).get('node')
+                            progress = data.get('data', {}).get('value', 0)
+                            node_progress[node_id] = progress
+                            logger.info(f"[comfyui_connector.py monitor_progress] data: {data}")
+                            logger.info(f"[comfyui_connector.py monitor_progress] Progress for node {node_id}: {progress}")    
+                            # Dynamic progress calculation (10-90%)
+                            if node_progress:
+                                avg_progress = min(90, 10 + (sum(node_progress.values()) / len(node_progress) * 80))
+                                await send_progress_update(job_id, int(avg_progress), "processing", f"Progress across {len(node_progress)} nodes")
+                            
+                        elif data.get('type') == 'execution_end':
+                            job_completed = True
+                            final_result = data.get('data', {})
+                            logger.debug(f"[comfyui_connector.py monitor_progress] data: {data}")
+                            await send_progress_update(job_id, 95, "finalizing", "Workflow execution completed")
+                            logger.info(f"[comfyui_connector.py monitor_progress] Workflow execution completed")
+                            
+                        elif data.get('type') == 'execution_error':
+                            logger.debug(f"[comfyui_connector.py monitor_progress] data: {data}")
+                            await send_progress_update(job_id, 0, "error", str(data))
+                            raise Exception(f"ComfyUI Execution Error: {data}")
+                            
+                    # Check for job completion
+                    if job_completed:
+                        break
+            
+                except asyncio.TimeoutError:
+                    logger.error("[COMFYUI] Message receive timed out")
+                    await send_progress_update(job_id, 0, "timeout", "Job message receive timed out")
+                    break
+        except asyncio.TimeoutError:
+            logger.error("[COMFYUI] Job monitoring timed out")
+            await send_progress_update(job_id, 0, "timeout", "Job exceeded maximum processing time")
         
         except Exception as e:
-            logger.error(f"[COMFYUI] Error monitoring progress: {str(e)}")
-            return {
-                "status": "failed",
-                "error": str(e)
-            }
+            logger.error(f"[COMFYUI] Unexpected error: {str(e)}")
+            await send_progress_update(job_id, 0, "error", str(e))
+        
+        return final_result or {}
     
     async def get_results(self) -> Dict[str, Any]:
         """Get the results of a ComfyUI workflow execution
@@ -413,7 +333,8 @@ class ComfyUIConnector(ConnectorInterface):
             Dict[str, Any]: Job result
         """
         try:
-            logger.info(f"[COMFYUI] Processing job {job_id}")
+            logger.info(f"[comfyui_connector.py process_job] Processing job {job_id}")
+            logger.info(f"[comfyui_connector.py process_job] Job payload: {payload}")
             
             # Connect to ComfyUI if not already connected
             if not self.connected:
@@ -422,6 +343,7 @@ class ComfyUIConnector(ConnectorInterface):
                     raise Exception("Failed to connect to ComfyUI")
             
             # Send workflow to ComfyUI
+            logger.info(f"[comfyui_connector.py process_job] Sending workflow to ComfyUI: {payload}")
             await self.send_workflow(payload)
             
             # Monitor progress and get results
@@ -429,7 +351,7 @@ class ComfyUIConnector(ConnectorInterface):
             
             return result
         except Exception as e:
-            logger.error(f"[COMFYUI] Error processing job {job_id}: {str(e)}")
+            logger.error(f"[comfyui_connector.py process_job] Error processing job {job_id}: {str(e)}")
             return {
                 "status": "failed",
                 "error": str(e)
@@ -437,7 +359,7 @@ class ComfyUIConnector(ConnectorInterface):
     
     async def shutdown(self) -> None:
         """Clean up resources when worker is shutting down"""
-        logger.info("[COMFYUI] Shutting down ComfyUI connector")
+        logger.info("[comfyui_connector.py shutdown] Shutting down ComfyUI connector")
         
         if self.ws is not None:
             await self.ws.close()

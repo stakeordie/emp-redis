@@ -23,7 +23,7 @@ class SimulationConnector(ConnectorInterface):
         logger.info(f"[SIMULATION] Processing time: {self.processing_time} seconds")
         logger.info(f"[SIMULATION] Steps: {self.steps}")
     
-    def initialize(self) -> bool:
+    async def initialize(self) -> bool:
         """Initialize the connector
         
         Returns:
