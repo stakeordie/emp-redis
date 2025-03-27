@@ -248,47 +248,38 @@ class ComfyUIConnector(ConnectorInterface):
                         # logger.info(f"[comfyui_connector.py monitor_progress] Received message from ComfyUI: {msg.data}")
                         # Existing message processing logic...
                         data = json.loads(msg.data)
-                            
+
+                        if data.get('type') != 'crystools.monitor':
+                            logger.info(f"[comfyui_connector.py monitor_progress] Received message from ComfyUI: {msg}")
+
                         # Forward raw message for full transparency
                         # await send_progress_update(job_id, 0, "raw_message", json.dumps(data))
                         # Comprehensive message type handling
                         if data.get('type') == 'prompt_queued':
-                            logger.debug(f"[comfyui_connector.py monitor_progress] data: {data}")
                             await send_progress_update(job_id, 5, "queued", "Workflow accepted by ComfyUI")
                             logger.info(f"[comfyui_connector.py monitor_progress] Workflow accepted by ComfyUI")
-                        elif data.get('type') == 'executing':
-                            execution_started = True
-                            node_id = data.get('data', {}).get('node')
-                            await send_progress_update(job_id, 10, "processing", f"Executing node {node_id}")
-                            logger.debug(f"[comfyui_connector.py monitor_progress] data: {data}")
-                            logger.info(f"[comfyui_connector.py monitor_progress] Executing node {node_id}")
-                        elif data.get('type') == 'progress':
+                        if data.get('type') == 'progress':
                             node_id = data.get('data', {}).get('node')
                             progress = data.get('data', {}).get('value', 0)
                             node_progress[node_id] = progress
-                            logger.info(f"[comfyui_connector.py monitor_progress] data: {data}")
                             logger.info(f"[comfyui_connector.py monitor_progress] Progress for node {node_id}: {progress}")    
                             # Dynamic progress calculation (10-90%)
                             if node_progress:
                                 avg_progress = min(90, 10 + (sum(node_progress.values()) / len(node_progress) * 80))
                                 await send_progress_update(job_id, int(avg_progress), "processing", f"Progress across {len(node_progress)} nodes")
-                            
-                        elif data.get('type') == 'execution_end':
+                        if data.get('type') == 'executing' and data.get('data', {}).get('node') == None:
                             job_completed = True
                             final_result = data.get('data', {})
                             logger.debug(f"[comfyui_connector.py monitor_progress] data: {data}")
-                            await send_progress_update(job_id, 95, "finalizing", "Workflow execution completed")
+                            await send_progress_update(job_id, 100, "finalizing", "Workflow execution completed")
                             logger.info(f"[comfyui_connector.py monitor_progress] Workflow execution completed")
-                            
-                        elif data.get('type') == 'execution_error':
+                        if data.get('type') == 'execution_error':
                             logger.debug(f"[comfyui_connector.py monitor_progress] data: {data}")
                             await send_progress_update(job_id, 0, "error", str(data))
                             raise Exception(f"ComfyUI Execution Error: {data}")
-                            
                     # Check for job completion
                     if job_completed:
                         break
-            
                 except asyncio.TimeoutError:
                     logger.error("[COMFYUI] Message receive timed out")
                     await send_progress_update(job_id, 0, "timeout", "Job message receive timed out")
