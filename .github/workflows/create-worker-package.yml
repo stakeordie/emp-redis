@@ -17,6 +17,11 @@ jobs:
 
       - name: Create worker package
         run: |
+          # Debug: Print shell version
+          bash --version
+          
+          # Set -x to show commands as they execute
+          set -x
           # Create temporary directory
           TEMP_DIR=$(mktemp -d)
           PACKAGE_DIR="$TEMP_DIR/emp-redis-worker"
@@ -146,14 +151,16 @@ jobs:
           echo "version=${TIMESTAMP}-${COMMIT_SHA}" >> $GITHUB_OUTPUT
 
           # Create a manifest file with download information
-          cat > worker-manifest.json << 'EOF'
-          {
-            "version": "${TIMESTAMP}-${COMMIT_SHA}",
-            "commit": "${{ github.sha }}",
-            "timestamp": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
-            "download_url": "https://github.com/${{ github.repository }}/releases/download/worker-latest/emp-redis-worker.tar.gz"
-          }
-          EOF
+          # Using a simpler approach to avoid heredoc issues
+          echo "{
+  \"version\": \"${TIMESTAMP}-${COMMIT_SHA}\",
+  \"commit\": \"${{ github.sha }}\",
+  \"timestamp\": \"$(date -u +\"%Y-%m-%dT%H:%M:%SZ\")\",
+  \"download_url\": \"https://github.com/${{ github.repository }}/releases/download/worker-latest/emp-redis-worker.tar.gz\"
+}" > worker-manifest.json
+          
+          # Debug: Show the created manifest file
+          cat worker-manifest.json
 
       - name: Create Versioned Release
         id: create_versioned_release
