@@ -21,15 +21,6 @@ def log_environment_info():
     logger.info(f"[worker.py log_environment_info] Current working directory: {os.getcwd()}")
     logger.info(f"[worker.py log_environment_info] Looking for .env file at: {os.path.join(os.getcwd(), '.env')}")
     
-    # Print key environment variables for debugging
-    logger.info(f"[worker.py log_environment_info] WORKER_REDIS_API_HOST: {os.environ.get('WORKER_REDIS_API_HOST', 'not set')}")
-    logger.info(f"[worker.py log_environment_info] WORKER_REDIS_API_PORT: {os.environ.get('WORKER_REDIS_API_PORT', 'not set')}")
-    logger.info(f"[worker.py log_environment_info] WORKER_USE_SSL: {os.environ.get('WORKER_USE_SSL', 'not set')}")
-    logger.info(f"[worker.py log_environment_info] WORKER_ID: {os.environ.get('WORKER_ID', 'not set')}")
-    logger.info(f"[worker.py log_environment_info] WORKER_CONNECTORS: {os.environ.get('WORKER_CONNECTORS', 'not set')}")
-    logger.info(f"[worker.py log_environment_info] WORKER_WEBSOCKET_AUTH_TOKEN: {os.environ.get('WORKER_WEBSOCKET_AUTH_TOKEN', 'not set')}")
-    
-    
     # Log connector-specific environment variables
     connectors = os.environ.get("CONNECTORS", "").split(",")
     connectors = [c.strip() for c in connectors if c.strip()]
@@ -44,12 +35,9 @@ def log_environment_info():
 async def main():
     """Main entry point for the worker"""
     try:
-        # Print environment information
-        log_environment_info()
 
         # Load environment variables from .env file
-        if not os.environ.get("WORKER_REDIS_API_HOST"):
-            load_dotenv()   
+        load_dotenv()   
         
         # Print environment information
         log_environment_info()
