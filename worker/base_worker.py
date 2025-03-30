@@ -129,7 +129,7 @@ class BaseWorker:
                 status = connector.get_connection_status()
                 connector_statuses[status["service"]] = status
             except Exception as e:
-                logger.error(f"Error getting connection status for connector: {str(e)}")
+                logger.error(f"[base_worker.py get_connector_statuses()]: Error getting connection status for connector: {str(e)}")
                 # Add error status for this connector
                 connector_statuses[job_type] = {
                     "connected": False,
@@ -160,12 +160,12 @@ class BaseWorker:
             
             # Send status message
             await websocket.send(status_message.model_dump_json())
-            logger.debug(f"Sent status update with connector statuses")
+            logger.debug(f"[base_worker.py send_status_update()]: Sent status update with connector statuses")
         except Exception as e:
-            logger.error(f"Error sending status update: {str(e)}")
+            logger.error(f"[base_worker.py send_status_update()]: Error sending status update: {str(e)}")
     
     async def send_heartbeat(self, websocket):
-        logger.debug("[base_worker.py send_heartbeat]: 0")
+        logger.debug("[base_worker.py send_heartbeat()]: 0")
         """Send heartbeat messages to keep the connection alive
         
         Args:
@@ -173,14 +173,13 @@ class BaseWorker:
         """
         try:
             print(f"[PRINT] Starting heartbeat for worker {self.worker_id}")  # Direct print
-            logger.debug(f"[base_worker.py send_heartbeat]: Starting heartbeat for worker {self.worker_id}")
+            logger.debug(f"[base_worker.py send_heartbeat()]: Starting heartbeat for worker {self.worker_id}")
             status_interval = 5  # Send full status every 5 heartbeats
             counter = 0
             while True:
                 try:
                     # Increment counter
                     counter += 1
-                    logger.debug(f"[base_worker.py send_heartbeat]: 1")
                     # Every status_interval heartbeats, send a full status update
                     if counter % status_interval == 0:
                         await self.send_status_update(websocket)
@@ -191,18 +190,16 @@ class BaseWorker:
                         status=self.status.name.lower(),
                         load=0.0
                     )
-                    logger.debug(f"[base_worker.py send_heartbeat]: 2")
                     # Send heartbeat message
                     await websocket.send(heartbeat_message.model_dump_json())
-                    logger.debug(f"Sent heartbeat: {self.status.name.lower()}")
-                    logger.debug(f"[base_worker.py send_heartbeat]: 3")
+                    logger.debug(f"[base_worker.py send_heartbeat()]: HEARTBEAT SENT")
                     # Wait for next heartbeat
                     await asyncio.sleep(self.heartbeat_interval)
                 except Exception as e:
-                    logger.error(f"Error sending heartbeat: {str(e)}")
+                    logger.error(f"[base_worker.py send_heartbeat()]: Error sending heartbeat: {str(e)}")
                     await asyncio.sleep(5)  # Wait before retrying
         except Exception as e:
-            logger.error(f"[base_worker.py send_heartbeat]: Fatal error for worker {self.worker_id}: {str(e)}")
+            logger.error(f"[base_worker.py send_heartbeat()]: Fatal error for worker {self.worker_id}: {str(e)}")
     
     async def send_progress_update(self, websocket, job_id: str, progress: int, status: str = "processing", message: Optional[str] = None):
         """Send a progress update for a job
@@ -214,7 +211,7 @@ class BaseWorker:
             status: Current job status (default: "processing")
             message: Optional status message
         """
-        logger.debug(f"[base_worker.py send_progress_update]: TESTING")
+        logger.debug(f"[base_worker.py send_progress_update()]: TESTING")
         try:
             # Create progress update message using UpdateJobProgressMessage class
             progress_message = UpdateJobProgressMessage(
@@ -227,10 +224,10 @@ class BaseWorker:
             
             # Send the progress update
             await websocket.send(progress_message.model_dump_json())
-            logger.debug(f"[WORKER] Sent progress update for job {job_id}: {progress}% - {message if message else status}")
+            logger.debug(f"[base_worker.py send_progress_update()]: Sent progress update for job {job_id}: {progress}% - {message if message else status}")
             
         except Exception as e:
-            logger.error(f"[WORKER] Error sending progress update for job {job_id}: {str(e)}")
+            logger.error(f"[base_worker.py send_progress_update()]: Error sending progress update for job {job_id}: {str(e)}")
     
     async def handle_message(self, websocket, message):
         """Handle incoming message from Redis Hub
@@ -245,58 +242,58 @@ class BaseWorker:
             message_obj = self.message_models.parse_message(message_data)
             
             if not message_obj:
-                logger.warning(f"Invalid message format: {message[:300]}...")
+                logger.warning(f"[base_worker.py handle_message()]: Invalid message format: {message[:300]}...")
                 return
             
             message_type = message_obj.type
-            logger.debug(f"Received message of type: {message_type}")
+            logger.debug(f"[base_worker.py handle_message()]: Received message of type: {message_type}")
             
             # Handle message based on type
             match(message_type):
                 case MessageType.CONNECTION_ESTABLISHED:
-                    logger.info(f"Connection established: {getattr(message_obj, 'message', '')}")
+                    logger.info(f"[base_worker.py handle_message()]: Connection established: {getattr(message_obj, 'message', '')}")
                 case MessageType.JOB_AVAILABLE:
                     # Ensure we have a JobAvailableMessage or compatible dict
                     if hasattr(message_obj, 'job_id') and hasattr(message_obj, 'job_type'):
                         await self.handle_job_notification(websocket, cast(Any, message_obj))
                     else:
-                        logger.warning(f"Received JOB_AVAILABLE message with invalid format")
+                        logger.warning(f"[base_worker.py handle_message()]: Received JOB_AVAILABLE message with invalid format")
                 case MessageType.JOB_ASSIGNED:
                     await self.handle_job_assigned(websocket, cast(Any, message_obj))
                 
                 case MessageType.WORKER_HEARTBEAT:
                     # Acknowledge heartbeat from server
-                    logger.debug(f"[WORKER] Heartbeat acknowledged")
+                    logger.debug(f"[base_worker.py handle_message()]: Heartbeat acknowledged")
                 case MessageType.JOB_COMPLETED_ACK:
                     # Handle job completion acknowledgment from the server
                     if hasattr(message_obj, 'job_id'):
                         job_id = message_obj.job_id
-                        logger.info(f"[WORKER] Job completion acknowledged by server: {job_id}")
+                        logger.info(f"[base_worker.py handle_message()]: Job completion acknowledged by server: {job_id}")
                     else:
-                        logger.warning(f"[WORKER] Received JOB_COMPLETED_ACK message with invalid format")
+                        logger.warning(f"[base_worker.py handle_message()]: Received JOB_COMPLETED_ACK message with invalid format")
                 
                 case MessageType.WORKER_REGISTERED:
                     # Handle worker registration confirmation
                     worker_id = getattr(message_obj, 'worker_id', self.worker_id)
-                    logger.info(f"[WORKER] Worker registration confirmed: {worker_id}")
+                    logger.info(f"[base_worker.py handle_message()]: Worker registration confirmed: {worker_id}")
                     # No further action needed, this is just an acknowledgment
                 case MessageType.ERROR:
                     # Handle error messages from the server
                     error_text = getattr(message_obj, 'error', 'Unknown error')
-                    logger.warning(f"[WORKER] Received error from server: {error_text}")
+                    logger.warning(f"[base_worker.py handle_message()]: Received error from server: {error_text}")
                     
                     # If we're in a non-idle state and the error is related to job claiming,
                     # reset the worker state to idle
                     if self.status != WorkerStatus.IDLE and "claim job" in error_text.lower():
-                        logger.info(f"[WORKER] Resetting worker state to idle after claim error")
+                        logger.info(f"[base_worker.py handle_message()]: Resetting worker state to idle after claim error")
                         self.status = WorkerStatus.IDLE
                         self.current_job_id = None
                 case _:
-                    logger.debug(f"Received unhandled message type: {message_type}")
+                    logger.debug(f"[base_worker.py handle_message()]: Received unhandled message type: {message_type}")
         except json.JSONDecodeError:
-            logger.error(f"Invalid JSON: {message[:100]}...")
+            logger.error(f"[base_worker.py handle_message()]: Invalid JSON: {message[:100]}...")
         except Exception as e:
-            logger.error(f"Error handling message: {str(e)}")
+            logger.error(f"[base_worker.py handle_message()]: Error handling message: {str(e)}")
 
     async def handle_job_notification(self, websocket, message_obj):
         """Handle job notification message from Redis Hub
@@ -308,23 +305,23 @@ class BaseWorker:
         try:
             # First check if worker is idle before proceeding
             if self.status != WorkerStatus.IDLE:
-                logger.info(f"Ignoring job notification - worker is busy")
+                logger.info(f"[base_worker.py handle_job_notification()]: Ignoring job notification - worker is busy")
                 return
                 
             # Extract job details safely with fallbacks
             job_id = getattr(message_obj, 'job_id', None)
             if job_id is None:
-                logger.error(f"Job notification missing job_id")
+                logger.error(f"[base_worker.py handle_job_notification()]: Job notification missing job_id")
                 return
                 
             job_type = getattr(message_obj, 'job_type', 'unknown')
             priority = getattr(message_obj, 'priority', 0)
             
-            logger.info(f"Received job notification - job_id: {job_id}, type: {job_type}, priority: {priority}")
+            logger.info(f"[base_worker.py handle_job_notification()]: Received job notification - job_id: {job_id}, type: {job_type}, priority: {priority}")
             
             # Check if we can handle this job type
             if job_type not in self.connectors:
-                logger.warning(f"Received job notification for unsupported job type: {job_type}")
+                logger.warning(f"[base_worker.py handle_job_notification()]: Received job notification for unsupported job type: {job_type}")
                 return
             
             # Claim the job using ClaimJobMessage class
@@ -334,16 +331,16 @@ class BaseWorker:
             )
             
             # Add debug logging to show worker state before claiming
-            logger.debug(f"Worker state before claiming job {job_id}: {self.status.name}")
+            logger.debug(f"[base_worker.py handle_job_notification()]: Worker state before claiming job {job_id}: {self.status.name}")
             
             # Send claim request
-            logger.info(f"Sending claim request for job {job_id}")
+            logger.info(f"[base_worker.py handle_job_notification()]: Sending claim request for job {job_id}")
             await websocket.send(claim_message.model_dump_json())
             
             # Note: We don't update worker state here - we'll wait for JOB_ASSIGNED message
             # This matches the behavior in main.bk.py
         except Exception as e:
-            logger.error(f"Error handling job notification: {str(e)}")
+            logger.error(f"[base_worker.py handle_job_notification()]: Error handling job notification: {str(e)}")
     
     async def handle_job_assigned(self, websocket, message_obj):
         """Handle job assigned message from Redis Hub
@@ -380,10 +377,10 @@ class BaseWorker:
             
             # Ensure job_id is not None
             if job_id is None:
-                logger.error(f"Cannot process job: missing job_id")
+                logger.error(f"[base_worker.py handle_job_assigned()]: Cannot process job: missing job_id")
                 return
             
-            logger.info(f"Processing job {job_id} of type {job_type}")
+            logger.info(f"[base_worker.py handle_job_assigned()]: Processing job {job_id} of type {job_type}")
             
             # Update worker state
             self.status = WorkerStatus.BUSY
@@ -400,7 +397,7 @@ class BaseWorker:
             # Get the appropriate connector for this job type
             connector = self.connectors.get(job_type)
             if connector is None:
-                logger.error(f"No connector available for job type: {job_type}")
+                logger.error(f"[base_worker.py handle_job_assigned()] No connector available for job type: {job_type}")
                 
                 # Send error progress update
                 await self.send_progress_update(
@@ -430,7 +427,7 @@ class BaseWorker:
                     status="idle"
                 )
                 await websocket.send(idle_status.model_dump_json())
-                logger.info(f"Worker status reset to idle")
+                logger.info(f"[base_worker.py handle_job_assigned()]: Worker status reset to idle")
                 return
             
             try:
@@ -446,7 +443,7 @@ class BaseWorker:
                 # Send final 100% progress update
                 await self.send_progress_update(websocket, job_id, 100, "completed", "Job completed successfully")
                 
-                logger.info(f"Job {job_id} completed successfully")
+                logger.info(f"[base_worker.py handle_job_assigned()]: Job {job_id} completed successfully")
                 
                 # Send job completion message using CompleteJobMessage class
                 job_id_str = str(job_id) if job_id is not None else "unknown_job"
@@ -458,7 +455,7 @@ class BaseWorker:
                 await websocket.send(completion_message.model_dump_json())
                 
             except Exception as e:
-                logger.error(f"Error processing job {job_id}: {str(e)}")
+                logger.error(f"[base_worker.py handle_job_assigned()]: Error processing job {job_id}: {str(e)}")
                 
                 # Send job failure message
                 job_id_str = str(job_id) if job_id is not None else "unknown_job"
@@ -483,10 +480,10 @@ class BaseWorker:
                     status="idle"
                 )
                 await websocket.send(idle_status.model_dump_json())
-                logger.info(f"Worker status reset to idle")
+                logger.info(f"[base_worker.py handle_job_assigned()]: Worker status reset to idle")
                 
         except Exception as e:
-            logger.error(f"Error in handle_job_assigned: {str(e)}")
+            logger.error(f"[base_worker.py handle_job_assigned()]: Error in handle_job_assigned: {str(e)}")
             
             # Reset worker state if we have an error at the top level
             self.status = WorkerStatus.IDLE
@@ -500,8 +497,8 @@ class BaseWorker:
         """
         try:
             # Debug logging before registration
-            logger.info(f"[WORKER-DEBUG] Worker capabilities before registration: {self.capabilities}")
-            logger.info(f"[WORKER-DEBUG] Worker connectors before registration: {list(self.connectors.keys())}")
+            logger.info(f"[base_worker.py register_worker()]: Worker capabilities before registration: {self.capabilities}")
+            logger.info(f"[base_worker.py register_worker()]: Worker connectors before registration: {list(self.connectors.keys())}")
             
             # Ensure capabilities is a proper dictionary
             capabilities_dict = dict(self.capabilities) if self.capabilities else {}
@@ -510,7 +507,7 @@ class BaseWorker:
             if "supported_job_types" not in capabilities_dict and self.connectors:
                 capabilities_dict["supported_job_types"] = list(self.connectors.keys())
                 
-            logger.info(f"[WORKER-DEBUG] Prepared capabilities for registration: {capabilities_dict}")
+            logger.info(f"[base_worker.py register_worker()]: Prepared capabilities for registration: {capabilities_dict}")
             
             # Create registration message using RegisterWorkerMessage class
             registration_message = RegisterWorkerMessage(
@@ -522,12 +519,12 @@ class BaseWorker:
             
             # Log the actual message being sent
             message_json = registration_message.model_dump_json()
-            logger.info(f"[WORKER-DEBUG] Registration message JSON: {message_json}")
+            logger.info(f"[base_worker.py register_worker()]: Registration message JSON: {message_json}")
             
             # Verify the message contains capabilities
             import json
             parsed_message = json.loads(message_json)
-            logger.info(f"[WORKER-DEBUG] Parsed message capabilities: {parsed_message.get('capabilities')}")
+            logger.info(f"[base_worker.py register_worker()]: Parsed message capabilities: {parsed_message.get('capabilities')}")
             
             # Send registration message
             await websocket.send(message_json)
@@ -560,7 +557,7 @@ class BaseWorker:
                 # Start heartbeat task
                 heartbeat_task = asyncio.create_task(self.send_heartbeat(websocket))
                 
-                logger.info(f"[base_worker.py run] after heartbeat task setup {self.worker_id} {heartbeat_task}")
+                logger.info(f"[base_worker.py run()]: after heartbeat task setup {self.worker_id} {heartbeat_task}")
 
                 # Process messages
                 async for message in websocket:
