@@ -46,17 +46,15 @@ jobs:
             cp worker/requirements.txt "${{ env.PACKAGE_DIR }}/requirements.txt"
           else
             echo "Warning: worker/requirements.txt not found"
-            # Create a minimal requirements file
-            cat > "${{ env.PACKAGE_DIR }}/requirements.txt" << 'EOF'
-            # EmProps Redis Worker Requirements
-            websockets>=10.4
-            aiohttp>=3.8.4
-            python-dotenv>=1.0.0
-            pydantic>=2.0.0
-            asyncio>=3.4.3
-            uuid>=1.30
-            typing-extensions>=4.5.0
-            EOF
+            # Create a minimal requirements file using echo
+            echo "# EmProps Redis Worker Requirements" > "${{ env.PACKAGE_DIR }}/requirements.txt"
+            echo "websockets>=10.4" >> "${{ env.PACKAGE_DIR }}/requirements.txt"
+            echo "aiohttp>=3.8.4" >> "${{ env.PACKAGE_DIR }}/requirements.txt"
+            echo "python-dotenv>=1.0.0" >> "${{ env.PACKAGE_DIR }}/requirements.txt"
+            echo "pydantic>=2.0.0" >> "${{ env.PACKAGE_DIR }}/requirements.txt"
+            echo "asyncio>=3.4.3" >> "${{ env.PACKAGE_DIR }}/requirements.txt"
+            echo "uuid>=1.30" >> "${{ env.PACKAGE_DIR }}/requirements.txt"
+            echo "typing-extensions>=4.5.0" >> "${{ env.PACKAGE_DIR }}/requirements.txt"
           fi
 
       - name: Create setup script
