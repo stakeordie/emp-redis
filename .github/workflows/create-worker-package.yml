@@ -2,11 +2,11 @@ name: Create Worker Package
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [main, master]
     paths:
-      - 'worker/**'
-      - 'core/**'
-  workflow_dispatch:  # Allow manual triggering
+      - "worker/**"
+      - "core/**"
+  workflow_dispatch: # Allow manual triggering
 
 jobs:
   build-package:
@@ -25,14 +25,15 @@ jobs:
           mkdir -p "$PACKAGE_DIR/core/interfaces"
           mkdir -p "$PACKAGE_DIR/core/utils"
           mkdir -p "$PACKAGE_DIR/scripts"
-          
+
           # Copy only the necessary files
           cp -r worker/* "$PACKAGE_DIR/worker/"
           cp core/message_models.py "$PACKAGE_DIR/core/"
           cp -r core/core_types/* "$PACKAGE_DIR/core/core_types/"
           cp -r core/interfaces/* "$PACKAGE_DIR/core/interfaces/"
           cp -r core/utils/* "$PACKAGE_DIR/core/utils/"
-          
+          cp worker/.env.example "$PACKAGE_DIR/.env.example"
+
           # Make sure requirements.txt is included
           if [ -f "worker/requirements.txt" ]; then
             cp worker/requirements.txt "$PACKAGE_DIR/requirements.txt"
@@ -50,12 +51,12 @@ jobs:
             typing-extensions>=4.5.0
             EOF
           fi
-          
+
           # Create setup script
           cat > "$PACKAGE_DIR/scripts/setup.sh" << 'EOF'
           #!/bin/bash
           # Setup script for EmProps Redis Worker
-          
+
           # Create virtual environment if venv module is available
           if python3 -m venv --help > /dev/null 2>&1; then
             echo "Creating virtual environment..."
@@ -64,33 +65,33 @@ jobs:
           else
             echo "Python venv module not available, skipping virtual environment creation"
           fi
-          
+
           # Install dependencies
           echo "Installing dependencies..."
           pip install -r requirements.txt
-          
+
           # Copy environment file if it doesn't exist
           if [ ! -f ".env" ]; then
             echo "Creating .env file from template..."
             cp .env.example .env
             echo "Please edit .env file with your configuration"
           fi
-          
+
           echo "Setup complete!"
           echo "To start the worker, run: python worker/worker.py"
           EOF
-          
+
           # Make setup script executable
           chmod +x "$PACKAGE_DIR/scripts/setup.sh"
-          
+
           # Create a README
           cat > "$PACKAGE_DIR/README.md" << 'EOF'
           # EmProps Redis Worker
-          
+
           This package contains a single worker component for the EmProps Redis system.
-          
+
           ## Setup
-          
+
           1. Run the setup script to install dependencies:
              ```
              ./scripts/setup.sh
@@ -102,39 +103,39 @@ jobs:
              - Set WORKER_ID to a unique identifier for this worker
              - Set WEBSOCKET_AUTH_TOKEN to match the token configured on the Redis Hub
              - Configure connector-specific variables as needed
-          
+
           3. Run the worker:
              ```
              python worker/worker.py
              ```
-          
+
           ## Environment Variables
-          
+
           ### Core Variables
           - REDIS_API_HOST: The hostname of the Redis Hub
           - REDIS_API_PORT: The port of the Redis Hub (default: 8001)
           - WORKER_ID: Unique identifier for this worker
           - WEBSOCKET_AUTH_TOKEN: Authentication token for Redis Hub
           - CONNECTORS: Comma-separated list of connectors to load (e.g., "comfyui,simulation")
-          
+
           ### ComfyUI Connector Variables
           - COMFYUI_API_HOST: Hostname of the ComfyUI instance
           - COMFYUI_API_PORT: Port of the ComfyUI instance
-          
+
           ### Simulation Connector Variables
           - SIMULATION_ENABLED: Whether to enable the simulation connector
           EOF
-          
+
           # Create the tarball
           cd "$TEMP_DIR"
           tar -czf emp-redis-worker.tar.gz emp-redis-worker
-          
+
           # Move to workspace
           mv emp-redis-worker.tar.gz $GITHUB_WORKSPACE/
-          
+
           # Clean up
           rm -rf "$TEMP_DIR"
-          
+
           echo "Worker package created: emp-redis-worker.tar.gz"
 
       - name: Get version info
@@ -143,7 +144,7 @@ jobs:
           COMMIT_SHA=$(git rev-parse --short HEAD)
           TIMESTAMP=$(date +%Y%m%d%H%M%S)
           echo "version=${TIMESTAMP}-${COMMIT_SHA}" >> $GITHUB_OUTPUT
-          
+
           # Create a manifest file with download information
           cat > worker-manifest.json << EOF
           {
@@ -162,7 +163,7 @@ jobs:
           name: Worker Package ${{ steps.version.outputs.version }}
           body: |
             Worker package for EmProps Redis system.
-            
+
             Built from commit: ${{ github.sha }}
             Timestamp: ${{ steps.version.outputs.version }}
           files: |
@@ -172,7 +173,7 @@ jobs:
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          
+
       - name: Create/Update Latest Release
         id: create_latest_release
         uses: softprops/action-gh-release@v1
@@ -181,10 +182,10 @@ jobs:
           name: Worker Package (Latest)
           body: |
             Latest worker package for EmProps Redis system.
-            
+
             Built from commit: ${{ github.sha }}
             Timestamp: ${{ steps.version.outputs.version }}
-            
+
             This is an automatically updated release that always points to the latest worker package.
           files: |
             emp-redis-worker.tar.gz
