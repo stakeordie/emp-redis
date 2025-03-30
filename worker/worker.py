@@ -22,11 +22,11 @@ def log_environment_info():
     logger.info(f"[worker.py log_environment_info] Looking for .env file at: {os.path.join(os.getcwd(), '.env')}")
     
     # Print key environment variables for debugging
-    logger.info(f"[worker.py log_environment_info] REDIS_API_HOST: {os.environ.get('REDIS_API_HOST', 'not set')}")
-    logger.info(f"[worker.py log_environment_info] REDIS_API_PORT: {os.environ.get('REDIS_API_PORT', 'not set')}")
-    logger.info(f"[worker.py log_environment_info] USE_SSL: {os.environ.get('USE_SSL', 'not set')}")
+    logger.info(f"[worker.py log_environment_info] WORKER_REDIS_API_HOST: {os.environ.get('WORKER_REDIS_API_HOST', 'not set')}")
+    logger.info(f"[worker.py log_environment_info] WORKER_REDIS_API_PORT: {os.environ.get('WORKER_REDIS_API_PORT', 'not set')}")
+    logger.info(f"[worker.py log_environment_info] WORKER_USE_SSL: {os.environ.get('WORKER_USE_SSL', 'not set')}")
     logger.info(f"[worker.py log_environment_info] WORKER_ID: {os.environ.get('WORKER_ID', 'not set')}")
-    logger.info(f"[worker.py log_environment_info] CONNECTORS: {os.environ.get('CONNECTORS', 'not set')}")
+    logger.info(f"[worker.py log_environment_info] WORKER_CONNECTORS: {os.environ.get('WORKER_CONNECTORS', 'not set')}")
     
     # Log connector-specific environment variables
     connectors = os.environ.get("CONNECTORS", "").split(",")
