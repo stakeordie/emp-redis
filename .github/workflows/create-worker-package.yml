@@ -32,7 +32,6 @@ jobs:
           cp -r core/core_types/* "$PACKAGE_DIR/core/core_types/"
           cp -r core/interfaces/* "$PACKAGE_DIR/core/interfaces/"
           cp -r core/utils/* "$PACKAGE_DIR/core/utils/"
-          cp .env.example "$PACKAGE_DIR/.env.example"
           
           # Make sure requirements.txt is included
           if [ -f "worker/requirements.txt" ]; then
