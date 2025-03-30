@@ -48,7 +48,8 @@ async def main():
         log_environment_info()
 
         # Load environment variables from .env file
-        load_dotenv()
+        if not os.environ.get("WORKER_REDIS_API_HOST"):
+            load_dotenv()   
         
         # Print environment information
         log_environment_info()
