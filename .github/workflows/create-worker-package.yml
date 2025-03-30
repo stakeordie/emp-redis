@@ -84,30 +84,60 @@ jobs:
           # Make setup script executable
           chmod +x "$PACKAGE_DIR/scripts/setup.sh"
 
+          # Debug: Temporarily comment out README creation
           # Create a README
-          cat > "$PACKAGE_DIR/README.md" << 'EOF'
-          # EmProps Redis Worker
+          # cat > "$PACKAGE_DIR/README.md" << 'EOF'
+          # # EmProps Redis Worker
+          # 
+          # This package contains a single worker component for the EmProps Redis system.
+          # 
+          # ## Setup
+          # 
+          # 1. Run the setup script to install dependencies:
+          #    ```
+          #    ./scripts/setup.sh
+          #    ```
+          #    
+          # 2. Copy `.env.example` to `.env` and configure it (if not done by setup script):
+          #    - Set REDIS_API_HOST to the hostname of your Redis Hub
+          #    - Set REDIS_API_PORT to the port of your Redis Hub (default: 8001)
+          #    - Set WORKER_ID to a unique identifier for this worker
+          #    - Set WEBSOCKET_AUTH_TOKEN to match the token configured on the Redis Hub
+          #    - Configure connector-specific variables as needed
+          # 
+          # 3. Run the worker:
+          #    ```
+          #    python worker/worker.py
+          #    ```
+          # 
+          # ## Environment Variables
+          # 
+          # ### Core Variables
+          # - REDIS_API_HOST: The hostname of the Redis Hub
+          # - REDIS_API_PORT: The port of the Redis Hub (default: 8001)
+          # - WORKER_ID: Unique identifier for this worker
+          # - WEBSOCKET_AUTH_TOKEN: Authentication token for Redis Hub
+          # - CONNECTORS: Comma-separated list of connectors to load (e.g., "comfyui,simulation")
+          # 
+          # ### ComfyUI Connector Variables
+          # - COMFYUI_API_HOST: Hostname of the ComfyUI instance
+          # - COMFYUI_API_PORT: Port of the ComfyUI instance
+          # 
+          # ### Simulation Connector Variables
+          # - SIMULATION_ENABLED: Whether to enable the simulation connector
+          # EOF
 
-          This package contains a single worker component for the EmProps Redis system.
+          # Create the tarball
+          cd "$TEMP_DIR"
+          tar -czf emp-redis-worker.tar.gz emp-redis-worker
 
-          ## Setup
+          # Move to workspace
+          mv emp-redis-worker.tar.gz $GITHUB_WORKSPACE/
 
-          1. Run the setup script to install dependencies:
-             ```
-             ./scripts/setup.sh
-             ```
-             
-          2. Copy `.env.example` to `.env` and configure it (if not done by setup script):
-             - Set REDIS_API_HOST to the hostname of your Redis Hub
-             - Set REDIS_API_PORT to the port of your Redis Hub (default: 8001)
-             - Set WORKER_ID to a unique identifier for this worker
-             - Set WEBSOCKET_AUTH_TOKEN to match the token configured on the Redis Hub
-             - Configure connector-specific variables as needed
+          # Clean up
+          rm -rf "$TEMP_DIR"
 
-          3. Run the worker:
-             ```
-             python worker/worker.py
-             ```
+          echo "Worker package created: emp-redis-worker.tar.gz"
 
       - name: Get version info
         id: version
