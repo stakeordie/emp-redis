@@ -4,12 +4,10 @@ import os
 import sys
 import traceback
 from dotenv import load_dotenv
-from core.utils.logger import logger
-# Add the parent directory to the Python path
+
+# Add the parent and current directory to the Python path EARLY
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, parent_dir)
-
-# Add the current directory to the Python path
 current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, current_dir)
 
