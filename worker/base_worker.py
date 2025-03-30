@@ -2,8 +2,8 @@
 # Base worker for the EmProps Redis Worker
 import os
 import sys
-import json
 import asyncio
+import json
 import uuid
 import websockets
 from typing import Dict, List, Any, Optional, Union, cast
@@ -47,19 +47,28 @@ class BaseWorker:
     
     def __init__(self):
         """Synchronous initialization of base worker"""
-        # Load environment variables
+        # Load worker-specific variables (WORKER_ID, WORKER_COMFYUI_PORT) from .env
         load_dotenv() # Load .env file into environment
-        # WORKER_ID is loaded from .env by load_dotenv()
-        self.worker_id = os.environ.get("WORKER_ID", "worker-unknown")
-
+        
+        # WORKER_ID and WORKER_COMFYUI_PORT are now loaded from .env
+        self.worker_id = os.environ.get("WORKER_ID", "worker-unknown-dotenv-failed")
+        # Note: WORKER_COMFYUI_PORT is loaded into env, but might be used by connectors later
+        
         # Log the worker ID for debugging
-        print(f"Initializing worker with ID: {self.worker_id}")
+        print(f"Initializing worker with ID: {self.worker_id} (loaded via dotenv)")
 
-        # Set up basic attributes
+        # Load GLOBAL settings directly from environment (set by container)
         self.auth_token = os.environ.get("WORKER_WEBSOCKET_AUTH_TOKEN", "")
         self.heartbeat_interval = int(os.environ.get("WORKER_HEARTBEAT_INTERVAL", "20"))
         self.use_ssl = os.environ.get("WORKER_USE_SSL", "false").lower() in ("true", "1", "yes")
+        
+        # WORKER_COMFYUI_HOST is expected to be in the global env
+        # Connectors like comfyui_connector will read WORKER_COMFYUI_HOST and WORKER_COMFYUI_PORT from os.environ
+        
+        # WORKER_SIMULATION_* settings are expected to be in the global env
+        # Connectors like simulation_connector will read these from os.environ
 
+        # Construct WebSocket URL using global settings + loaded WORKER_ID
         direct_ws_url = os.environ.get("WORKER_REDIS_WS_URL", "")
 
         if direct_ws_url:
@@ -68,7 +77,7 @@ class BaseWorker:
             self.redis_port = ""
         else:
             self.redis_host = os.environ.get("WORKER_REDIS_API_HOST", "localhost")
-            # >>> EDIT: Look for namespaced port, but default to empty
+            # WORKER_REDIS_API_PORT is expected to be unset/empty for SSL or set globally otherwise
             self.redis_port = os.environ.get("WORKER_REDIS_API_PORT", "") 
 
             protocol = "wss" if self.use_ssl else "ws"

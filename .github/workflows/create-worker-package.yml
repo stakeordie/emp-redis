@@ -54,7 +54,7 @@ jobs:
             echo "asyncio>=3.4.3" >> "${{ env.PACKAGE_DIR }}/requirements.txt"
             echo "uuid>=1.30" >> "${{ env.PACKAGE_DIR }}/requirements.txt"
             echo "typing-extensions>=4.5.0" >> "${{ env.PACKAGE_DIR }}/requirements.txt"
-            # >>> EDIT: Added python-dotenv for loading .env files
+            # Re-added python-dotenv for loading worker-specific .env file
             echo "python-dotenv>=1.0.0" >> "${{ env.PACKAGE_DIR }}/requirements.txt"
           fi
 
