@@ -146,7 +146,7 @@ jobs:
           echo "version=${TIMESTAMP}-${COMMIT_SHA}" >> $GITHUB_OUTPUT
 
           # Create a manifest file with download information
-          cat > worker-manifest.json << EOF
+          cat > worker-manifest.json << 'EOF'
           {
             "version": "${TIMESTAMP}-${COMMIT_SHA}",
             "commit": "${{ github.sha }}",
