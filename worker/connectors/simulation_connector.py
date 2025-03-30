@@ -12,10 +12,16 @@ class SimulationConnector(ConnectorInterface):
     
     def __init__(self):
         """Initialize the simulation connector"""
-        # Get configuration from environment variables with SIMULATION_ prefix
-        self.job_type = os.environ.get("SIMULATION_JOB_TYPE", "simulation")
-        self.processing_time = int(os.environ.get("SIMULATION_PROCESSING_TIME", "10"))
-        self.steps = int(os.environ.get("SIMULATION_STEPS", "5"))
+        # Get configuration from environment variables (support both namespaced and non-namespaced)
+        self.job_type = os.environ.get("WORKER_SIMULATION_JOB_TYPE", os.environ.get("SIMULATION_JOB_TYPE", "simulation"))
+        self.processing_time = int(os.environ.get("WORKER_SIMULATION_PROCESSING_TIME", os.environ.get("SIMULATION_PROCESSING_TIME", "10")))
+        self.steps = int(os.environ.get("WORKER_SIMULATION_STEPS", os.environ.get("SIMULATION_STEPS", "5")))
+        
+        # Log which variables we're using
+        logger.info(f"[SIMULATION] Using environment variables:")
+        logger.info(f"[SIMULATION] WORKER_SIMULATION_JOB_TYPE/SIMULATION_JOB_TYPE: {self.job_type}")
+        logger.info(f"[SIMULATION] WORKER_SIMULATION_PROCESSING_TIME/SIMULATION_PROCESSING_TIME: {self.processing_time}")
+        logger.info(f"[SIMULATION] WORKER_SIMULATION_STEPS/SIMULATION_STEPS: {self.steps}")
         
         # Log configuration
         logger.info(f"[SIMULATION] Connector configuration:")
@@ -73,7 +79,7 @@ class SimulationConnector(ConnectorInterface):
         }
     
     async def process_job(self, websocket, job_id: str, payload: Dict[str, Any], send_progress_update) -> Dict[str, Any]:
-        """Process a simulated job
+        """Process a job
         
         Args:
             websocket: The WebSocket connection to the Redis Hub

@@ -15,6 +15,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, current_dir)
 
 # Import required modules
+
 from connector_interface import ConnectorInterface
 from core.utils.logger import logger
 
@@ -24,9 +25,9 @@ async def load_connectors() -> Dict[str, ConnectorInterface]:
     Returns:
         Dict[str, ConnectorInterface]: Dictionary of connector instances by job type
     """
-    # Get connector list from environment variable
-    connector_env = os.environ.get("CONNECTORS", "simulation")
-    logger.info(f"[connector_loader.py load_connectors()] CONNECTORS environment variable: '{connector_env}'")
+    # Get connector list from environment variable (support both namespaced and non-namespaced)
+    connector_env = os.environ.get("WORKER_CONNECTORS", os.environ.get("CONNECTORS", "simulation"))
+    logger.info(f"[connector_loader.py load_connectors()] WORKER_CONNECTORS environment variable: '{connector_env}'")
     
     connector_list = connector_env.split(",")
     connector_list = [c.strip() for c in connector_list if c.strip()]

@@ -11,9 +11,10 @@ sys.path.insert(0, parent_dir)
 current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, current_dir)
 
-# Import worker components
-from base_worker import BaseWorker
+# Import logger early for debugging
 from core.utils.logger import setup_logging, logger
+
+# BaseWorker will be imported inside the main function to avoid circular imports
 
 def log_environment_info():
     """Print environment information for debugging"""
@@ -52,6 +53,9 @@ async def main():
         setup_logging()
         
         logger.info("[worker.py main] Starting EmProps Redis Worker")
+        
+        # Import BaseWorker here to avoid circular imports
+        from base_worker import BaseWorker
         
         # Create and start worker
         worker = BaseWorker() ## base_worker.py

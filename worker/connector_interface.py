@@ -7,7 +7,7 @@ class ConnectorInterface(ABC):
     """Interface for service connectors that handle specific job types"""
     
     @abstractmethod
-    def initialize(self) -> bool:
+    async def initialize(self) -> bool:
         """Initialize the connector
         
         Returns:

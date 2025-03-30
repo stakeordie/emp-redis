@@ -19,8 +19,14 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, current_dir)
 
 # Import required modules
-from connector_interface import ConnectorInterface
-from connector_loader import load_connectors, get_worker_capabilities
+try:
+    # Try direct imports first (for Docker container)
+    from connector_interface import ConnectorInterface
+    from connector_loader import load_connectors, get_worker_capabilities
+except ImportError:
+    # Fall back to package imports (for local development)
+    from worker.connector_interface import ConnectorInterface
+    from worker.connector_loader import load_connectors, get_worker_capabilities
 from core.utils.logger import logger
 
 from core.message_models import (
@@ -58,27 +64,31 @@ class BaseWorker:
         print(f"Initializing worker with ID: {self.worker_id} (loaded via dotenv)")
 
         # Load GLOBAL settings directly from environment (set by container)
-        self.auth_token = os.environ.get("WORKER_WEBSOCKET_AUTH_TOKEN", "")
-        self.heartbeat_interval = int(os.environ.get("WORKER_HEARTBEAT_INTERVAL", "20"))
-        self.use_ssl = os.environ.get("WORKER_USE_SSL", "false").lower() in ("true", "1", "yes")
+        # Support both namespaced (WORKER_*) and non-namespaced versions for backward compatibility
+        self.auth_token = os.environ.get("WORKER_WEBSOCKET_AUTH_TOKEN", os.environ.get("WEBSOCKET_AUTH_TOKEN", ""))
+        self.heartbeat_interval = int(os.environ.get("WORKER_HEARTBEAT_INTERVAL", os.environ.get("HEARTBEAT_INTERVAL", "20")))
+        self.use_ssl = os.environ.get("WORKER_USE_SSL", os.environ.get("USE_SSL", "false")).lower() in ("true", "1", "yes")
         
-        # WORKER_COMFYUI_HOST is expected to be in the global env
-        # Connectors like comfyui_connector will read WORKER_COMFYUI_HOST and WORKER_COMFYUI_PORT from os.environ
+        # Log the environment variables we're using
+        print(f"[base_worker.py] Using environment variables:")
+        print(f"[base_worker.py] WORKER_ID: {self.worker_id}")
+        print(f"[base_worker.py] WORKER_USE_SSL: {self.use_ssl}")
+        print(f"[base_worker.py] WORKER_HEARTBEAT_INTERVAL: {self.heartbeat_interval}")
         
-        # WORKER_SIMULATION_* settings are expected to be in the global env
-        # Connectors like simulation_connector will read these from os.environ
-
         # Construct WebSocket URL using global settings + loaded WORKER_ID
-        direct_ws_url = os.environ.get("WORKER_REDIS_WS_URL", "")
+        direct_ws_url = os.environ.get("WORKER_REDIS_WS_URL", os.environ.get("REDIS_WS_URL", ""))
 
         if direct_ws_url:
             base_url = direct_ws_url
             self.redis_host = "Using WORKER_REDIS_WS_URL directly"
             self.redis_port = ""
         else:
-            self.redis_host = os.environ.get("WORKER_REDIS_API_HOST", "localhost")
-            # WORKER_REDIS_API_PORT is expected to be unset/empty for SSL or set globally otherwise
-            self.redis_port = os.environ.get("WORKER_REDIS_API_PORT", "") 
+            # Try both namespaced and non-namespaced versions
+            self.redis_host = os.environ.get("WORKER_REDIS_API_HOST", os.environ.get("REDIS_API_HOST", "localhost"))
+            self.redis_port = os.environ.get("WORKER_REDIS_API_PORT", os.environ.get("REDIS_API_PORT", ""))
+            
+            print(f"[base_worker.py] WORKER_REDIS_API_HOST: {self.redis_host}")
+            print(f"[base_worker.py] WORKER_REDIS_API_PORT: {self.redis_port}")
 
             protocol = "wss" if self.use_ssl else "ws"
             if self.redis_port:
@@ -149,11 +159,12 @@ class BaseWorker:
             connector_statuses: Dict[str, Any] = self.get_connector_statuses()
             
             # Create worker status message using WorkerStatusMessage class
+            capabilities_dict = self.capabilities or {}  # Use empty dict if None
             status_message = WorkerStatusMessage(
                 worker_id=self.worker_id,
                 status=self.status.name.lower(),
                 capabilities={
-                    **self.capabilities,
+                    **capabilities_dict,
                     "connector_statuses": connector_statuses
                 }
             )
@@ -319,8 +330,13 @@ class BaseWorker:
             
             logger.info(f"[base_worker.py handle_job_notification()]: Received job notification - job_id: {job_id}, type: {job_type}, priority: {priority}")
             
+            # Check if connectors are initialized
+            if self.connectors is None:
+                logger.error(f"[base_worker.py handle_job_notification()]: Connectors not initialized yet")
+                return
+                
             # Check if we can handle this job type
-            if job_type not in self.connectors:
+            if self.connectors is not None and job_type not in self.connectors:
                 logger.warning(f"[base_worker.py handle_job_notification()]: Received job notification for unsupported job type: {job_type}")
                 return
             
@@ -394,8 +410,36 @@ class BaseWorker:
             )
             await websocket.send(busy_status.model_dump_json())
             
+            # Check if connectors are initialized
+            if self.connectors is None:
+                logger.error(f"[base_worker.py handle_job_assigned()] Connectors not initialized yet")
+                
+                # Send error progress update
+                await self.send_progress_update(
+                    websocket, job_id, 0, "error", 
+                    "Worker connectors not initialized"
+                )
+                
+                # Send job failure message
+                job_id_str = str(job_id) if job_id is not None else "unknown_job"
+                fail_message = CompleteJobMessage(
+                    job_id=job_id_str,
+                    worker_id=self.worker_id,
+                    result={
+                        "status": "failed",
+                        "error": "Worker connectors not initialized"
+                    }
+                )
+                await websocket.send(fail_message.model_dump_json())
+                
+                # Reset worker state
+                self.status = WorkerStatus.IDLE
+                self.current_job_id = None
+                return
+            
             # Get the appropriate connector for this job type
             connector = self.connectors.get(job_type)
+            
             if connector is None:
                 logger.error(f"[base_worker.py handle_job_assigned()] No connector available for job type: {job_type}")
                 
@@ -498,7 +542,6 @@ class BaseWorker:
         try:
             # Debug logging before registration
             logger.info(f"[base_worker.py register_worker()]: Worker capabilities before registration: {self.capabilities}")
-            logger.info(f"[base_worker.py register_worker()]: Worker connectors before registration: {list(self.connectors.keys())}")
             
             # Ensure capabilities is a proper dictionary
             capabilities_dict = dict(self.capabilities) if self.capabilities else {}

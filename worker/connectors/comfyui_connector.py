@@ -18,14 +18,20 @@ class ComfyUIConnector(ConnectorInterface):
         super().__init__()
         
         """Initialize the ComfyUI connector"""
-        # ComfyUI connection settings
-        self.host = os.environ.get("COMFYUI_HOST", "localhost")
-        self.port = int(os.environ.get("COMFYUI_PORT", "8188"))
-        self.use_ssl = os.environ.get("COMFYUI_USE_SSL", "false").lower() in ("true", "1", "yes")
+        # ComfyUI connection settings (support both namespaced and non-namespaced)
+        self.host = os.environ.get("WORKER_COMFYUI_HOST", os.environ.get("COMFYUI_HOST", "localhost"))
+        self.port = int(os.environ.get("WORKER_COMFYUI_PORT", os.environ.get("COMFYUI_PORT", "8188")))
+        self.use_ssl = os.environ.get("WORKER_COMFYUI_USE_SSL", os.environ.get("COMFYUI_USE_SSL", "false")).lower() in ("true", "1", "yes")
         
         # Authentication settings
-        self.username = os.environ.get("COMFYUI_USERNAME")
-        self.password = os.environ.get("COMFYUI_PASSWORD")
+        self.username = os.environ.get("WORKER_COMFYUI_USERNAME", os.environ.get("COMFYUI_USERNAME"))
+        self.password = os.environ.get("WORKER_COMFYUI_PASSWORD", os.environ.get("COMFYUI_PASSWORD"))
+        
+        # Log which variables we're using
+        logger.info(f"[comfyui_connector.py __init__] Using environment variables:")
+        logger.info(f"[comfyui_connector.py __init__] WORKER_COMFYUI_HOST/COMFYUI_HOST: {self.host}")
+        logger.info(f"[comfyui_connector.py __init__] WORKER_COMFYUI_PORT/COMFYUI_PORT: {self.port}")
+        logger.info(f"[comfyui_connector.py __init__] WORKER_COMFYUI_USE_SSL/COMFYUI_USE_SSL: {self.use_ssl}")
         
         logger.info(f"[comfyui_connector.py __init__] Initializing connector")
         logger.info(f"[comfyui_connector.py __init__] Username environment variable: {'set' if self.username else 'not set'}")
@@ -209,12 +215,14 @@ class ComfyUIConnector(ConnectorInterface):
                     logger.info(f"[comfyui_connector.py send_workflow] Prompt queued with ID: {self.prompt_id}")
                     if self.prompt_id is None:
                         raise Exception("Failed to queue workflow in ComfyUI")
-                    return self.prompt_id
+                    # Explicitly return as str to match the return type
+                    return str(self.prompt_id)
             elif msg.type == aiohttp.WSMsgType.ERROR:
                 logger.error(f"[comfyui_connector.py send_workflow] WebSocket connection closed with exception {self.ws.exception()}")
                 raise Exception(f"ComfyUI WebSocket error: {self.ws.exception()}")
         
-        raise Exception("Failed to queue workflow in ComfyUI")
+        # If we get here without returning, something went wrong
+        return None
     
     async def monitor_progress(self, job_id: str, send_progress_update: Callable) -> Dict[str, Any]:
         """
@@ -312,7 +320,7 @@ class ComfyUIConnector(ConnectorInterface):
         }
     
     async def process_job(self, websocket, job_id: str, payload: Dict[str, Any], send_progress_update) -> Dict[str, Any]:
-        """Process a ComfyUI job
+        """Process a job
         
         Args:
             websocket: The WebSocket connection to the Redis Hub
