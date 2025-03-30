@@ -15,32 +15,39 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Create worker package
+      - name: Set up temporary directories
+        id: setup_dirs
         run: |
-          # Create temporary directory
           TEMP_DIR=$(mktemp -d)
           PACKAGE_DIR="$TEMP_DIR/emp-redis-worker"
+          echo "TEMP_DIR=$TEMP_DIR" >> $GITHUB_ENV
+          echo "PACKAGE_DIR=$PACKAGE_DIR" >> $GITHUB_ENV
           mkdir -p "$PACKAGE_DIR/worker"
           mkdir -p "$PACKAGE_DIR/core/core_types"
           mkdir -p "$PACKAGE_DIR/core/interfaces"
           mkdir -p "$PACKAGE_DIR/core/utils"
           mkdir -p "$PACKAGE_DIR/scripts"
+          echo "Temporary directories created: $TEMP_DIR, $PACKAGE_DIR"
 
-          # Copy only the necessary files
-          cp -r worker/* "$PACKAGE_DIR/worker/"
-          cp core/message_models.py "$PACKAGE_DIR/core/"
-          cp -r core/core_types/* "$PACKAGE_DIR/core/core_types/"
-          cp -r core/interfaces/* "$PACKAGE_DIR/core/interfaces/"
-          cp -r core/utils/* "$PACKAGE_DIR/core/utils/"
-          cp worker/.env.example "$PACKAGE_DIR/.env.example"
+      - name: Copy project files
+        run: |
+          echo "Copying files to ${{ env.PACKAGE_DIR }}"
+          cp -r worker/* "${{ env.PACKAGE_DIR }}/worker/"
+          cp core/message_models.py "${{ env.PACKAGE_DIR }}/core/"
+          cp -r core/core_types/* "${{ env.PACKAGE_DIR }}/core/core_types/"
+          cp -r core/interfaces/* "${{ env.PACKAGE_DIR }}/core/interfaces/"
+          cp -r core/utils/* "${{ env.PACKAGE_DIR }}/core/utils/"
+          cp worker/.env.example "${{ env.PACKAGE_DIR }}/.env.example"
 
-          # Make sure requirements.txt is included
+      - name: Handle requirements.txt
+        run: |
+          echo "Handling requirements.txt"
           if [ -f "worker/requirements.txt" ]; then
-            cp worker/requirements.txt "$PACKAGE_DIR/requirements.txt"
+            cp worker/requirements.txt "${{ env.PACKAGE_DIR }}/requirements.txt"
           else
             echo "Warning: worker/requirements.txt not found"
             # Create a minimal requirements file
-            cat > "$PACKAGE_DIR/requirements.txt" << 'EOF'
+            cat > "${{ env.PACKAGE_DIR }}/requirements.txt" << 'EOF'
             # EmProps Redis Worker Requirements
             websockets>=10.4
             aiohttp>=3.8.4
@@ -52,11 +59,13 @@ jobs:
             EOF
           fi
 
-          # Create setup script
-          cat > "$PACKAGE_DIR/scripts/setup.sh" << 'EOF'
+      - name: Create setup script
+        run: |
+          echo "Creating setup.sh"
+          cat > "${{ env.PACKAGE_DIR }}/scripts/setup.sh" << 'EOF'
           #!/bin/bash
           # Setup script for EmProps Redis Worker
-
+          
           # Create virtual environment if venv module is available
           if python3 -m venv --help > /dev/null 2>&1; then
             echo "Creating virtual environment..."
@@ -65,28 +74,31 @@ jobs:
           else
             echo "Python venv module not available, skipping virtual environment creation"
           fi
-
+          
           # Install dependencies
           echo "Installing dependencies..."
           pip install -r requirements.txt
-
+          
           # Copy environment file if it doesn't exist
           if [ ! -f ".env" ]; then
             echo "Creating .env file from template..."
             cp "$(dirname "$0")/../.env.example" .env
             echo "Please edit .env file with your configuration"
           fi
-
+          
           echo "Setup complete!"
           echo "To start the worker, run: python worker/worker.py"
           EOF
-
+          
           # Make setup script executable
-          chmod +x "$PACKAGE_DIR/scripts/setup.sh"
+          chmod +x "${{ env.PACKAGE_DIR }}/scripts/setup.sh"
 
+      - name: Create README (Commented Out)
+        run: |
+          echo "Skipping README creation (commented out for debugging)"
           # Debug: Temporarily comment out README creation
-          # Create a README
-          # cat > "$PACKAGE_DIR/README.md" << 'EOF'
+          # # Create a README
+          # cat > "${{ env.PACKAGE_DIR }}/README.md" << 'EOF'
           # # EmProps Redis Worker
           # 
           # This package contains a single worker component for the EmProps Redis system.
@@ -127,16 +139,15 @@ jobs:
           # - SIMULATION_ENABLED: Whether to enable the simulation connector
           # EOF
 
-          # Create the tarball
-          cd "$TEMP_DIR"
+      - name: Create tarball and clean up
+        run: |
+          echo "Creating tarball in ${{ env.TEMP_DIR }}"
+          cd "${{ env.TEMP_DIR }}"
           tar -czf emp-redis-worker.tar.gz emp-redis-worker
-
-          # Move to workspace
+          echo "Moving tarball to workspace"
           mv emp-redis-worker.tar.gz $GITHUB_WORKSPACE/
-
-          # Clean up
-          rm -rf "$TEMP_DIR"
-
+          echo "Cleaning up ${{ env.TEMP_DIR }}"
+          rm -rf "${{ env.TEMP_DIR }}"
           echo "Worker package created: emp-redis-worker.tar.gz"
 
       - name: Get version info
