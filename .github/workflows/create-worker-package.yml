@@ -109,35 +109,6 @@ jobs:
              python worker/worker.py
              ```
 
-          ## Environment Variables
-
-          ### Core Variables
-          - REDIS_API_HOST: The hostname of the Redis Hub
-          - REDIS_API_PORT: The port of the Redis Hub (default: 8001)
-          - WORKER_ID: Unique identifier for this worker
-          - WEBSOCKET_AUTH_TOKEN: Authentication token for Redis Hub
-          - CONNECTORS: Comma-separated list of connectors to load (e.g., "comfyui,simulation")
-
-          ### ComfyUI Connector Variables
-          - COMFYUI_API_HOST: Hostname of the ComfyUI instance
-          - COMFYUI_API_PORT: Port of the ComfyUI instance
-
-          ### Simulation Connector Variables
-          - SIMULATION_ENABLED: Whether to enable the simulation connector
-          EOF
-
-          # Create the tarball
-          cd "$TEMP_DIR"
-          tar -czf emp-redis-worker.tar.gz emp-redis-worker
-
-          # Move to workspace
-          mv emp-redis-worker.tar.gz $GITHUB_WORKSPACE/
-
-          # Clean up
-          rm -rf "$TEMP_DIR"
-
-          echo "Worker package created: emp-redis-worker.tar.gz"
-
       - name: Get version info
         id: version
         run: |
