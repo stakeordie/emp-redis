@@ -8,6 +8,7 @@ import uuid
 import websockets
 from typing import Dict, List, Any, Optional, Union, cast
 from enum import Enum, auto
+from dotenv import load_dotenv
 
 # Add the parent directory to the Python path
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -47,36 +48,35 @@ class BaseWorker:
     def __init__(self):
         """Synchronous initialization of base worker"""
         # Load environment variables
-        base_worker_id = os.environ.get("WORKER_ID", "worker")
-        unique_suffix = str(uuid.uuid4())[:8]
-        self.worker_id = f"{base_worker_id}-{unique_suffix}"
-        
+        load_dotenv() # Load .env file into environment
+        # WORKER_ID is loaded from .env by load_dotenv()
+        self.worker_id = os.environ.get("WORKER_ID", "worker-unknown")
+
         # Log the worker ID for debugging
-        print(f"Initializing worker with ID: {self.worker_id} (based on {base_worker_id})")
-        
+        print(f"Initializing worker with ID: {self.worker_id}")
+
         # Set up basic attributes
-        self.auth_token = os.environ.get("WEBSOCKET_AUTH_TOKEN", "")
-        self.heartbeat_interval = int(os.environ.get("HEARTBEAT_INTERVAL", "20"))
-        self.use_ssl = os.environ.get("USE_SSL", "false").lower() in ("true", "1", "yes")
-        
-        direct_ws_url = os.environ.get("REDIS_WS_URL", "")
+        self.auth_token = os.environ.get("WORKER_WEBSOCKET_AUTH_TOKEN", "")
+        self.heartbeat_interval = int(os.environ.get("WORKER_HEARTBEAT_INTERVAL", "20"))
+        self.use_ssl = os.environ.get("WORKER_USE_SSL", "false").lower() in ("true", "1", "yes")
+
+        direct_ws_url = os.environ.get("WORKER_REDIS_WS_URL", "")
 
         if direct_ws_url:
-
             base_url = direct_ws_url
-
-            self.redis_host = "Using REDIS_WS_URL directly"
+            self.redis_host = "Using WORKER_REDIS_WS_URL directly"
             self.redis_port = ""
         else:
-            self.redis_host = os.environ.get("REDIS_API_HOST", "localhost")
-            self.redis_port = os.environ.get("REDIS_API_PORT", "")
+            self.redis_host = os.environ.get("WORKER_REDIS_API_HOST", "localhost")
+            # >>> EDIT: Look for namespaced port, but default to empty
+            self.redis_port = os.environ.get("WORKER_REDIS_API_PORT", "") 
 
             protocol = "wss" if self.use_ssl else "ws"
             if self.redis_port:
                 base_url = f"{protocol}://{self.redis_host}:{self.redis_port}/ws/worker/{self.worker_id}"
             else:
                 base_url = f"{protocol}://{self.redis_host}/ws/worker/{self.worker_id}"
-            
+
         self.redis_ws_url = f"{base_url}?token={self.auth_token}" if self.auth_token else base_url
         
         # Initialize MessageModels for message parsing

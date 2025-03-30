@@ -48,13 +48,14 @@ jobs:
             echo "Warning: worker/requirements.txt not found"
             # Create a minimal requirements file using echo
             echo "# EmProps Redis Worker Requirements" > "${{ env.PACKAGE_DIR }}/requirements.txt"
-            echo "websockets>=10.4" >> "${{ env.PACKAGE_DIR }}/requirements.txt"
+            echo "websockets>=12.0" >> "${{ env.PACKAGE_DIR }}/requirements.txt"
             echo "aiohttp>=3.8.4" >> "${{ env.PACKAGE_DIR }}/requirements.txt"
-            echo "python-dotenv>=1.0.0" >> "${{ env.PACKAGE_DIR }}/requirements.txt"
             echo "pydantic>=2.0.0" >> "${{ env.PACKAGE_DIR }}/requirements.txt"
             echo "asyncio>=3.4.3" >> "${{ env.PACKAGE_DIR }}/requirements.txt"
             echo "uuid>=1.30" >> "${{ env.PACKAGE_DIR }}/requirements.txt"
             echo "typing-extensions>=4.5.0" >> "${{ env.PACKAGE_DIR }}/requirements.txt"
+            # >>> EDIT: Added python-dotenv for loading .env files
+            echo "python-dotenv>=1.0.0" >> "${{ env.PACKAGE_DIR }}/requirements.txt"
           fi
 
       - name: Create setup script
@@ -63,31 +64,22 @@ jobs:
           cat > "${{ env.PACKAGE_DIR }}/scripts/setup.sh" << 'EOF'
           #!/bin/bash
           # Setup script for EmProps Redis Worker
-          
-          # Create virtual environment if venv module is available
-          if python3 -m venv --help > /dev/null 2>&1; then
-            echo "Creating virtual environment..."
-            python3 -m venv venv
-            source venv/bin/activate
-          else
-            echo "Python venv module not available, skipping virtual environment creation"
-          fi
-          
+
           # Install dependencies
           echo "Installing dependencies..."
           pip install -r requirements.txt
-          
+
           # Copy environment file if it doesn't exist
           if [ ! -f ".env" ]; then
             echo "Creating .env file from template..."
             cp "$(dirname "$0")/../.env.example" .env
             echo "Please edit .env file with your configuration"
           fi
-          
+
           echo "Setup complete!"
           echo "To start the worker, run: python worker/worker.py"
           EOF
-          
+
           # Make setup script executable
           chmod +x "${{ env.PACKAGE_DIR }}/scripts/setup.sh"
 
