@@ -28,8 +28,15 @@ EXPOSE 6379 8001
 ENV REDIS_URL=redis://localhost:6379/0
 ENV API_PORT=8001
 
-# Copy .env file for additional configuration
-COPY ./hub/.env /app/.env
+# Create an empty .env file that can be overridden at runtime
+RUN touch /app/.env
+
+# Approach that doesn't rely on copying a potentially missing file
+# This ensures the build won't fail if .env doesn't exist
+RUN echo "# This is a placeholder .env file created during the Docker build" >> /app/.env
+RUN echo "# Override this file by mounting a volume at runtime" >> /app/.env
+RUN echo "REDIS_URL=redis://localhost:6379/0" >> /app/.env
+RUN echo "API_PORT=8001" >> /app/.env
 
 # Start Redis and the FastAPI server
 CMD ["/app/start.sh"]
