@@ -555,8 +555,13 @@ class MessageHandler(MessageHandlerInterface):
         
         # Send heartbeat acknowledgment back to worker
         try:
-            # Create heartbeat acknowledgment message
-            heartbeat_ack = {"type": "worker_heartbeat", "worker_id": worker_id, "timestamp": current_time}
+            # Create heartbeat acknowledgment message using the proper model
+            from .message_models import WorkerHeartbeatMessage
+            
+            heartbeat_ack = WorkerHeartbeatMessage(
+                worker_id=worker_id,
+                timestamp=current_time
+            )
             # Send it back to the worker
             await self.connection_manager.send_to_worker(worker_id, heartbeat_ack)
             logger.debug(f"[message_handler.py handle_worker_heartbeat()]: Sent heartbeat acknowledgment to worker {worker_id}")
