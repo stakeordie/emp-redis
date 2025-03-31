@@ -1655,38 +1655,41 @@ class ConnectionManager(ConnectionManagerInterface):
         # Return a copy of the worker info to prevent external modification
         return dict(self.worker_info[worker_id])
         
-    def update_worker_status(self, worker_id: str, status: str, job_id: Optional[str] = None) -> bool:
-        """Update worker status and job assignment
-        
-        Args:
-            worker_id: ID of the worker to update
-            status: New status (e.g., "idle", "busy", "disconnected")
-            job_id: Optional ID of the job the worker is processing
-            
-        Returns:
-            bool: True if update was successful
-        """
-        try:
-            if worker_id not in self.worker_info:
-                return False
-                
-            current_time = time.time()
-            
-            # Update status
-            self.worker_status[worker_id] = status
-            self.worker_info[worker_id]["status"] = status
-            self.worker_info[worker_id]["updated_at"] = current_time
-            
-            # Update job assignment
-            if job_id:
-                self.worker_current_jobs[worker_id] = job_id
-                self.worker_info[worker_id]["current_job_id"] = job_id
-            elif status == "idle":
-                self.worker_current_jobs.pop(worker_id, None)
-                self.worker_info[worker_id]["current_job_id"] = ""
-                
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error updating worker {worker_id} status: {str(e)}")
-            return False
+    # COMMENTED OUT: 2025-03-31 - This method was causing a name conflict with the async version
+    # This method appears to be unused currently but contains functionality for updating job assignments
+    # If needed in the future, consider renaming to update_worker_job_assignment or similar
+    # def update_worker_status(self, worker_id: str, status: str, job_id: Optional[str] = None) -> bool:
+    #     """Update worker status and job assignment
+    #     
+    #     Args:
+    #         worker_id: ID of the worker to update
+    #         status: New status (e.g., "idle", "busy", "disconnected")
+    #         job_id: Optional ID of the job the worker is processing
+    #         
+    #     Returns:
+    #         bool: True if update was successful
+    #     """
+    #     try:
+    #         if worker_id not in self.worker_info:
+    #             return False
+    #             
+    #         current_time = time.time()
+    #         
+    #         # Update status
+    #         self.worker_status[worker_id] = status
+    #         self.worker_info[worker_id]["status"] = status
+    #         self.worker_info[worker_id]["updated_at"] = current_time
+    #         
+    #         # Update job assignment
+    #         if job_id:
+    #             self.worker_current_jobs[worker_id] = job_id
+    #             self.worker_info[worker_id]["current_job_id"] = job_id
+    #         elif status == "idle":
+    #             self.worker_current_jobs.pop(worker_id, None)
+    #             self.worker_info[worker_id]["current_job_id"] = ""
+    #             
+    #         return True
+    #         
+    #     except Exception as e:
+    #         logger.error(f"Error updating worker {worker_id} status: {str(e)}")
+    #         return False
