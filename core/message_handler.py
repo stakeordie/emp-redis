@@ -552,6 +552,16 @@ class MessageHandler(MessageHandlerInterface):
             # If worker is idle, broadcast pending jobs
             if message.status == "idle":
                 await self.broadcast_pending_jobs_to_idle_workers()
+        
+        # Send heartbeat acknowledgment back to worker
+        try:
+            # Create heartbeat acknowledgment message
+            heartbeat_ack = {"type": "worker_heartbeat", "worker_id": worker_id, "timestamp": current_time}
+            # Send it back to the worker
+            await self.connection_manager.send_to_worker(worker_id, heartbeat_ack)
+            logger.debug(f"[message_handler.py handle_worker_heartbeat()]: Sent heartbeat acknowledgment to worker {worker_id}")
+        except Exception as e:
+            logger.error(f"[message_handler.py handle_worker_heartbeat()]: Error sending heartbeat acknowledgment to worker {worker_id}: {str(e)}")
 
     async def handle_worker_status(self, worker_id: str, message: WorkerStatusMessage) -> None:
         """
