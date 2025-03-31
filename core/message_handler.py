@@ -437,15 +437,20 @@ class MessageHandler(MessageHandlerInterface):
                 # This is strictly for monitoring purposes
                 from core.message_models import ConnectorWebSocketStatusMessage
                 
-                if not isinstance(message_obj, ConnectorWebSocketStatusMessage):
-                    try:
+                try:
+                    # Ensure we have a properly typed message object
+                    if not isinstance(message_obj, ConnectorWebSocketStatusMessage):
                         ws_status_message = ConnectorWebSocketStatusMessage(**message_obj.model_dump())
-                        await self.connection_manager.forward_connector_ws_status(ws_status_message)
-                    except Exception as e:
-                        error_message = ErrorMessage(error=f"Invalid ConnectorWebSocketStatusMessage: {str(e)}")
-                        await self.connection_manager.send_to_worker(worker_id, error_message)
-                else:
-                    await self.connection_manager.forward_connector_ws_status(message_obj)
+                    else:
+                        ws_status_message = message_obj
+                        
+                    # Forward the status message to monitors
+                    await self.connection_manager.forward_connector_ws_status(ws_status_message)
+                    
+                except Exception as e:
+                    # Send error back to worker
+                    error_message = ErrorMessage(error=f"Error processing ConnectorWebSocketStatusMessage: {str(e)}")
+                    await self.connection_manager.send_to_worker(worker_id, error_message)
             # The subscribe_job_notifications case has been removed
             # This functionality is now handled by the register_worker message
             case _:
