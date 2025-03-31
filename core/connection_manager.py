@@ -1341,6 +1341,45 @@ class ConnectionManager(ConnectionManagerInterface):
         except Exception as e:
             logger.error(f"[connection_manager.py forward_job_progress 5] Error forwarding job progress update: {str(e)}")
             return False
+            
+    async def forward_connector_ws_status(self, status_message: BaseMessage) -> bool:
+        """Forward connector WebSocket status message to all monitors
+        
+        This method forwards connector WebSocket status messages to all connected monitors.
+        It's used for real-time monitoring of connector WebSocket connections to external services.
+        
+        Args:
+            status_message: The connector WebSocket status message (ConnectorWebSocketStatusMessage)
+            
+        Returns:
+            bool: True if the status was successfully forwarded to at least one monitor, False otherwise
+        """
+        try:
+            logger.debug(f"[connection_manager.py forward_connector_ws_status] Forwarding connector WS status: {status_message}")
+            
+            # If there are no monitors connected, log and return
+            if not self.monitor_connections:
+                logger.debug(f"[connection_manager.py forward_connector_ws_status] No monitors connected, skipping status update")
+                return False
+            
+            # Track successful sends
+            successful_sends = 0
+            
+            # Forward the status message to all connected monitors
+            for monitor_id, websocket in self.monitor_connections.items():
+                try:
+                    # Send the message to the monitor
+                    await websocket.send_text(status_message.model_dump_json())
+                    successful_sends += 1
+                except Exception as e:
+                    logger.warning(f"[connection_manager.py forward_connector_ws_status] Failed to send status update to monitor {monitor_id}: {str(e)}")
+            
+            # Return success if at least one monitor received the update
+            return successful_sends > 0
+            
+        except Exception as e:
+            logger.error(f"[connection_manager.py forward_connector_ws_status] Error forwarding connector WS status: {str(e)}")
+            return False
         
     def set_monitor_subscriptions(self, monitor_id: str, channels: List[str]) -> None:
         """Set the subscription channels for a monitor

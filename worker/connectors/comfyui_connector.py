@@ -5,6 +5,7 @@ import json
 import asyncio
 import aiohttp
 import base64
+import time
 from typing import Dict, Any, Optional, Union, Callable
 
 from connector_interface import ConnectorInterface
@@ -355,6 +356,73 @@ class ComfyUIConnector(ConnectorInterface):
                 "status": "failed",
                 "error": str(e)
             }
+    
+    async def monitor_ws_connection(self, websocket, worker_id: str) -> None:
+        """Monitor WebSocket connection to ComfyUI and send status updates
+        
+        This method periodically checks the WebSocket connection to ComfyUI
+        and sends status updates to the Redis Hub.
+        
+        Args:
+            websocket: The WebSocket connection to the Redis Hub
+            worker_id: The ID of the worker
+        """
+        # Import here to avoid circular imports
+        from core.message_models import MessageModels
+        
+        # Create message models instance
+        message_models = MessageModels()
+        
+        # Monitor interval in seconds
+        monitor_interval = 30
+        
+        logger.info(f"[comfyui_connector.py monitor_ws_connection] Starting WebSocket connection monitor for worker {worker_id}")
+        
+        try:
+            while True:
+                try:
+                    # Check if the WebSocket connection is alive
+                    connected = self.connected and self.ws is not None
+                    
+                    # If not connected, try to reconnect
+                    if not connected:
+                        logger.warning(f"[comfyui_connector.py monitor_ws_connection] WebSocket connection to ComfyUI is down, attempting to reconnect")
+                        try:
+                            await self.connect()
+                            connected = self.connected and self.ws is not None
+                        except Exception as e:
+                            logger.error(f"[comfyui_connector.py monitor_ws_connection] Failed to reconnect to ComfyUI: {str(e)}")
+                    
+                    # Get connection details
+                    details = {
+                        "host": self.host,
+                        "port": self.port,
+                        "client_id": self.client_id,
+                        "ws_url": self.ws_url,
+                        "last_prompt_id": self.prompt_id
+                    }
+                    
+                    # Create and send status message
+                    status_message = message_models.create_connector_ws_status_message(
+                        worker_id=worker_id,
+                        connector_type="comfyui",
+                        connected=connected,
+                        service_name="ComfyUI",
+                        details=details,
+                        last_ping=time.time() if connected else None
+                    )
+                    
+                    # Send status message to Redis Hub
+                    await websocket.send(status_message.model_dump_json())
+                    logger.debug(f"[comfyui_connector.py monitor_ws_connection] Sent WebSocket connection status: {connected}")
+                    
+                except Exception as e:
+                    logger.error(f"[comfyui_connector.py monitor_ws_connection] Error monitoring WebSocket connection: {str(e)}")
+                
+                # Wait for next check
+                await asyncio.sleep(monitor_interval)
+        except Exception as e:
+            logger.error(f"[comfyui_connector.py monitor_ws_connection] Fatal error in WebSocket connection monitor: {str(e)}")
     
     async def shutdown(self) -> None:
         """Clean up resources when worker is shutting down"""

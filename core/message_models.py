@@ -126,6 +126,18 @@ class WorkerStatusMessage(BaseMessage):
     capabilities: Optional[Dict[str, Any]] = None
     timestamp: float = Field(default_factory=time.time)
 
+# Connector WebSocket Status Message
+class ConnectorWebSocketStatusMessage(BaseMessage):
+    """Message for reporting the status of a connector's WebSocket connection to an external service"""
+    type: str = MessageType.CONNECTOR_WS_STATUS
+    worker_id: str
+    connector_type: str  # Type of connector (e.g., "comfyui")
+    connected: bool  # Whether the WebSocket connection is alive
+    service_name: str  # Name of the external service (e.g., "ComfyUI")
+    details: Optional[Dict[str, Any]] = None  # Additional connection details
+    last_ping: Optional[float] = None  # Timestamp of the last successful ping
+    timestamp: float = Field(default_factory=time.time)
+
 # SubscribeJobNotificationsMessage has been removed
 # Its functionality is now part of RegisterWorkerMessage
     
@@ -434,6 +446,20 @@ class MessageModels(MessageModelsInterface):
                         worker_id=data.get("worker_id", ""),
                         status=data.get("status", "idle"),
                         capabilities=data.get("capabilities", {}),
+                        timestamp=data.get("timestamp", time.time())
+                    ),
+                    message_type
+                )
+            case MessageType.CONNECTOR_WS_STATUS:
+                return self._try_parse_message(
+                    lambda: ConnectorWebSocketStatusMessage(
+                        type=MessageType.CONNECTOR_WS_STATUS,
+                        worker_id=data.get("worker_id", ""),
+                        connector_type=data.get("connector_type", ""),
+                        connected=data.get("connected", False),
+                        service_name=data.get("service_name", ""),
+                        details=data.get("details", None),
+                        last_ping=data.get("last_ping", None),
                         timestamp=data.get("timestamp", time.time())
                     ),
                     message_type
@@ -906,5 +932,34 @@ class MessageModels(MessageModelsInterface):
         return JobCompletedAckMessage(
             job_id=job_id,
             worker_id=worker_id
+        )
+
+    def create_connector_ws_status_message(self, worker_id: str, connector_type: str, 
+                                         connected: bool, service_name: str,
+                                         details: Optional[Dict[str, Any]] = None,
+                                         last_ping: Optional[float] = None) -> ConnectorWebSocketStatusMessage:
+        """
+        Create a connector WebSocket status message.
+        
+        Args:
+            worker_id: ID of the worker that owns the connector
+            connector_type: Type of connector (e.g., "comfyui")
+            connected: Whether the WebSocket connection is alive
+            service_name: Name of the external service (e.g., "ComfyUI")
+            details: Optional additional connection details
+            last_ping: Optional timestamp of the last successful ping
+            
+        Returns:
+            ConnectorWebSocketStatusMessage: Connector WebSocket status message model
+        """
+        return ConnectorWebSocketStatusMessage(
+            type=MessageType.CONNECTOR_WS_STATUS,
+            worker_id=worker_id,
+            connector_type=connector_type,
+            connected=connected,
+            service_name=service_name,
+            details=details,
+            last_ping=last_ping,
+            timestamp=time.time()
         )
 

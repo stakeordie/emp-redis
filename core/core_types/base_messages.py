@@ -136,6 +136,9 @@ class MessageType:
 
     #SERVER_SEND_JOB_ERROR_TO_CLIENT
     ERROR = "error"                                # Server → Client/Worker: Reports an error condition
+    
+    # CONNECTOR_SEND_WS_STATUS_TO_SERVER
+    CONNECTOR_WS_STATUS = "connector_ws_status"    # Connector → Server → Monitor: Reports the status of a connector's WebSocket connection
 
 # Base message class for all messages
 class BaseMessage(BaseModel):

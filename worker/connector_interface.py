@@ -64,3 +64,16 @@ class ConnectorInterface(ABC):
     async def shutdown(self) -> None:
         """Clean up resources when worker is shutting down"""
         pass
+        
+    async def monitor_ws_connection(self, websocket, worker_id: str) -> None:
+        """Monitor WebSocket connection to external service and send status updates
+        
+        This method is optional and only needs to be implemented by connectors
+        that use WebSockets to connect to external services.
+        
+        Args:
+            websocket: The WebSocket connection to the Redis Hub
+            worker_id: The ID of the worker
+        """
+        # Default implementation does nothing
+        pass

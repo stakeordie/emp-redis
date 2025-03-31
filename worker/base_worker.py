@@ -605,6 +605,21 @@ class BaseWorker:
                 heartbeat_task = asyncio.create_task(self.send_heartbeat(websocket))
                 
                 logger.info(f"[base_worker.py run()]: after heartbeat task setup {self.worker_id} {heartbeat_task}")
+                
+                # Start connector WebSocket monitoring tasks for connectors that use WebSockets
+                connector_ws_monitor_tasks = []
+                if self.connectors is not None:
+                    for job_type, connector in self.connectors.items():
+                        try:
+                            # Check if the connector has the monitor_ws_connection method implemented
+                            # (not just inherited from the base class)
+                            if hasattr(connector, 'monitor_ws_connection') and \
+                               connector.monitor_ws_connection.__func__ is not ConnectorInterface.monitor_ws_connection.__func__:
+                                logger.info(f"[base_worker.py run()]: Starting WebSocket monitor for {job_type} connector")
+                                monitor_task = asyncio.create_task(connector.monitor_ws_connection(websocket, self.worker_id))
+                                connector_ws_monitor_tasks.append(monitor_task)
+                        except Exception as e:
+                            logger.error(f"[base_worker.py run()]: Error starting WebSocket monitor for {job_type} connector: {str(e)}")
 
                 # Process messages
                 async for message in websocket:
@@ -612,9 +627,28 @@ class BaseWorker:
                 
                 # Cancel heartbeat task
                 heartbeat_task.cancel()
+                
+                # Cancel connector WebSocket monitor tasks
+                for task in connector_ws_monitor_tasks:
+                    if not task.done():
+                        task.cancel()
+                        try:
+                            await task
+                        except asyncio.CancelledError:
+                            pass
         except Exception as e:
             logger.error(f"Error in worker: {str(e)}")
         finally:
+            # Cancel any remaining connector WebSocket monitor tasks
+            if 'connector_ws_monitor_tasks' in locals():
+                for task in connector_ws_monitor_tasks:
+                    if not task.done():
+                        task.cancel()
+                        try:
+                            await asyncio.wait_for(asyncio.shield(task), timeout=2.0)
+                        except (asyncio.CancelledError, asyncio.TimeoutError):
+                            pass
+            
             # Shutdown connectors
             await self.shutdown_connectors()
     
