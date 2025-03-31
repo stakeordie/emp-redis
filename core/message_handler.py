@@ -556,9 +556,9 @@ class MessageHandler(MessageHandlerInterface):
         # Send heartbeat acknowledgment back to worker
         try:
             # Create heartbeat acknowledgment message using the proper model
-            from .message_models import WorkerHeartbeatMessage
+            from .message_models import WorkerHeartbeatAckMessage
             
-            heartbeat_ack = WorkerHeartbeatMessage(
+            heartbeat_ack = WorkerHeartbeatAckMessage(
                 worker_id=worker_id,
                 timestamp=current_time
             )

@@ -275,6 +275,10 @@ class BaseWorker:
                 case MessageType.WORKER_HEARTBEAT:
                     # Acknowledge heartbeat from server with detailed logging
                     logger.info(f"[base_worker.py handle_message()]: HEARTBEAT RESPONSE RECEIVED from server for worker {self.worker_id}")
+                
+                case MessageType.WORKER_HEARTBEAT_ACK:
+                    # Handle heartbeat acknowledgment from server
+                    logger.info(f"[base_worker.py handle_message()]: HEARTBEAT ACK RECEIVED from server for worker {self.worker_id}")
                 case MessageType.JOB_COMPLETED_ACK:
                     # Handle job completion acknowledgment from the server
                     if hasattr(message_obj, 'job_id'):

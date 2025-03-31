@@ -46,6 +46,9 @@ class MessageType:
 
     #8 WORKER_SEND_MY_HEARTBEAT_TO_SERVER
     WORKER_HEARTBEAT = "worker_heartbeat"          # Worker → Server: Sends periodic heartbeat to indicate it's still alive
+    
+    #8 SERVER_SEND_HEARTBEAT_ACK_TO_WORKER
+    WORKER_HEARTBEAT_ACK = "worker_heartbeat_ack"  # Server → Worker: Acknowledges receipt of a worker heartbeat
 
     #8 WORKER_SEND_MY_STATUS_TO_SERVER
     WORKER_STATUS = "worker_status"                # Worker → Server: Reports its current status (busy, idle, etc.)

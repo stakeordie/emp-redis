@@ -111,6 +111,12 @@ class WorkerHeartbeatMessage(BaseMessage):
     status: Optional[str] = "idle"
     load: Optional[float] = 0.0
     timestamp: float = Field(default_factory=time.time)
+
+class WorkerHeartbeatAckMessage(BaseMessage):
+    """Message for acknowledging receipt of a worker heartbeat"""
+    type: str = MessageType.WORKER_HEARTBEAT_ACK
+    worker_id: str
+    timestamp: float = Field(default_factory=time.time)
     
 class WorkerStatusMessage(BaseMessage):
     type: str = MessageType.WORKER_STATUS
