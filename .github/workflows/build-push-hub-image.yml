@@ -45,36 +45,6 @@ jobs:
           cache-from: type=registry,ref=emprops/redis_server:buildcache
           cache-to: type=registry,ref=emprops/redis_server:buildcache,mode=max
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: hub-${{ steps.version.outputs.version }}
-          name: Hub Server ${{ steps.version.outputs.version }}
-          body: |
-            Redis Hub Server Docker Image
-            
-            Built from commit: ${{ github.sha }}
-            Timestamp: ${{ steps.version.outputs.version }}
-            
-            Docker image: `emprops/redis_server:${{ steps.version.outputs.version }}`
-            
-            To deploy:
-            ```
-            # You can use either the version-specific tag
-            docker pull emprops/redis_server:${{ steps.version.outputs.version }}
-            
-            # Or the latest tag
-            docker pull emprops/redis_server:latest
-            ```
-            
-            **Important GitHub Release Note:**
-            Unlike the worker package, there is NO `hub-latest` GitHub release/tag.
-            Always use the specific versioned GitHub release shown above (`hub-${{ steps.version.outputs.version }}`).
-            The `worker-latest` GitHub tag is reserved for the worker package only.
-            
-            Note the distinction: The Docker image has both versioned and 'latest' tags,
-            but the GitHub release only has versioned tags.
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Hub workflow only builds and pushes Docker images
+      # No GitHub release is created for the hub server
+      # Only the worker package creates GitHub releases with assets
