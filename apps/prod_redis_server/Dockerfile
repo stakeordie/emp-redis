@@ -37,6 +37,9 @@ RUN echo "# This is a placeholder .env file created during the Docker build" >> 
 RUN echo "# Override this file by mounting a volume at runtime" >> /app/.env
 RUN echo "REDIS_URL=redis://localhost:6379/0" >> /app/.env
 RUN echo "API_PORT=8001" >> /app/.env
+RUN echo "HEARTBEAT_INTERVAL=20" >> /app/.env
+RUN echo "JOB_CLEANUP_INTERVAL=60" >> /app/.env
+RUN echo "MAX_WORKER_HEARTBEAT_AGE=60" >> /app/.env
 
 # Start Redis and the FastAPI server
 CMD ["/app/start.sh"]
