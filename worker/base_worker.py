@@ -253,11 +253,11 @@ class BaseWorker:
             message_obj = self.message_models.parse_message(message_data)
             
             if not message_obj:
-                logger.warning(f"[base_worker.py handle_message()]: Invalid message format: {message[:300]}...")
+                logger.info(f"[base_worker.py handle_message()]: Invalid message format: {message[:300]}...")
                 return
             
             message_type = message_obj.type
-            logger.debug(f"[base_worker.py handle_message()]: Received message of type: {message_type}")
+            logger.info(f"[base_worker.py handle_message()]: Received message of type: {message_type}")
             
             # Handle message based on type
             match(message_type):
@@ -273,8 +273,8 @@ class BaseWorker:
                     await self.handle_job_assigned(websocket, cast(Any, message_obj))
                 
                 case MessageType.WORKER_HEARTBEAT:
-                    # Acknowledge heartbeat from server
-                    logger.debug(f"[base_worker.py handle_message()]: Heartbeat acknowledged")
+                    # Acknowledge heartbeat from server with detailed logging
+                    logger.info(f"[base_worker.py handle_message()]: HEARTBEAT RESPONSE RECEIVED from server for worker {self.worker_id}")
                 case MessageType.JOB_COMPLETED_ACK:
                     # Handle job completion acknowledgment from the server
                     if hasattr(message_obj, 'job_id'):

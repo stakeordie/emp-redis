@@ -152,7 +152,7 @@ services:
       dockerfile: ./apps/mock-env/Dockerfile.worker
     environment:
       - WORKER_ID=worker3r
-      - CONNECTORS=comfyui,image_processing,simulation
+      - CONNECTORS=image_processing,simulation
       - REDIS_API_HOST=redisserver-production.up.railway.app
       - PYTHONPATH=/app
     env_file:

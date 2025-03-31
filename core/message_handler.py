@@ -547,7 +547,7 @@ class MessageHandler(MessageHandlerInterface):
         # Optionally update worker status if provided
         if message.status:
             # Update worker status using ConnectionManager's method
-            self.connection_manager.update_worker_status(worker_id, message.status)
+            await self.connection_manager.update_worker_status(worker_id, message.status)
             
             # If worker is idle, broadcast pending jobs
             if message.status == "idle":
@@ -565,7 +565,7 @@ class MessageHandler(MessageHandlerInterface):
         status = message.status if message.status is not None else "idle"
         
         # Update worker status using ConnectionManager's method
-        self.connection_manager.update_worker_status(worker_id, status)
+        await self.connection_manager.update_worker_status(worker_id, status)
         
         # If worker is now idle, broadcast pending jobs
         if status == "idle":
