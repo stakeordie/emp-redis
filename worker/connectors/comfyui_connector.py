@@ -57,29 +57,44 @@ class ComfyUIConnector(ConnectorInterface):
         self.connected = False
 
         try:
-            credentials = f"{self.username}:{self.password}"
-            encoded_credentials = base64.b64encode(credentials.encode('utf-8')).decode('utf-8')
-
-            # Prepare headers
-            headers = {
-                "Authorization": f"Basic {encoded_credentials}",
-                "Upgrade": "websocket",
-                "Connection": "Upgrade",
-                "Sec-WebSocket-Version": "13"
-            }
+            # Validate credentials
+            if self.username and self.password:
+                credentials = f"{self.username}:{self.password}"
+                encoded_credentials = base64.b64encode(credentials.encode('utf-8')).decode('utf-8')
+                # Prepare headers with authentication
+                headers = {
+                    "Authorization": f"Basic {encoded_credentials}",
+                    "Upgrade": "websocket",
+                    "Connection": "Upgrade",
+                    "Sec-WebSocket-Version": "13"
+                }
+            else:
+                # No authentication
+                headers = {
+                    "Upgrade": "websocket",
+                    "Connection": "Upgrade",
+                    "Sec-WebSocket-Version": "13"
+                }
+                
             # Log WebSocket connection details
             logger.info(f"[comfyui_connector.py connect()] WebSocket URL: {self.ws_url}")
-            logger.info(f"[comfyui_connector.py connect()] Authorization Header: {headers['Authorization']}")
+            if "Authorization" in headers:
+                logger.info(f"[comfyui_connector.py connect()] Authorization Header: {headers['Authorization']}")
+            else:
+                logger.info(f"[comfyui_connector.py connect()] No authorization header provided")
             
             # Close existing session if it exists
             if hasattr(self, 'session') and self.session:
                 await self.session.close()
 
+            # Create new session and connect
             self.session = aiohttp.ClientSession()
             self.ws = await self.session.ws_connect(
                 self.ws_url,
                 headers=headers
             )
+            
+            # Mark as connected and return success
             self.connected = True
             logger.info(f"[comfyui_connector.py connect()] Successfully connected to ComfyUI")
             return True
