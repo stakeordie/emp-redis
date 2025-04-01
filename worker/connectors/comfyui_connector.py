@@ -126,14 +126,16 @@ class ComfyUIConnector(ConnectorInterface):
     async def validate_connection(self):
         """
         Quick method to check connection without full workflow processing.
-        Can be implemented differently based on ComfyUI's API capabilities.
+        This is now a lightweight check that doesn't actually connect.
         """
         try:
-            if not self.connected:
-                await self.connect()
+            # Just validate configuration without connecting
+            protocol = "wss" if self.use_ssl else "ws"
+            ws_url = f"{protocol}://{self.host}:{self.port}/ws"
+            logger.info(f"[comfyui_connector.py validate_connection()] Configuration valid: {ws_url}")
             return True
         except Exception as e:
-            logger.error(f"[comfyui_connector.py validate_connection() Exception] Connection failed: {str(e)}")
+            logger.error(f"[comfyui_connector.py validate_connection() Exception] Configuration validation failed: {str(e)}")
             return False
 
     async def initialize(self) -> bool:
@@ -142,14 +144,17 @@ class ComfyUIConnector(ConnectorInterface):
         Returns:
             bool: True if initialization was successful, False otherwise
         """
+        # Don't establish a connection during initialization
+        # Just verify configuration is valid
         try:
-        # Optional: Add a timeout or quick connectivity check
-        # Don't block worker startup if connection fails
-            await asyncio.wait_for(self.validate_connection(), timeout=5.0)
+            # Validate configuration
+            protocol = "wss" if self.use_ssl else "ws"
+            ws_url = f"{protocol}://{self.host}:{self.port}/ws"
+            logger.info(f"[comfyui_connector.py initialize()] ComfyUI connector initialized with URL: {ws_url}")
             return True
         except Exception as e:
             # Log the issue but don't prevent worker from starting
-            logger.warning(f"[comfyui_connector.py initialize() Exception] Initial connection validation failed: {e}")
+            logger.warning(f"[comfyui_connector.py initialize() Exception] Initialization error: {e}")
             return True  # Still return True to allow worker to continue
     
     def get_job_type(self) -> str:
@@ -352,11 +357,11 @@ class ComfyUIConnector(ConnectorInterface):
             logger.info(f"[comfyui_connector.py process_job] Processing job {job_id}")
             logger.info(f"[comfyui_connector.py process_job] Job payload: {payload}")
             
-            # Connect to ComfyUI if not already connected
-            if not self.connected:
-                success = await self.connect()
-                if not success:
-                    raise Exception("Failed to connect to ComfyUI")
+            # Always establish a fresh connection for each job
+            logger.info(f"[comfyui_connector.py process_job] Opening websocket connection for job {job_id}")
+            success = await self.connect()
+            if not success:
+                raise Exception("Failed to connect to ComfyUI")
             
             # Send workflow to ComfyUI
             logger.info(f"[comfyui_connector.py process_job] Sending workflow to ComfyUI: {payload}")
@@ -372,6 +377,19 @@ class ComfyUIConnector(ConnectorInterface):
                 "status": "failed",
                 "error": str(e)
             }
+        finally:
+            # Always close the connection after job completion
+            logger.info(f"[comfyui_connector.py process_job] Closing websocket connection for job {job_id}")
+            if self.ws is not None:
+                await self.ws.close()
+                self.ws = None
+            
+            if self.session is not None:
+                await self.session.close()
+                self.session = None
+                
+            self.connected = False
+            logger.info(f"[comfyui_connector.py process_job] Websocket connection closed for job {job_id}")
     
     async def monitor_ws_connection(self, websocket, worker_id: str) -> None:
         """Monitor WebSocket connection to ComfyUI and send status updates

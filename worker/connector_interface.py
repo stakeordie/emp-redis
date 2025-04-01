@@ -49,6 +49,11 @@ class ConnectorInterface(ABC):
     async def process_job(self, websocket, job_id: str, payload: Dict[str, Any], send_progress_update) -> Dict[str, Any]:
         """Process a job
         
+        For connectors that use websockets to external services, this method should:
+        1. Open a new websocket connection at the beginning of job processing
+        2. Process the job using that connection
+        3. Close the websocket connection when the job is complete (in a finally block)
+        
         Args:
             websocket: The WebSocket connection to the Redis Hub
             job_id: The ID of the job to process
