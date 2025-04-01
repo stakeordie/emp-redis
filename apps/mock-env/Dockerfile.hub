@@ -10,7 +10,6 @@ RUN apt-get update && \
 # Copy Hub code, core code, and .env file
 COPY ./hub /app/
 COPY ./core /app/core/
-COPY ./hub/.env /app/.env
 
 # Ensure Python can find the core modules
 ENV PYTHONPATH=/app

@@ -69,13 +69,6 @@ jobs:
           echo "Installing dependencies..."
           pip install -r requirements.txt
 
-          # Copy environment file if it doesn't exist
-          if [ ! -f ".env" ]; then
-            echo "Creating .env file from template..."
-            cp "$(dirname "$0")/../.env.example" .env
-            echo "Please edit .env file with your configuration"
-          fi
-
           echo "Setup complete!"
           echo "To start the worker, run: python worker/worker.py"
           EOF

@@ -11,8 +11,6 @@ services:
       - "6380:6379" # Redis DB (mapped to different host port)
     environment:
       - PYTHONPATH=/app # Ensure core modules can be imported
-    env_file:
-      - ../../hub/.env
     networks:
       - redis-network
     # Volumes removed - rebuild containers when code changes
@@ -27,13 +25,15 @@ services:
       dockerfile: ./apps/mock-env/Dockerfile.worker
     environment:
       - WORKER_ID=worker1
-      - CONNECTORS=image_processing,simulation
-      - REDIS_API_HOST=hub
-      - REDIS_API_PORT=8001
-      - USE_SSL=FALSE
-      - PYTHONPATH=/app # Ensure core modules can be imported
-    env_file:
-      - ../../worker/.env
+      - WORKER_REDIS_API_HOST=hub
+      - WORKER_REDIS_API_PORT=8001
+      - WORKER_USE_SSL=FALSE
+      - WORKER_HEARTBEAT_INTERVAL=20
+      - WORKER_LOG_LEVEL=INFO
+      - WORKER_CONNECTORS=simulation
+      - WORKER_SIMULATION_PROCESSING_TIME=1
+      - WORKER_SIMULATION_STEPS=45
+      - PYTHONPATH=/app # Ensure core modules can be imported/
     networks:
       - redis-network
     depends_on:
@@ -48,14 +48,16 @@ services:
       context: ../.. # Root of the monorepo
       dockerfile: ./apps/mock-env/Dockerfile.worker
     environment:
-      - CONNECTORS=image_processing,simulation
       - WORKER_ID=worker2
-      - REDIS_API_HOST=hub
-      - REDIS_API_PORT=8001
-      - USE_SSL=FALSE
-      - PYTHONPATH=/app # Ensure core modules can be imported
-    env_file:
-      - ../../worker/.env
+      - WORKER_REDIS_API_HOST=hub
+      - WORKER_REDIS_API_PORT=8001
+      - WORKER_USE_SSL=FALSE
+      - WORKER_HEARTBEAT_INTERVAL=20
+      - WORKER_LOG_LEVEL=INFO
+      - WORKER_CONNECTORS=simulation,image_processing
+      - WORKER_SIMULATION_PROCESSING_TIME=2
+      - WORKER_SIMULATION_STEPS=45
+      - PYTHONPATH=/app # Ensure core modules can be importe
     networks:
       - redis-network
     depends_on:
@@ -70,14 +72,17 @@ services:
       context: ../.. # Root of the monorepo
       dockerfile: ./apps/mock-env/Dockerfile.worker
     environment:
-      - CONNECTORS=simulation,image_processing
       - WORKER_ID=worker3
-      - REDIS_API_HOST=hub
-      - REDIS_API_PORT=8001
-      - USE_SSL=FALSE
-      - PYTHONPATH=/app # Ensure core modules can be imported
-    env_file:
-      - ../../worker/.env
+      - WORKER_REDIS_API_HOST=hub
+      - WORKER_REDIS_API_PORT=8001
+      - WORKER_USE_SSL=FALSE
+      - WORKER_HEARTBEAT_INTERVAL=20
+      - WORKER_LOG_LEVEL=INFO
+      - WORKER_CONNECTORS=simulation
+      - WORKER_SIMULATION_JOB_TYPE=simulation
+      - WORKER_SIMULATION_PROCESSING_TIME=4
+      - WORKER_SIMULATION_STEPS=45
+      - PYTHONPATH=/app # Ensure core modules can be importe
     networks:
       - redis-network
     depends_on:
@@ -92,14 +97,16 @@ services:
       context: ../.. # Root of the monorepo
       dockerfile: ./apps/mock-env/Dockerfile.worker
     environment:
-      - CONNECTORS=simulation,image_processing,comfyui
       - WORKER_ID=worker4
-      - REDIS_API_HOST=hub
-      - REDIS_API_PORT=8001
-      - USE_SSL=FALSE
-      - PYTHONPATH=/app # Ensure core modules can be imported
-    env_file:
-      - ../../worker/.env
+      - WORKER_REDIS_API_HOST=hub
+      - WORKER_REDIS_API_PORT=8001
+      - WORKER_USE_SSL=FALSE
+      - WORKER_HEARTBEAT_INTERVAL=20
+      - WORKER_LOG_LEVEL=INFO
+      - WORKER_CONNECTORS=simulation,image_processing,comfyui
+      - WORKER_SIMULATION_PROCESSING_TIME=8
+      - WORKER_SIMULATION_STEPS=45
+      - PYTHONPATH=/app # Ensure core modules can be importe
     networks:
       - redis-network
     depends_on:
@@ -119,8 +126,8 @@ services:
       - CONNECTORS=image_processing,simulation
       - REDIS_API_HOST=redisserver-production.up.railway.app
       - PYTHONPATH=/app
-    env_file:
-      - ../../worker/.env
+    # env_file:
+    #   - ../../worker/.env
     networks:
       - redis-network
     # Volumes removed - rebuild containers when code changes
@@ -137,8 +144,8 @@ services:
       - CONNECTORS=image_processing,simulation
       - REDIS_API_HOST=redisserver-production.up.railway.app
       - PYTHONPATH=/app
-    env_file:
-      - ../../worker/.env
+    # env_file:
+    #   - ../../worker/.env
     networks:
       - redis-network
     # Volumes removed - rebuild containers when code changes
@@ -155,8 +162,8 @@ services:
       - CONNECTORS=image_processing,simulation
       - REDIS_API_HOST=redisserver-production.up.railway.app
       - PYTHONPATH=/app
-    env_file:
-      - ../../worker/.env
+    # env_file:
+    #   - ../../worker/.env
     networks:
       - redis-network
     # Volumes removed - rebuild containers when code changes
@@ -174,8 +181,8 @@ services:
       - REDIS_API_HOST=redisserver-production.up.railway.app
       - REDIS_API_PORT=443
       - PYTHONPATH=/app
-    env_file:
-      - ../../worker/.env
+    # env_file:
+    #   - ../../worker/.env
     networks:
       - redis-network
     # Volumes removed - rebuild containers when code changes

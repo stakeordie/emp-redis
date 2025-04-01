@@ -529,8 +529,18 @@ class MessageHandler(MessageHandlerInterface):
             result=message.result
         )
 
-        # Update worker status to idle in memory
-        self.connection_manager.worker_status[worker_id] = "idle"
+        # Update worker status to idle and clear job assignment
+        # This also updates worker_info with the new status
+        self.connection_manager.update_worker_job_assignment(worker_id, "idle")
+        
+        # Update job statistics in worker_info if available
+        if worker_id in self.connection_manager.worker_info:
+            # Increment jobs processed count
+            if "jobs_processed" in self.connection_manager.worker_info[worker_id]:
+                self.connection_manager.worker_info[worker_id]["jobs_processed"] += 1
+            
+            # Update last job completed timestamp
+            self.connection_manager.worker_info[worker_id]["last_job_completed_at"] = time.time()
 
         # Send acknowledgment back to the worker
         # This prevents the worker from receiving its own message back
@@ -598,7 +608,11 @@ class MessageHandler(MessageHandlerInterface):
         # Use 'idle' as default status if message.status is None
         status = message.status if message.status is not None else "idle"
         
-        # Update worker status using ConnectionManager's method
+        # Update worker status in memory and job assignment tracking
+        # This handles the comprehensive worker state management
+        self.connection_manager.update_worker_job_assignment(worker_id, status)
+        
+        # Also use the async method to broadcast status to monitors
         await self.connection_manager.update_worker_status(worker_id, status)
         
         # If worker is now idle, broadcast pending jobs
@@ -628,8 +642,8 @@ class MessageHandler(MessageHandlerInterface):
         success = self.redis_service.claim_job(message.job_id, worker_id)
 
         if success:
-            # Update worker status to working in memory only
-            self.connection_manager.worker_status[worker_id] = "working"
+            # Update worker status and job assignment using the comprehensive method
+            self.connection_manager.update_worker_job_assignment(worker_id, "working", message.job_id)
 
             # Get job details
             job_data = self.redis_service.get_job_status(message.job_id)

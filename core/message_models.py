@@ -438,6 +438,15 @@ class MessageModels(MessageModelsInterface):
                     ),
                     message_type
                 )
+            case MessageType.WORKER_HEARTBEAT_ACK:
+                return self._try_parse_message(
+                    lambda: WorkerHeartbeatAckMessage(
+                        type=MessageType.WORKER_HEARTBEAT_ACK,
+                        worker_id=data.get("worker_id", ""),
+                        timestamp=data.get("timestamp", time.time())
+                    ),
+                    message_type
+                )
             case MessageType.WORKER_STATUS:
                 return self._try_parse_message(
                     lambda: WorkerStatusMessage(
