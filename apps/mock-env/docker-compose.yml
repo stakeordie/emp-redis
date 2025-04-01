@@ -123,9 +123,14 @@ services:
       dockerfile: ./apps/mock-env/Dockerfile.worker
     environment:
       - WORKER_ID=worker1r
-      - CONNECTORS=image_processing,simulation
-      - REDIS_API_HOST=redisserver-production.up.railway.app
-      - PYTHONPATH=/app
+      - WORKER_REDIS_API_HOST=redisserver-production.up.railway.app
+      - WORKER_USE_SSL=FALSE
+      - WORKER_HEARTBEAT_INTERVAL=20
+      - WORKER_LOG_LEVEL=INFO
+      - WORKER_CONNECTORS=image_processing,simulation
+      - WORKER_SIMULATION_PROCESSING_TIME=1
+      - WORKER_SIMULATION_STEPS=100
+      - PYTHONPATH=/app # Ensure core modules can be importe
     # env_file:
     #   - ../../worker/.env
     networks:
@@ -141,9 +146,14 @@ services:
       dockerfile: ./apps/mock-env/Dockerfile.worker
     environment:
       - WORKER_ID=worker2r
-      - CONNECTORS=image_processing,simulation
-      - REDIS_API_HOST=redisserver-production.up.railway.app
-      - PYTHONPATH=/app
+      - WORKER_REDIS_API_HOST=redisserver-production.up.railway.app
+      - WORKER_USE_SSL=FALSE
+      - WORKER_HEARTBEAT_INTERVAL=20
+      - WORKER_LOG_LEVEL=INFO
+      - WORKER_CONNECTORS=image_processing,simulation
+      - WORKER_SIMULATION_PROCESSING_TIME=2
+      - WORKER_SIMULATION_STEPS=100
+      - PYTHONPATH=/app # Ensure core modules can be importe
     # env_file:
     #   - ../../worker/.env
     networks:
@@ -159,9 +169,14 @@ services:
       dockerfile: ./apps/mock-env/Dockerfile.worker
     environment:
       - WORKER_ID=worker3r
-      - CONNECTORS=image_processing,simulation
-      - REDIS_API_HOST=redisserver-production.up.railway.app
-      - PYTHONPATH=/app
+      - WORKER_REDIS_API_HOST=redisserver-production.up.railway.app
+      - WORKER_USE_SSL=FALSE
+      - WORKER_HEARTBEAT_INTERVAL=20
+      - WORKER_LOG_LEVEL=INFO
+      - WORKER_CONNECTORS=image_processing,simulation
+      - WORKER_SIMULATION_PROCESSING_TIME=4
+      - WORKER_SIMULATION_STEPS=100
+      - PYTHONPATH=/app # Ensure core modules can be importe
     # env_file:
     #   - ../../worker/.env
     networks:
@@ -177,10 +192,14 @@ services:
       dockerfile: ./apps/mock-env/Dockerfile.worker
     environment:
       - WORKER_ID=worker4r
-      - CONNECTORS=image_processing,simulation
-      - REDIS_API_HOST=redisserver-production.up.railway.app
-      - REDIS_API_PORT=443
-      - PYTHONPATH=/app
+      - WORKER_REDIS_API_HOST=redisserver-production.up.railway.app
+      - WORKER_USE_SSL=FALSE
+      - WORKER_HEARTBEAT_INTERVAL=20
+      - WORKER_LOG_LEVEL=INFO
+      - WORKER_CONNECTORS=image_processing,simulation
+      - WORKER_SIMULATION_PROCESSING_TIME=8
+      - WORKER_SIMULATION_STEPS=100
+      - PYTHONPATH=/app # Ensure core modules can be importe
     # env_file:
     #   - ../../worker/.env
     networks:

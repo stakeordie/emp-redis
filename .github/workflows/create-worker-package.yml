@@ -37,7 +37,6 @@ jobs:
           cp -r core/core_types/* "${{ env.PACKAGE_DIR }}/core/core_types/"
           cp -r core/interfaces/* "${{ env.PACKAGE_DIR }}/core/interfaces/"
           cp -r core/utils/* "${{ env.PACKAGE_DIR }}/core/utils/"
-          cp worker/.env.example "${{ env.PACKAGE_DIR }}/.env.example"
 
       - name: Handle requirements.txt
         run: |
