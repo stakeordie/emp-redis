@@ -617,7 +617,7 @@ class BaseWorker:
                             # Check if the connector has the monitor_ws_connection method implemented
                             # (not just inherited from the base class)
                             if hasattr(connector, 'monitor_ws_connection') and \
-                               connector.monitor_ws_connection.__func__ is not ConnectorInterface.monitor_ws_connection.__func__:
+                               connector.monitor_ws_connection is not ConnectorInterface.monitor_ws_connection:
                                 logger.info(f"[base_worker.py run()]: Starting WebSocket monitor for {job_type} connector")
                                 monitor_task = asyncio.create_task(connector.monitor_ws_connection(websocket, self.worker_id))
                                 connector_ws_monitor_tasks.append(monitor_task)
