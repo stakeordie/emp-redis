@@ -607,9 +607,12 @@ class BaseWorker:
                 logger.info(f"[base_worker.py run()]: after heartbeat task setup {self.worker_id} {heartbeat_task}")
                 
                 # Start connector WebSocket monitoring tasks for connectors that use WebSockets
-                connector_ws_monitor_tasks = []
+                connector_ws_monitor_tasks: list[asyncio.Task] = []
+                logger.info(f"[base_worker.py run()]: before connector ws monitor task setup {self.worker_id} {connector_ws_monitor_tasks}")
                 if self.connectors is not None:
+                    logger.info(f"[base_worker.py run()]: self.connectors is not None")
                     for job_type, connector in self.connectors.items():
+                        logger.info(f"[base_worker.py run()]: job_type {job_type} connector {connector}")
                         try:
                             # Check if the connector has the monitor_ws_connection method implemented
                             # (not just inherited from the base class)
