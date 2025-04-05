@@ -58,8 +58,12 @@ class BaseWorker:
         # Load worker-specific variables (WORKER_ID, WORKER_COMFYUI_PORT) from .env
         load_dotenv() # Load .env file into environment
         
-        # WORKER_ID and WORKER_COMFYUI_PORT are now loaded from .env
-        self.worker_id = os.environ.get("WORKER_ID", "worker-unknown-dotenv-failed")
+        # Generate worker ID with the format worker-gpu0-<UUID>
+        # AI-generated fix: 2025-04-04T21:37:21 - Updated worker ID format
+        import uuid
+        worker_base = os.environ.get("WORKER_BASE_ID", "worker-gpu0")
+        worker_uuid = str(uuid.uuid4())
+        self.worker_id = f"{worker_base}-{worker_uuid}"
         # Note: WORKER_COMFYUI_PORT is loaded into env, but might be used by connectors later
         
         # Log the worker ID for debugging
