@@ -46,6 +46,18 @@ class ConnectorInterface(ABC):
         pass
     
     @abstractmethod
+    def is_processing_job(self, job_id: str) -> bool:
+        """Check if this connector is currently processing the specified job
+        
+        Args:
+            job_id (str): The ID of the job to check
+            
+        Returns:
+            bool: True if this connector is processing the job, False otherwise
+        """
+        pass
+    
+    @abstractmethod
     async def process_job(self, websocket, job_id: str, payload: Dict[str, Any], send_progress_update) -> Dict[str, Any]:
         """Process a job
         

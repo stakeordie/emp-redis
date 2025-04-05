@@ -33,6 +33,10 @@ services:
       - WORKER_CONNECTORS=simulation
       - WORKER_SIMULATION_PROCESSING_TIME=1
       - WORKER_SIMULATION_STEPS=45
+      - WORKER_COMFYUI_HOST=142.170.86.89
+      - WORKER_COMFYUI_PORT=25765
+      - WORKER_COMFYUI_USERNAME=sd
+      - WORKER_COMFYUI_PASSWORD=UbjpkE6kwM
       - PYTHONPATH=/app # Ensure core modules can be imported/
     networks:
       - redis-network
@@ -54,9 +58,13 @@ services:
       - WORKER_USE_SSL=FALSE
       - WORKER_HEARTBEAT_INTERVAL=20
       - WORKER_LOG_LEVEL=INFO
-      - WORKER_CONNECTORS=simulation,image_processing
+      - WORKER_CONNECTORS=simulation
       - WORKER_SIMULATION_PROCESSING_TIME=2
       - WORKER_SIMULATION_STEPS=45
+      - WORKER_COMFYUI_HOST=142.170.86.89
+      - WORKER_COMFYUI_PORT=25765
+      - WORKER_COMFYUI_USERNAME=sd
+      - WORKER_COMFYUI_PASSWORD=UbjpkE6kwM
       - PYTHONPATH=/app # Ensure core modules can be importe
     networks:
       - redis-network
@@ -82,6 +90,10 @@ services:
       - WORKER_SIMULATION_JOB_TYPE=simulation
       - WORKER_SIMULATION_PROCESSING_TIME=4
       - WORKER_SIMULATION_STEPS=45
+      - WORKER_COMFYUI_HOST=142.170.86.89
+      - WORKER_COMFYUI_PORT=25765
+      - WORKER_COMFYUI_USERNAME=sd
+      - WORKER_COMFYUI_PASSWORD=UbjpkE6kwM
       - PYTHONPATH=/app # Ensure core modules can be importe
     networks:
       - redis-network
@@ -103,9 +115,13 @@ services:
       - WORKER_USE_SSL=FALSE
       - WORKER_HEARTBEAT_INTERVAL=20
       - WORKER_LOG_LEVEL=INFO
-      - WORKER_CONNECTORS=simulation,image_processing,comfyui
+      - WORKER_CONNECTORS=simulation,comfyui
       - WORKER_SIMULATION_PROCESSING_TIME=8
       - WORKER_SIMULATION_STEPS=45
+      - WORKER_COMFYUI_HOST=142.170.86.89
+      - WORKER_COMFYUI_PORT=25765
+      - WORKER_COMFYUI_USERNAME=sd
+      - WORKER_COMFYUI_PASSWORD=UbjpkE6kwM
       - PYTHONPATH=/app # Ensure core modules can be importe
     networks:
       - redis-network
@@ -127,7 +143,7 @@ services:
       - WORKER_USE_SSL=FALSE
       - WORKER_HEARTBEAT_INTERVAL=20
       - WORKER_LOG_LEVEL=INFO
-      - WORKER_CONNECTORS=image_processing,simulation
+      - WORKER_CONNECTORS=simulation
       - WORKER_SIMULATION_PROCESSING_TIME=1
       - WORKER_SIMULATION_STEPS=100
       - PYTHONPATH=/app # Ensure core modules can be importe
@@ -150,7 +166,7 @@ services:
       - WORKER_USE_SSL=FALSE
       - WORKER_HEARTBEAT_INTERVAL=20
       - WORKER_LOG_LEVEL=INFO
-      - WORKER_CONNECTORS=image_processing,simulation
+      - WORKER_CONNECTORS=simulation
       - WORKER_SIMULATION_PROCESSING_TIME=2
       - WORKER_SIMULATION_STEPS=100
       - PYTHONPATH=/app # Ensure core modules can be importe
@@ -173,7 +189,7 @@ services:
       - WORKER_USE_SSL=FALSE
       - WORKER_HEARTBEAT_INTERVAL=20
       - WORKER_LOG_LEVEL=INFO
-      - WORKER_CONNECTORS=image_processing,simulation
+      - WORKER_CONNECTORS=simulation
       - WORKER_SIMULATION_PROCESSING_TIME=4
       - WORKER_SIMULATION_STEPS=100
       - PYTHONPATH=/app # Ensure core modules can be importe
@@ -196,7 +212,7 @@ services:
       - WORKER_USE_SSL=FALSE
       - WORKER_HEARTBEAT_INTERVAL=20
       - WORKER_LOG_LEVEL=INFO
-      - WORKER_CONNECTORS=image_processing,simulation
+      - WORKER_CONNECTORS=simulation
       - WORKER_SIMULATION_PROCESSING_TIME=8
       - WORKER_SIMULATION_STEPS=100
       - PYTHONPATH=/app # Ensure core modules can be importe

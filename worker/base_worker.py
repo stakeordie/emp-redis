@@ -220,19 +220,40 @@ class BaseWorker:
         Args:
             websocket: The WebSocket connection to send the update through
             job_id: The ID of the job being processed
-            progress: Progress percentage (0-100)
+            progress: Progress percentage (0-100 or -1 for heartbeats)
             status: Current job status (default: "processing")
             message: Optional status message
         """
         logger.debug(f"[base_worker.py send_progress_update()]: TESTING")
         try:
+            # Get connector details if available
+            connector_details = None
+            if self.current_job_id == job_id and self.connectors is not None:
+                # Find the active connector for this job
+                active_job_type = None
+                for job_type, connector in self.connectors.items():
+                    if connector.is_processing_job(job_id):
+                        active_job_type = job_type
+                        break
+                
+                if active_job_type and active_job_type in self.connectors:
+                    # Get connection details from the connector
+                    connector = self.connectors[active_job_type]
+                    connector_details = connector.get_connection_status()
+                    
+                    # Add additional debug info
+                    if connector_details:
+                        connector_details["job_id"] = job_id
+                        connector_details["progress_type"] = "heartbeat" if progress == -1 else "normal"
+            
             # Create progress update message using UpdateJobProgressMessage class
             progress_message = UpdateJobProgressMessage(
                 job_id=job_id,
                 worker_id=self.worker_id,
                 progress=progress,
                 status=status,
-                message=message
+                message=message,
+                connector_details=connector_details
             )
             
             # Send the progress update
@@ -608,23 +629,9 @@ class BaseWorker:
                 
                 logger.info(f"[base_worker.py run()]: after heartbeat task setup {self.worker_id} {heartbeat_task}")
                 
-                # Start connector WebSocket monitoring tasks for connectors that use WebSockets
-                connector_ws_monitor_tasks: list[asyncio.Task] = []
-                logger.info(f"[base_worker.py run()]: before connector ws monitor task setup {self.worker_id} {connector_ws_monitor_tasks}")
-                if self.connectors is not None:
-                    logger.info(f"[base_worker.py run()]: self.connectors is not None")
-                    for job_type, connector in self.connectors.items():
-                        logger.info(f"[base_worker.py run()]: job_type {job_type} connector {connector}")
-                        try:
-                            # Check if the connector has the monitor_ws_connection method implemented
-                            # (not just inherited from the base class)
-                            if hasattr(connector, 'monitor_ws_connection') and \
-                               connector.monitor_ws_connection is not ConnectorInterface.monitor_ws_connection:
-                                logger.info(f"[base_worker.py run()]: Starting WebSocket monitor for {job_type} connector")
-                                monitor_task = asyncio.create_task(connector.monitor_ws_connection(websocket, self.worker_id))
-                                connector_ws_monitor_tasks.append(monitor_task)
-                        except Exception as e:
-                            logger.error(f"[base_worker.py run()]: Error starting WebSocket monitor for {job_type} connector: {str(e)}")
+                # Note: WebSocket monitoring has been removed in favor of job-specific heartbeats
+                # Each connector now handles its own connection lifecycle and sends heartbeats during active jobs
+                connector_ws_monitor_tasks: list[asyncio.Task] = []  # Keep empty list for compatibility
 
                 # Process messages
                 async for message in websocket:
@@ -633,26 +640,11 @@ class BaseWorker:
                 # Cancel heartbeat task
                 heartbeat_task.cancel()
                 
-                # Cancel connector WebSocket monitor tasks
-                for task in connector_ws_monitor_tasks:
-                    if not task.done():
-                        task.cancel()
-                        try:
-                            await task
-                        except asyncio.CancelledError:
-                            pass
+                # No connector WebSocket monitor tasks to cancel (feature removed)
         except Exception as e:
             logger.error(f"Error in worker: {str(e)}")
         finally:
-            # Cancel any remaining connector WebSocket monitor tasks
-            if 'connector_ws_monitor_tasks' in locals():
-                for task in connector_ws_monitor_tasks:
-                    if not task.done():
-                        task.cancel()
-                        try:
-                            await asyncio.wait_for(asyncio.shield(task), timeout=2.0)
-                        except (asyncio.CancelledError, asyncio.TimeoutError):
-                            pass
+            # No connector WebSocket monitor tasks to cancel (feature removed)
             
             # Shutdown connectors
             await self.shutdown_connectors()

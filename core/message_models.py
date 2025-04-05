@@ -66,13 +66,13 @@ class UpdateJobProgressMessage(BaseMessage):
     progress: int
     status: str = "processing"
     message: Optional[str] = None
+    connector_details: Optional[Dict[str, Any]] = None
     timestamp: float = Field(default_factory=time.time)
     
     @field_validator('progress')
     def validate_progress(cls, v):
-        """Validate that progress is between 0 and 100 inclusive."""
-        if v < 0 or v > 100:
-            raise ValueError("Progress must be between 0 and 100")
+        if v < -1 or v > 100:  # Allow -1 for heartbeats
+            raise ValueError("Progress must be between -1 and 100")
         return v
 
 class ClaimJobMessage(BaseMessage):
@@ -412,6 +412,7 @@ class MessageModels(MessageModelsInterface):
                         progress=data.get("progress", 0),
                         status=data.get("status", "processing"),
                         message=data.get("message", None),
+                        connector_details=data.get("connector_details", None),
                         timestamp=data.get("timestamp", time.time())
                     ),
                     message_type
@@ -648,31 +649,31 @@ class MessageModels(MessageModelsInterface):
     def create_update_job_progress_message(self, job_id: str, worker_id: str,
                                           progress: int,
                                           status: str = "processing",
-                                          message: Optional[str] = None) -> BaseMessage:
+                                          message: Optional[str] = None,
+                                          connector_details: Optional[Dict[str, Any]] = None) -> BaseMessage:
         """
         Create a job progress update message.
         
         Args:
             job_id: ID of the job
             worker_id: ID of the worker processing the job
-            progress: Progress percentage (0-100)
+            progress: Progress percentage (0-100 or -1 for heartbeats)
             status: Job status (default: "processing")
             message: Optional status message
+            connector_details: Optional details about the connector processing the job
             
         Returns:
             BaseMessage: UpdateJobProgressMessage model
         """
-        # Create and return a new UpdateJobProgressMessage
-        # Using a different variable name to avoid confusion with the parameter
-        progress_message = UpdateJobProgressMessage(
+        return UpdateJobProgressMessage(
             type=MessageType.UPDATE_JOB_PROGRESS,
             job_id=job_id,
             worker_id=worker_id,
             progress=progress,
             status=status,
-            message=message
+            message=message,
+            connector_details=connector_details
         )
-        return progress_message
     
     def create_worker_registered_message(self, worker_id: str, 
                                         status: str = "active") -> BaseMessage:

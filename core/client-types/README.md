@@ -33,7 +33,7 @@ When creating messages to send to the server, use the appropriate interface:
 // Example: Creating a job submission message
 const submitJobMessage: SubmitJobMessage = {
   type: MessageType.SUBMIT_JOB,
-  job_type: "image_processing",
+  job_type: "simulation",
   priority: 5,
   payload: {
     image_url: "https://example.com/image.jpg",
@@ -230,7 +230,7 @@ client
   });
 
 // Submit a job
-const jobId = client.submitJob("image_processing", {
+const jobId = client.submitJob("simulation", {
   image_url: "https://example.com/image.jpg",
   settings: { resolution: "high" }
 }, 5);

@@ -166,6 +166,15 @@ export interface UpdateJobProgressMessage extends BaseMessage {
   status: string; // Default: "processing"
   message?: string;
   timestamp?: number;
+  connector_details?: {
+    connected: boolean;
+    service: string;
+    details: Record<string, any>;
+    ws_url?: string;
+    use_ssl?: boolean;
+    current_job_id?: string;
+    version?: string;
+  };
 }
 
 /**
