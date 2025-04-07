@@ -1,27 +1,53 @@
 FROM python:3.10.11-slim
 
+# Created: 2025-04-07T11:32:00-04:00
+# Updated to match GitHub workflow package structure
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends apt-transport-https ca-certificates && \
+    apt-get clean
+
+# Set up the directory structure to match the GitHub workflow
 WORKDIR /app
+
+# Create the same directory structure as the GitHub workflow
+RUN mkdir -p /app/emp-redis-worker/worker && \
+    mkdir -p /app/emp-redis-worker/core/core_types && \
+    mkdir -p /app/emp-redis-worker/core/interfaces && \
+    mkdir -p /app/emp-redis-worker/core/utils && \
+    mkdir -p /app/emp-redis-worker/scripts
 
 # Install dependencies
 RUN pip install --no-cache-dir fastapi uvicorn websockets aiohttp redis python-dotenv
 
-# Copy Worker code, core code, and .env.example file
-COPY ./worker /app/
-COPY ./core /app/core/
+# Copy Worker code and core code to match GitHub workflow structure
+COPY ./worker /app/emp-redis-worker/worker/
+COPY ./core/message_models.py /app/emp-redis-worker/core/
+COPY ./core/core_types /app/emp-redis-worker/core/core_types/
+COPY ./core/interfaces /app/emp-redis-worker/core/interfaces/
+COPY ./core/utils /app/emp-redis-worker/core/utils/
 
-# Ensure Python can find the core modules
-ENV PYTHONPATH=/app
+# Copy entrypoint script to the worker directory
+COPY ./worker/docker_entrypoint.sh /app/emp-redis-worker/worker/
+
+# Ensure Python can find the modules - set PYTHONPATH to include the emp-redis-worker directory
+ENV PYTHONPATH=/app/emp-redis-worker
 
 # Make entrypoint script executable
-RUN chmod +x /app/docker_entrypoint.sh
+RUN chmod +x /app/emp-redis-worker/worker/docker_entrypoint.sh
 
 # Add debugging to show directory contents
 RUN echo "Worker container setup" && \
-    echo "Contents of /app:" && ls -la /app && \
-    echo "Contents of /app/core:" && ls -la /app/core && \
+    echo "Contents of /app/emp-redis-worker:" && ls -la /app/emp-redis-worker && \
+    echo "Contents of /app/emp-redis-worker/worker:" && ls -la /app/emp-redis-worker/worker && \
+    echo "Contents of /app/emp-redis-worker/core:" && ls -la /app/emp-redis-worker/core && \
     echo "Python version:" && python --version && \
     echo "Python path:" && python -c "import sys; print(sys.path)"
 
+# Copy the worker_main.py to the root directory
+# This is the new entry point that runs outside the worker package
+COPY ./worker_main.py /app/emp-redis-worker/
+
 # Start the worker process with environment variables
 # Workers will connect directly to the hub service using the entrypoint script
-ENTRYPOINT ["/app/docker_entrypoint.sh"]
+ENTRYPOINT ["/app/emp-redis-worker/worker/docker_entrypoint.sh"]

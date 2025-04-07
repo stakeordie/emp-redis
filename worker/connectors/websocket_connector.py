@@ -1,22 +1,38 @@
 #!/usr/bin/env python3
 # WebSocket connector base class for the EmProps Redis Worker
+# Created: 2025-04-07T11:07:00-04:00
+
 import os
 import json
 import asyncio
 import aiohttp
 import time
+import sys
 from typing import Dict, Any, Optional, Union, Callable
 
-# Try direct imports first (for Docker container)
+# Standard import approach - works in both Docker and local environments
+# when the package structure is properly set up
 try:
-    from connector_interface import ConnectorInterface
-except ImportError:
-    # Fall back to package imports (for local development)
+    # For when the module is imported as part of the worker package
     from worker.connector_interface import ConnectorInterface
+except ImportError:
+    # For when the module is imported directly or in Docker
+    # where the worker directory is in the Python path
+    try:
+        from connector_interface import ConnectorInterface
+    except ImportError:
+        # Last resort - absolute imports
+        from ..connector_interface import ConnectorInterface
+
+# Import logger - this should be available in all environments
 from core.utils.logger import logger
 
 class WebSocketConnector(ConnectorInterface):
     """Base class for connectors that use WebSockets to communicate with external services"""
+    
+    # Base class is not directly usable by workers
+    # Updated: 2025-04-07T15:50:00-04:00
+    connector_name = None  # Set to None to indicate this is not directly usable
     
     # Version identifier to verify code deployment
     VERSION = "2025-04-04-19:36-connector-details-update"
@@ -48,10 +64,10 @@ class WebSocketConnector(ConnectorInterface):
             bool: True if connection was successful, False otherwise
         """
         if not self.ws_url:
-            logger.error(f"[websocket_connector.py connect()] WebSocket URL not set")
+            logger.error(f"[connectors/websocket_connector.py connect()] WebSocket URL not set")
             return False
             
-        logger.info(f"[websocket_connector.py connect()] Attempting to connect to {self.ws_url}")
+        logger.info(f"[connectors/websocket_connector.py connect()] Attempting to connect to {self.ws_url}")
         self.connected = False
 
         try:
@@ -71,14 +87,14 @@ class WebSocketConnector(ConnectorInterface):
             
             # Mark as connected and return success
             self.connected = True
-            logger.info(f"[websocket_connector.py connect()] Successfully connected to WebSocket service")
+            logger.info(f"[connectors/websocket_connector.py connect()] Successfully connected to WebSocket service")
             
             # Handle any service-specific connection steps
             await self._on_connect()
             
             return True
         except Exception as e:
-            logger.error(f"[websocket_connector.py connect()] Error connecting to WebSocket service: {str(e)}")
+            logger.error(f"[connectors/websocket_connector.py connect()] Error connecting to WebSocket service: {str(e)}")
             return False
     
     def _get_connection_headers(self) -> Dict[str, str]:
@@ -148,7 +164,7 @@ class WebSocketConnector(ConnectorInterface):
                     # Check if websocket is still connected
                     if self.ws is None or self.ws.closed:
                         missed_heartbeats += 1
-                        logger.warning(f"[websocket_connector.py send_heartbeats] Missed heartbeat #{missed_heartbeats}: WebSocket closed")
+                        logger.warning(f"[connectors/websocket_connector.py send_heartbeats] Missed heartbeat #{missed_heartbeats}: WebSocket closed")
                     else:
                         # Send heartbeat through progress update
                         try:
@@ -156,24 +172,24 @@ class WebSocketConnector(ConnectorInterface):
                             version_message = f"{self.get_job_type()} connection active [version: {self.VERSION}]"
                             await send_progress_update(job_id, -1, "heartbeat", version_message)
                             missed_heartbeats = 0  # Reset counter on successful heartbeat
-                            logger.debug(f"[websocket_connector.py send_heartbeats] Sent heartbeat for job {job_id}")
+                            logger.debug(f"[connectors/websocket_connector.py send_heartbeats] Sent heartbeat for job {job_id}")
                         except Exception as e:
                             missed_heartbeats += 1
-                            logger.warning(f"[websocket_connector.py send_heartbeats] Missed heartbeat #{missed_heartbeats}: {str(e)}")
+                            logger.warning(f"[connectors/websocket_connector.py send_heartbeats] Missed heartbeat #{missed_heartbeats}: {str(e)}")
                     
                     # Check if we've missed too many heartbeats
                     if missed_heartbeats >= max_missed_heartbeats:
-                        logger.error(f"[websocket_connector.py send_heartbeats] Missed {missed_heartbeats} heartbeats, connection considered failed")
+                        logger.error(f"[connectors/websocket_connector.py send_heartbeats] Missed {missed_heartbeats} heartbeats, connection considered failed")
                         raise Exception(f"WebSocket connection lost after {missed_heartbeats} missed heartbeats")
                     
                     # Wait for next heartbeat interval
                     await asyncio.sleep(heartbeat_interval)
             except asyncio.CancelledError:
                 # Task was cancelled, this is normal during cleanup
-                logger.debug(f"[websocket_connector.py send_heartbeats] Heartbeat task cancelled for job {job_id}")
+                logger.debug(f"[connectors/websocket_connector.py send_heartbeats] Heartbeat task cancelled for job {job_id}")
             except Exception as e:
                 # Propagate other exceptions
-                logger.error(f"[websocket_connector.py send_heartbeats] Heartbeat error: {str(e)}")
+                logger.error(f"[connectors/websocket_connector.py send_heartbeats] Heartbeat error: {str(e)}")
                 raise
         
         try:
@@ -191,7 +207,7 @@ class WebSocketConnector(ConnectorInterface):
             
             return final_result
         except Exception as e:
-            logger.error(f"[websocket_connector.py monitor_progress] Error: {str(e)}")
+            logger.error(f"[connectors/websocket_connector.py monitor_progress] Error: {str(e)}")
             await send_progress_update(job_id, 0, "error", str(e))
             raise
         finally:
@@ -203,7 +219,7 @@ class WebSocketConnector(ConnectorInterface):
                 except asyncio.CancelledError:
                     pass  # This is expected
                 except Exception as e:
-                    logger.error(f"[websocket_connector.py monitor_progress] Error cancelling heartbeat task: {str(e)}")
+                    logger.error(f"[connectors/websocket_connector.py monitor_progress] Error cancelling heartbeat task: {str(e)}")
     
     async def _monitor_service_progress(self, job_id: str, send_progress_update: Callable) -> Dict[str, Any]:
         """Service-specific implementation of progress monitoring
@@ -234,7 +250,7 @@ class WebSocketConnector(ConnectorInterface):
         try:
             # Set current job ID for tracking
             self.current_job_id = job_id
-            logger.info(f"[websocket_connector.py process_job] Starting job {job_id} for {self.get_job_type()} service")
+            logger.info(f"[connectors/websocket_connector.py process_job] Starting job {job_id} for {self.get_job_type()} service")
             
             # Connect to the WebSocket service if not already connected
             if not self.connected:
@@ -247,17 +263,17 @@ class WebSocketConnector(ConnectorInterface):
             
             # Process the job using service-specific implementation
             # AI-generated fix: 2025-04-04T20:13:55 - Added call to _process_service_job before monitoring progress
-            logger.info(f"[websocket_connector.py process_job] Calling service-specific job processing for {job_id}")
+            logger.info(f"[connectors/websocket_connector.py process_job] Calling service-specific job processing for {job_id}")
             result = await self._process_service_job(websocket, job_id, payload, send_progress_update)
             
             # Return the result
             return result
         except Exception as e:
-            logger.error(f"[websocket_connector.py process_job] Error processing job {job_id}: {str(e)}")
+            logger.error(f"[connectors/websocket_connector.py process_job] Error processing job {job_id}: {str(e)}")
             raise
         finally:
             # Clear current job ID when done
-            logger.info(f"[websocket_connector.py process_job] Completed job {job_id} for {self.get_job_type()} service")
+            logger.info(f"[connectors/websocket_connector.py process_job] Completed job {job_id} for {self.get_job_type()} service")
             self.current_job_id = None
     
     async def _prepare_job(self, job_id: str, payload: Dict[str, Any]) -> None:
@@ -306,13 +322,13 @@ class WebSocketConnector(ConnectorInterface):
                 
             self.connected = False
         except Exception as e:
-            logger.error(f"[websocket_connector.py _disconnect] Error disconnecting: {str(e)}")
+            logger.error(f"[connectors/websocket_connector.py _disconnect] Error disconnecting: {str(e)}")
     
     async def shutdown(self) -> None:
         """Clean up resources when worker is shutting down"""
-        logger.info(f"[websocket_connector.py shutdown] Shutting down {self.get_job_type()} connector")
+        logger.info(f"[connectors/websocket_connector.py shutdown] Shutting down {self.get_job_type()} connector")
         await self._disconnect()
-        logger.info(f"[websocket_connector.py shutdown] {self.get_job_type()} connector shut down")
+        logger.info(f"[connectors/websocket_connector.py shutdown] {self.get_job_type()} connector shut down")
     
     def get_connection_status(self) -> Dict[str, Any]:
         """Get the current connection status of the connector

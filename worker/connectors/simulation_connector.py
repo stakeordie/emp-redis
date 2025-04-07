@@ -15,6 +15,10 @@ from core.utils.logger import logger
 class SimulationConnector(ConnectorInterface):
     """Connector for simulating job processing"""
     
+    # Set the connector name to match the environment variable
+    # Updated: 2025-04-07T15:52:00-04:00
+    connector_name = "simulation"
+    
     # Version identifier to verify code deployment
     VERSION = "2025-04-04-19:36-connector-details-update"
     

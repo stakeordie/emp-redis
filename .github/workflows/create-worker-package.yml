@@ -6,6 +6,7 @@ on:
     paths:
       - "worker/**"
       - "core/**"
+      - "worker_main.py"
   workflow_dispatch: # Allow manual triggering
 
 jobs:
@@ -32,11 +33,23 @@ jobs:
       - name: Copy project files
         run: |
           echo "Copying files to ${{ env.PACKAGE_DIR }}"
+          # Copy worker package files
           cp -r worker/* "${{ env.PACKAGE_DIR }}/worker/"
+          
+          # Copy core files
           cp core/message_models.py "${{ env.PACKAGE_DIR }}/core/"
           cp -r core/core_types/* "${{ env.PACKAGE_DIR }}/core/core_types/"
           cp -r core/interfaces/* "${{ env.PACKAGE_DIR }}/core/interfaces/"
           cp -r core/utils/* "${{ env.PACKAGE_DIR }}/core/utils/"
+          
+          # Copy worker_main.py to the root of the package
+          if [ -f "worker_main.py" ]; then
+            echo "Copying worker_main.py to package root"
+            cp worker_main.py "${{ env.PACKAGE_DIR }}/"
+            chmod +x "${{ env.PACKAGE_DIR }}/worker_main.py"
+          else
+            echo "Warning: worker_main.py not found in project root"
+          fi
 
       - name: Handle requirements.txt
         run: |
@@ -63,63 +76,78 @@ jobs:
           cat > "${{ env.PACKAGE_DIR }}/scripts/setup.sh" << 'EOF'
           #!/bin/bash
           # Setup script for EmProps Redis Worker
+          # Created: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
           # Install dependencies
           echo "Installing dependencies..."
           pip install -r requirements.txt
 
           echo "Setup complete!"
-          echo "To start the worker, run: python worker/worker.py"
+          if [ -f "worker_main.py" ]; then
+            echo "To start the worker, run: python worker_main.py"
+          else
+            echo "To start the worker, run: python worker/worker.py"
+          fi
           EOF
 
           # Make setup script executable
           chmod +x "${{ env.PACKAGE_DIR }}/scripts/setup.sh"
 
-      - name: Create README (Commented Out)
+      - name: Create README
         run: |
-          echo "Skipping README creation (commented out for debugging)"
-          # Debug: Temporarily comment out README creation
-          # # Create a README
-          # cat > "${{ env.PACKAGE_DIR }}/README.md" << 'EOF'
-          # # EmProps Redis Worker
-          # 
-          # This package contains a single worker component for the EmProps Redis system.
-          # 
-          # ## Setup
-          # 
-          # 1. Run the setup script to install dependencies:
-          #    ```
-          #    ./scripts/setup.sh
-          #    ```
-          #    
-          # 2. Copy `.env.example` to `.env` and configure it (if not done by setup script):
-          #    - Set REDIS_API_HOST to the hostname of your Redis Hub
-          #    - Set REDIS_API_PORT to the port of your Redis Hub (default: 8001)
-          #    - Set WORKER_ID to a unique identifier for this worker
-          #    - Set WEBSOCKET_AUTH_TOKEN to match the token configured on the Redis Hub
-          #    - Configure connector-specific variables as needed
-          # 
-          # 3. Run the worker:
-          #    ```
-          #    python worker/worker.py
-          #    ```
-          # 
-          # ## Environment Variables
-          # 
-          # ### Core Variables
-          # - REDIS_API_HOST: The hostname of the Redis Hub
-          # - REDIS_API_PORT: The port of the Redis Hub (default: 8001)
-          # - WORKER_ID: Unique identifier for this worker
-          # - WEBSOCKET_AUTH_TOKEN: Authentication token for Redis Hub
-          # - CONNECTORS: Comma-separated list of connectors to load (e.g., "comfyui,simulation")
-          # 
-          # ### ComfyUI Connector Variables
-          # - COMFYUI_API_HOST: Hostname of the ComfyUI instance
-          # - COMFYUI_API_PORT: Port of the ComfyUI instance
-          # 
-          # ### Simulation Connector Variables
-          # - SIMULATION_ENABLED: Whether to enable the simulation connector
-          # EOF
+          echo "Creating README.md"
+          cat > "${{ env.PACKAGE_DIR }}/README.md" << 'EOF'
+          # EmProps Redis Worker
+          
+          This package contains a single worker component for the EmProps Redis system.
+          
+          ## Setup
+          
+          1. Run the setup script to install dependencies:
+             ```
+             ./scripts/setup.sh
+             ```
+             
+          2. Copy `.env.example` to `.env` and configure it (if not done by setup script):
+             - Set REDIS_API_HOST to the hostname of your Redis Hub
+             - Set REDIS_API_PORT to the port of your Redis Hub (default: 8001)
+             - Set WORKER_ID to a unique identifier for this worker
+             - Set WEBSOCKET_AUTH_TOKEN to match the token configured on the Redis Hub
+             - Configure connector-specific variables as needed
+          
+          3. Run the worker:
+             ```
+             # If worker_main.py exists at the root level (recommended)
+             python worker_main.py
+             
+             # OR, if using the legacy approach
+             python worker/worker.py
+             ```
+          
+          ## Package Structure
+          
+          The worker package has been restructured to solve import issues:
+          
+          - `worker_main.py`: Main entry point script located outside the worker package
+          - `worker/`: Contains the worker implementation and connectors
+          - `core/`: Contains core utilities and interfaces
+          
+          ## Environment Variables
+          
+          ### Core Variables
+          - REDIS_API_HOST: The hostname of the Redis Hub
+          - REDIS_API_PORT: The port of the Redis Hub (default: 8001)
+          - WORKER_ID: Unique identifier for this worker
+          - WEBSOCKET_AUTH_TOKEN: Authentication token for Redis Hub
+          - WORKER_CONNECTORS or CONNECTORS: Comma-separated list of connectors to load (e.g., "comfyui,simulation")
+          
+          ### ComfyUI Connector Variables
+          - COMFYUI_API_HOST: Hostname of the ComfyUI instance
+          - COMFYUI_API_PORT: Port of the ComfyUI instance
+          
+          ### Simulation Connector Variables
+          - SIMULATION_ENABLED: Whether to enable the simulation connector
+          EOF
 
       - name: Create tarball and clean up
         run: |

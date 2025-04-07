@@ -6,6 +6,12 @@ from typing import Dict, Any, Optional, Union
 class ConnectorInterface(ABC):
     """Interface for service connectors that handle specific job types"""
     
+    # Class attribute to identify the connector type
+    # This should be overridden by each connector implementation
+    # and should match the name used in the WORKER_CONNECTORS environment variable
+    # Updated: 2025-04-07T15:48:00-04:00
+    connector_name = None
+    
     @abstractmethod
     async def initialize(self) -> bool:
         """Initialize the connector

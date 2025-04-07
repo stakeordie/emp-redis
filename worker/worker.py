@@ -49,7 +49,50 @@ async def main():
         logger.info("[worker.py main] Starting EmProps Redis Worker")
         
         # Import BaseWorker here to avoid circular imports
-        from base_worker import BaseWorker
+        # Use package imports to leverage __init__.py
+        logger.info("[worker.py main] Importing BaseWorker")
+        
+        # Define BaseWorker variable
+        BaseWorker = None
+        import_success = False
+        
+        # Approach 1: Try importing from worker package (best practice)
+        try:
+            logger.info("[worker.py main] Attempting to import BaseWorker from worker package")
+            from worker import BaseWorker as WorkerBaseWorker
+            BaseWorker = WorkerBaseWorker
+            logger.info("[worker.py main] Successfully imported BaseWorker from worker package")
+            import_success = True
+        except ImportError as e:
+            logger.info(f"[worker.py main] Failed to import BaseWorker from worker package: {str(e)}")
+        
+        # Approach 2: Try direct import
+        if not import_success:
+            try:
+                logger.info("[worker.py main] Attempting direct import of BaseWorker")
+                from base_worker import BaseWorker as DirectBaseWorker
+                BaseWorker = DirectBaseWorker
+                logger.info("[worker.py main] Successfully imported BaseWorker directly")
+                import_success = True
+            except ImportError as e2:
+                logger.info(f"[worker.py main] Failed direct import of BaseWorker: {str(e2)}")
+        
+        # Approach 3: Try emp-redis-worker specific import
+        if not import_success:
+            try:
+                logger.info("[worker.py main] Attempting emp-redis-worker specific import of BaseWorker")
+                from emp_redis_worker.worker import BaseWorker as EmpBaseWorker
+                BaseWorker = EmpBaseWorker
+                logger.info("[worker.py main] Successfully imported BaseWorker from emp_redis_worker.worker")
+                import_success = True
+            except ImportError as e3:
+                logger.info(f"[worker.py main] Failed emp-redis-worker import of BaseWorker: {str(e3)}")
+        
+        # Check if any import approach succeeded
+        if not import_success:
+            error_msg = "Failed to import BaseWorker using any approach"
+            logger.error(f"[worker.py main] {error_msg}")
+            raise ImportError(error_msg)
         
         # Create and start worker
         worker = BaseWorker() ## base_worker.py

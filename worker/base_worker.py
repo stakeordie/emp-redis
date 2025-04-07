@@ -20,16 +20,76 @@ sys.path.insert(0, parent_dir)
 current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, current_dir)
 
-# Import required modules
-try:
-    # Try direct imports first (for Docker container)
-    from connector_interface import ConnectorInterface
-    from connector_loader import load_connectors, get_worker_capabilities
-except ImportError:
-    # Fall back to package imports (for local development)
-    from worker.connector_interface import ConnectorInterface
-    from worker.connector_loader import load_connectors, get_worker_capabilities
+# Import logger first for proper diagnostics
 from core.utils.logger import logger
+
+# Import required modules using package structure
+# This leverages the __init__.py files for proper package imports
+ConnectorInterface = None
+load_connectors = None
+get_worker_capabilities = None
+
+# Use a step-by-step approach to avoid multiple import errors
+logger.info("[base_worker.py] Attempting to import required modules")
+
+# Try different import approaches in sequence
+import_success = False
+
+# Approach 1: Try importing from worker package (best practice)
+try:
+    logger.info("[base_worker.py] Attempting to import from worker package")
+    from worker import ConnectorInterface as WorkerConnectorInterface
+    from worker import load_connectors as worker_load_connectors
+    from worker import get_worker_capabilities as worker_get_capabilities
+    
+    ConnectorInterface = WorkerConnectorInterface
+    load_connectors = worker_load_connectors
+    get_worker_capabilities = worker_get_capabilities
+    
+    logger.info("[base_worker.py] Successfully imported from worker package")
+    import_success = True
+except ImportError as e:
+    logger.info(f"[base_worker.py] Failed to import from worker package: {str(e)}")
+
+# Approach 2: Try direct imports (for Docker container)
+if not import_success:
+    try:
+        logger.info("[base_worker.py] Attempting direct imports")
+        from connector_interface import ConnectorInterface as DirectConnectorInterface
+        from connector_loader import load_connectors as direct_load_connectors
+        from connector_loader import get_worker_capabilities as direct_get_capabilities
+        
+        ConnectorInterface = DirectConnectorInterface
+        load_connectors = direct_load_connectors
+        get_worker_capabilities = direct_get_capabilities
+        
+        logger.info("[base_worker.py] Successfully imported directly")
+        import_success = True
+    except ImportError as e2:
+        logger.info(f"[base_worker.py] Failed direct imports: {str(e2)}")
+
+# Approach 3: Try emp-redis-worker specific imports (for new Docker structure)
+if not import_success:
+    try:
+        logger.info("[base_worker.py] Attempting emp-redis-worker specific imports")
+        from emp_redis_worker.worker import ConnectorInterface as EmpConnectorInterface
+        from emp_redis_worker.worker import load_connectors as emp_load_connectors
+        from emp_redis_worker.worker import get_worker_capabilities as emp_get_capabilities
+        
+        ConnectorInterface = EmpConnectorInterface
+        load_connectors = emp_load_connectors
+        get_worker_capabilities = emp_get_capabilities
+        
+        logger.info("[base_worker.py] Successfully imported from emp_redis_worker.worker")
+        import_success = True
+    except ImportError as e3:
+        logger.info(f"[base_worker.py] Failed emp-redis-worker imports: {str(e3)}")
+
+# Check if any import approach succeeded
+if not import_success:
+    error_msg = "Failed to import required modules using any approach"
+    logger.error(f"[base_worker.py] {error_msg}")
+    raise ImportError(error_msg)
 
 from core.message_models import (
     MessageType,

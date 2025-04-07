@@ -1,33 +1,80 @@
 #!/usr/bin/env python3
 # ComfyUI connector for the EmProps Redis Worker
+# Created: 2025-04-07T11:05:00-04:00
+# Updated: 2025-04-07T15:06:00-04:00 - Fixed import order
+
 import os
 import json
 import asyncio
 import aiohttp
 import time
+import sys
 from typing import Dict, Any, Optional, Union, Callable
 
-import sys
-import os
+# Import logger early for diagnostics
+from core.utils.logger import logger
 
-# Add the parent directory to the Python path
-parent_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, parent_dir)
+# Updated import approach - uses proper package imports
+# Updated: 2025-04-07T15:04:00-04:00
 
-# Add the worker directory to the Python path
-worker_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, worker_dir)
-
-# Try direct imports first (for Docker container)
+# Import ConnectorInterface first - this should be available in all environments
+# Updated: 2025-04-07T15:05:00-04:00 - Fixed import order and lint errors
+ConnectorInterface = None
 try:
-    from websocket_connector import WebSocketConnector
-except ImportError:
-    # Fall back to package imports (for local development)
-    from worker.websocket_connector import WebSocketConnector
+    # First try relative import from parent package
+    from ..connector_interface import ConnectorInterface as ParentConnectorInterface
+    ConnectorInterface = ParentConnectorInterface
+    logger.info(f"[comfyui_connector.py] Successfully imported ConnectorInterface via relative import from parent package")
+except ImportError as e:
+    # Fall back to direct import if not in a package context
+    try:
+        from worker.connector_interface import ConnectorInterface as WorkerConnectorInterface
+        ConnectorInterface = WorkerConnectorInterface
+        logger.info(f"[comfyui_connector.py] Successfully imported ConnectorInterface via worker package import")
+    except ImportError as e2:
+        try:
+            from connector_interface import ConnectorInterface as DirectConnectorInterface
+            ConnectorInterface = DirectConnectorInterface
+            logger.info(f"[comfyui_connector.py] Successfully imported ConnectorInterface via direct import")
+        except ImportError as e3:
+            # Last resort - try absolute import
+            import sys
+            logger.error(f"[comfyui_connector.py] Failed to import ConnectorInterface: {e3}")
+            logger.error(f"[comfyui_connector.py] Python path: {sys.path}")
+            raise ImportError(f"Could not import ConnectorInterface: {e3}")
+
+# Now import WebSocketConnector - this should be loaded by the connector_loader first
+WebSocketConnector = None
+try:
+    # First try relative import from same package
+    from .websocket_connector import WebSocketConnector as RelativeWebSocketConnector
+    WebSocketConnector = RelativeWebSocketConnector
+    logger.info(f"[comfyui_connector.py] Successfully imported WebSocketConnector via relative import")
+except ImportError as e:
+    # Fall back to worker package import
+    try:
+        from worker.connectors.websocket_connector import WebSocketConnector as WorkerWebSocketConnector
+        WebSocketConnector = WorkerWebSocketConnector
+        logger.info(f"[comfyui_connector.py] Successfully imported WebSocketConnector via worker package import")
+    except ImportError as e2:
+        # Try direct import
+        try:
+            from websocket_connector import WebSocketConnector as DirectWebSocketConnector
+            WebSocketConnector = DirectWebSocketConnector
+            logger.info(f"[comfyui_connector.py] Successfully imported WebSocketConnector via direct import")
+        except ImportError as e3:
+            logger.error(f"[comfyui_connector.py] Failed to import WebSocketConnector: {e3}")
+            raise ImportError(f"Could not import WebSocketConnector. Make sure it's loaded first: {e3}")
+
+# Import logger - this should be available in all environments
 from core.utils.logger import logger
 
 class ComfyUIConnector(WebSocketConnector):
     """Connector for ComfyUI service"""
+    
+    # Set the connector name to match the environment variable
+    # Updated: 2025-04-07T15:50:00-04:00
+    connector_name = "comfyui"
     
     def __init__(self):
         # Call the parent class's __init__ method
@@ -39,6 +86,10 @@ class ComfyUIConnector(WebSocketConnector):
         self.port = int(os.environ.get("WORKER_COMFYUI_PORT", os.environ.get("COMFYUI_PORT", "8188")))
         self.use_ssl = os.environ.get("WORKER_COMFYUI_USE_SSL", os.environ.get("COMFYUI_USE_SSL", "false")).lower() in ("true", "1", "yes")
         
+        # Connection management settings
+        # Updated: 2025-04-07T15:56:00-04:00 - Added option to control connection persistence
+        self.keep_connection_open = os.environ.get("WORKER_COMFYUI_KEEP_CONNECTION", os.environ.get("COMFYUI_KEEP_CONNECTION", "false")).lower() in ("true", "1", "yes")
+        
         # Authentication settings
         self.username = os.environ.get("WORKER_COMFYUI_USERNAME", os.environ.get("COMFYUI_USERNAME"))
         self.password = os.environ.get("WORKER_COMFYUI_PASSWORD", os.environ.get("COMFYUI_PASSWORD"))
@@ -48,6 +99,7 @@ class ComfyUIConnector(WebSocketConnector):
         logger.info(f"[comfyui_connector.py __init__] WORKER_COMFYUI_HOST/COMFYUI_HOST: {self.host}")
         logger.info(f"[comfyui_connector.py __init__] WORKER_COMFYUI_PORT/COMFYUI_PORT: {self.port}")
         logger.info(f"[comfyui_connector.py __init__] WORKER_COMFYUI_USE_SSL/COMFYUI_USE_SSL: {self.use_ssl}")
+        logger.info(f"[comfyui_connector.py __init__] WORKER_COMFYUI_KEEP_CONNECTION/COMFYUI_KEEP_CONNECTION: {self.keep_connection_open}")
         
         logger.info(f"[comfyui_connector.py __init__] Initializing connector")
         logger.info(f"[comfyui_connector.py __init__] Username environment variable: {'set' if self.username else 'not set'}")
@@ -177,6 +229,9 @@ class ComfyUIConnector(WebSocketConnector):
         logger.info(f"[comfyui_connector.py send_workflow] Sent workflow to ComfyUI: {prompt_message}")
         
         # Wait for prompt_queued message to get prompt_id
+        if self.ws is None:
+            raise Exception("WebSocket connection is not established")
+            
         async for msg in self.ws:
             if msg.type == aiohttp.WSMsgType.TEXT:
                 data = json.loads(msg.data)
@@ -187,9 +242,10 @@ class ComfyUIConnector(WebSocketConnector):
                         raise Exception("Failed to queue workflow in ComfyUI")
                     # Explicitly return as str to match the return type
                     return str(self.prompt_id)
-            elif msg.type == aiohttp.WSMsgType.ERROR:
-                logger.error(f"[comfyui_connector.py send_workflow] WebSocket connection closed with exception {self.ws.exception()}")
-                raise Exception(f"ComfyUI WebSocket error: {self.ws.exception()}")
+            elif msg.type == aiohttp.WSMsgType.ERROR and self.ws is not None:
+                error_msg = str(self.ws.exception()) if self.ws.exception() is not None else "Unknown WebSocket error"
+                logger.error(f"[comfyui_connector.py send_workflow] WebSocket connection closed with exception {error_msg}")
+                raise Exception(f"ComfyUI WebSocket error: {error_msg}")
         
         # If we get here without returning, something went wrong
         return None
@@ -213,40 +269,67 @@ class ComfyUIConnector(WebSocketConnector):
         logger.info(f"[comfyui_connector.py _monitor_service_progress] Workflow queued in ComfyUI")
         
         # Process messages from ComfyUI
-        async for msg in self.ws:
-            if msg.type == aiohttp.WSMsgType.TEXT:
-                data = json.loads(msg.data)
-
-                if data.get('type') != 'crystools.monitor':
-                    logger.info(f"[comfyui_connector.py _monitor_service_progress] Received message from ComfyUI: {msg}")
-
-                # Comprehensive message type handling
-                if data.get('type') == 'prompt_queued':
-                    await send_progress_update(job_id, 5, "queued", "Workflow accepted by ComfyUI")
-                    logger.info(f"[comfyui_connector.py _monitor_service_progress] Workflow accepted by ComfyUI")
-                if data.get('type') == 'progress':
-                    node_id = data.get('data', {}).get('node')
-                    progress = data.get('data', {}).get('value', 0)
-                    node_progress[node_id] = progress
-                    logger.info(f"[comfyui_connector.py _monitor_service_progress] Progress for node {node_id}: {progress}")    
-                    # Dynamic progress calculation (10-90%)
-                    if node_progress:
-                        avg_progress = min(90, 10 + (sum(node_progress.values()) / len(node_progress) * 80))
-                        await send_progress_update(job_id, int(avg_progress), "processing", f"Progress across {len(node_progress)} nodes")
-                if data.get('type') == 'executing' and data.get('data', {}).get('node') == None:
-                    job_completed = True
-                    final_result = data.get('data', {})
-                    logger.debug(f"[comfyui_connector.py _monitor_service_progress] data: {data}")
-                    await send_progress_update(job_id, 100, "finalizing", "Workflow execution completed")
-                    logger.info(f"[comfyui_connector.py _monitor_service_progress] Workflow execution completed")
-                    break
-                if data.get('type') == 'execution_error':
-                    logger.debug(f"[comfyui_connector.py _monitor_service_progress] data: {data}")
-                    await send_progress_update(job_id, 0, "error", str(data))
-                    raise Exception(f"ComfyUI Execution Error: {data}")
-            elif msg.type == aiohttp.WSMsgType.ERROR:
-                logger.error(f"[comfyui_connector.py _monitor_service_progress] WebSocket error: {self.ws.exception()}")
-                raise Exception(f"ComfyUI WebSocket error: {self.ws.exception()}")
+        if self.ws is None:
+            raise Exception("WebSocket connection is not established")
+            
+        # Check if websocket is available
+        if self.ws is None:
+            logger.error("[comfyui_connector.py _monitor_service_progress] WebSocket connection is None")
+            return {"status": "error", "message": "WebSocket connection is None"}
+            
+        # Process all messages from the websocket
+        try:
+            async for msg in self.ws:
+                if msg.type == aiohttp.WSMsgType.TEXT:
+                    data = json.loads(msg.data)
+                    
+                    # Log non-monitor messages
+                    if data.get('type') != 'crystools.monitor':
+                        logger.info(f"[comfyui_connector.py _monitor_service_progress] Received message from ComfyUI: {data}")
+                    
+                    # Handle different message types
+                    if data.get('type') == 'prompt_queued':
+                        await send_progress_update(job_id, 5, "queued", "Workflow accepted by ComfyUI")
+                        logger.info(f"[comfyui_connector.py _monitor_service_progress] Workflow accepted by ComfyUI")
+                        
+                    elif data.get('type') == 'progress':
+                        node_id = data.get('data', {}).get('node')
+                        progress = data.get('data', {}).get('value', 0)
+                        node_progress[node_id] = progress
+                        logger.info(f"[comfyui_connector.py _monitor_service_progress] Progress for node {node_id}: {progress}")    
+                        
+                        # Dynamic progress calculation (10-90%)
+                        if node_progress:
+                            avg_progress = min(90, 10 + (sum(node_progress.values()) / len(node_progress) * 80))
+                            await send_progress_update(job_id, int(avg_progress), "processing", f"Progress across {len(node_progress)} nodes")
+                            
+                    elif data.get('type') == 'executing' and data.get('data', {}).get('node') == None:
+                        job_completed = True
+                        final_result = data.get('data', {})
+                        logger.debug(f"[comfyui_connector.py _monitor_service_progress] data: {data}")
+                        await send_progress_update(job_id, 100, "finalizing", "Workflow execution completed")
+                        logger.info(f"[comfyui_connector.py _monitor_service_progress] Workflow execution completed")
+                        break
+                        
+                    elif data.get('type') == 'execution_error':
+                        logger.debug(f"[comfyui_connector.py _monitor_service_progress] data: {data}")
+                        await send_progress_update(job_id, 0, "error", str(data))
+                        raise Exception(f"ComfyUI Execution Error: {data}")
+                        
+                elif msg.type == aiohttp.WSMsgType.ERROR:
+                    # Safely get exception message
+                    error_msg = "Unknown WebSocket error"
+                    try:
+                        if self.ws and self.ws.exception():
+                            error_msg = str(self.ws.exception())
+                    except Exception as e:
+                        error_msg = f"Error getting exception: {str(e)}"
+                        
+                    logger.error(f"[comfyui_connector.py _monitor_service_progress] WebSocket error: {error_msg}")
+                    raise Exception(f"ComfyUI WebSocket error: {error_msg}")
+        except Exception as e:
+            logger.error(f"[comfyui_connector.py _monitor_service_progress] Error processing messages: {str(e)}")
+            return {"status": "error", "message": str(e)}
         
         return final_result or {}
     
@@ -282,15 +365,24 @@ class ComfyUIConnector(WebSocketConnector):
         logger.info(f"[comfyui_connector.py _process_service_job] Processing ComfyUI job {job_id}")
         logger.info(f"[comfyui_connector.py _process_service_job] Job payload: {payload}")
         
-        # Send workflow to ComfyUI
-        logger.info(f"[comfyui_connector.py _process_service_job] Sending workflow to ComfyUI")
-        await self.send_workflow(payload)
-        
-        # AI-generated fix: 2025-04-04T20:17:19 - Call monitor_progress to enable heartbeats and progress tracking
-        logger.info(f"[comfyui_connector.py _process_service_job] Starting progress monitoring for job {job_id}")
-        result = await self.monitor_progress(job_id, send_progress_update)
-        
-        return result
+        try:
+            # Send workflow to ComfyUI
+            logger.info(f"[comfyui_connector.py _process_service_job] Sending workflow to ComfyUI")
+            await self.send_workflow(payload)
+            
+            # Call monitor_progress to enable heartbeats and progress tracking
+            logger.info(f"[comfyui_connector.py _process_service_job] Starting progress monitoring for job {job_id}")
+            result = await self.monitor_progress(job_id, send_progress_update)
+            
+            return result
+        finally:
+            # Close the connection after job completion if keep_connection_open is False
+            # Updated: 2025-04-07T15:57:00-04:00 - Added connection management after job completion
+            if not self.keep_connection_open:
+                logger.info(f"[comfyui_connector.py _process_service_job] Closing connection after job {job_id} completion")
+                await self._disconnect()
+            else:
+                logger.info(f"[comfyui_connector.py _process_service_job] Keeping connection open after job {job_id} completion")
     
     async def _on_disconnect(self) -> None:
         """Handle ComfyUI-specific disconnection steps"""
