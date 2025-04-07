@@ -181,8 +181,9 @@ function setupEventListeners() {
 }
 
 /**
- * Connect to Redis via WebSocket with monitor, client, and worker connections
+ * Connect to Redis via WebSocket with monitor and client connections
  * Uses timestamp-based IDs for each connection type
+ * [2025-04-06 20:46] Restored client connection for job submission
  */
 function connect() {
     // Get base URL from form
@@ -212,8 +213,6 @@ function connect() {
     
     // Connection displays now show fixed 'Connected' status instead of IDs
     // The HTML has been updated to show this by default
-    
-
     
     // Log connection attempt with IDs
     addLogEntry(`Initializing connections with timestamp-based IDs (${new Date(timestamp).toLocaleTimeString()})`, 'info');
@@ -352,6 +351,7 @@ function connectClientSocket(baseUrl, clientId, authToken) {
  * Update the connection UI based on connection states
  * [2025-04-06 18:53] Simplified to focus on monitor and client connections
  * [2025-04-06 19:21] Fixed ReferenceError by initializing statusDetails array
+ * [2025-04-06 20:46] Restored client connection handling
  */
 function updateConnectionUI() {
     // Update connect/disconnect buttons
@@ -361,13 +361,9 @@ function updateConnectionUI() {
     // Initialize statusDetails array
     const statusDetails = [];
     
-    // Update status indicator
-    if (state.monitorConnected && state.clientConnected) {
-        // Both monitor and client connected
-        elements.statusIndicator.className = 'status-indicator status-connected';
-        elements.connectionStatusText.textContent = 'Connected';
-        elements.connectionStatusText.style.color = '#4CAF50';
-        // Use the stored monitor ID from state if available
+    // Update monitor connection status
+    if (state.monitorConnected) {
+        // Monitor connected
         const monitorId = state.monitorId || 'unknown';
         statusDetails.push(`Monitor: Connected (${monitorId})`);
         
@@ -384,8 +380,9 @@ function updateConnectionUI() {
         }
     }
     
+    // Update client connection status
     if (state.clientConnected) {
-        // Use the stored client ID from state if available
+        // Client connected
         const clientId = state.clientId || 'unknown';
         statusDetails.push(`Client: Connected (${clientId})`);
         
@@ -402,7 +399,7 @@ function updateConnectionUI() {
         }
     }
     
-    // Update connection status indicator and text with null checks
+    // Update connection status indicator with null checks
     if (elements.statusIndicator) {
         // Determine connection state
         const allConnected = state.monitorConnected && state.clientConnected;
@@ -410,21 +407,25 @@ function updateConnectionUI() {
         
         if (allConnected) {
             // All connections active
-            elements.statusIndicator.classList.remove('status-disconnected', 'status-partial');
-            elements.statusIndicator.classList.add('status-connected');
+            elements.statusIndicator.className = 'status-indicator status-connected';
+            elements.connectionStatusText.textContent = 'Connected';
+            elements.connectionStatusText.style.color = '#4CAF50';
         } else if (anyConnected) {
             // At least one connection active - partial connection state
-            elements.statusIndicator.classList.remove('status-disconnected', 'status-connected');
-            elements.statusIndicator.classList.add('status-partial');
+            elements.statusIndicator.className = 'status-indicator status-partial';
+            elements.connectionStatusText.textContent = 'Partially Connected';
+            elements.connectionStatusText.style.color = '#FF9800';
         } else {
             // No connections active
-            elements.statusIndicator.classList.remove('status-connected', 'status-partial');
-            elements.statusIndicator.classList.add('status-disconnected');
+            elements.statusIndicator.className = 'status-indicator status-disconnected';
+            elements.connectionStatusText.textContent = 'Disconnected';
+            elements.connectionStatusText.style.color = '#F44336';
         }
     }
     
-    if (elements.connectionStatusText) {
-        // Connection status text is handled above
+    // Update status details display if it exists
+    if (elements.connectionStatusDetails) {
+        elements.connectionStatusDetails.innerHTML = statusDetails.join('<br>');
     }
     
     // Add CSS for partial connection state if it doesn't exist
@@ -442,6 +443,7 @@ function updateConnectionUI() {
 
 /**
  * Disconnect from WebSocket connections
+ * [2025-04-06 20:46] Updated to close both monitor and client connections
  */
 function disconnect() {
     addLogEntry('Disconnecting from WebSocket connections...', 'info');
@@ -456,25 +458,26 @@ function disconnect() {
         state.clientSocket.close();
     }
     
+    // Call handleDisconnect to reset state and update UI
     handleDisconnect();
 }
 
 /**
  * Handle disconnection (either manual or due to error)
  * Resets connection states and UI elements
+ * [2025-04-06 20:46] Updated to properly handle both monitor and client connections
  */
 function handleDisconnect() {
     // Reset connection states
     state.monitorConnected = false;
     state.clientConnected = false;
     
-    // Clear socket references
+    // Reset socket references
     state.monitorSocket = null;
     state.clientSocket = null;
     
     // Reset connection info display
     if (elements.connectionInfo) {
-        // Hide the connection info display
         elements.connectionInfo.style.display = 'none';
     }
     
@@ -486,10 +489,6 @@ function handleDisconnect() {
     if (elements.clientIdDisplay) {
         elements.clientIdDisplay.textContent = 'Not connected';
     }
-    
-    // Clear connection IDs from state
-    state.monitorId = null;
-    state.clientId = null;
     
     // Enable/disable buttons based on connection status
     updateConnectionUI();
@@ -1034,11 +1033,18 @@ function handleStatsBroadcast(parsedMessage, rawMessage, source = 'unknown') {
  * Handle job accepted message
  * @param {Object} message - Parsed job accepted message
  * @param {string} source - Source of the message ('monitor' or 'client')
+ * [2025-04-06 20:50] Added job_type and client_id capture and preservation
  */
 function handleJobAccepted(message, source = 'unknown') {
-    const jobId = message.jobId;
+    const jobId = message.jobId || message.job_id;
     const status = message.status;
     const position = message.position;
+    // [2025-04-06 20:50] Capture job_type from the message
+    const jobType = message.job_type || message.type || null;
+    // [2025-04-06 20:50] Capture client_id from the message
+    const clientId = message.client_id || null;
+    
+    console.log(`[DEBUG] Job accepted: ${jobId}, type: ${jobType || 'unknown'}, client: ${clientId || 'unknown'}, source: ${source}`);
     
     // Add job to state
     state.jobs[jobId] = {
@@ -1046,11 +1052,14 @@ function handleJobAccepted(message, source = 'unknown') {
         status: status || 'pending',
         position: position,
         progress: 0,
+        job_type: jobType, // [2025-04-06 20:50] Store job type
+        client_id: clientId, // [2025-04-06 20:50] Store client ID
         createdAt: new Date(),
-        updatedAt: new Date()
+        updatedAt: new Date(),
+        source_update: source
     };
     
-    addLogEntry(`Job accepted: ${jobId}`, 'success');
+    addLogEntry(`Job accepted: ${jobId} (Type: ${jobType || 'unknown'}, Client: ${clientId || 'unknown'})`, 'success');
 }
 
 /**
@@ -1059,15 +1068,20 @@ function handleJobAccepted(message, source = 'unknown') {
  * @param {Object} rawMessage - Raw message object (fallback)
  * @param {string} source - Source of the message ('monitor' or 'client')
  * [2025-04-06 19:40] Added to handle job cancellations
+ * [2025-04-06 20:50] Added job_type and client_id capture and preservation
  */
 function handleJobCancelled(message, rawMessage, source = 'unknown') {
     // [2025-04-06 19:40] Handle both jobId (camelCase) and job_id (snake_case) formats
     const jobId = message.jobId || message.job_id || (rawMessage && (rawMessage.jobId || rawMessage.job_id));
     const workerId = message.workerId || message.worker_id || (rawMessage && (rawMessage.workerId || rawMessage.worker_id));
     const reason = message.reason || (rawMessage && rawMessage.reason) || 'No reason provided';
+    // [2025-04-06 20:50] Capture job_type from the message
+    const jobType = message.job_type || message.type || (rawMessage && (rawMessage.job_type || rawMessage.type)) || null;
+    // [2025-04-06 20:50] Capture client_id from the message
+    const clientId = message.client_id || (rawMessage && rawMessage.client_id) || null;
     
-    console.log(`[DEBUG] Job cancellation received for jobId: ${jobId}, workerId: ${workerId}, source: ${source}`);
-    addLogEntry(`Job cancelled: ${jobId} - ${reason}`, 'warning');
+    console.log(`[DEBUG] Job cancellation received for jobId: ${jobId}, type: ${jobType || 'unknown'}, workerId: ${workerId}, client: ${clientId || 'unknown'}, source: ${source}`);
+    addLogEntry(`Job cancelled: ${jobId} (Type: ${jobType || 'unknown'}) - ${reason}`, 'warning');
     
     // Update the job in state
     if (jobId) {
@@ -1077,6 +1091,8 @@ function handleJobCancelled(message, rawMessage, source = 'unknown') {
             state.jobs[jobId] = {
                 id: jobId,
                 worker_id: workerId,
+                client_id: clientId, // [2025-04-06 20:50] Store client ID
+                job_type: jobType, // [2025-04-06 20:50] Store job type
                 status: 'cancelled',
                 progress: 0,
                 createdAt: message.createdAt || message.created_at || (rawMessage && (rawMessage.createdAt || rawMessage.created_at)) || (Date.now() - 60000), // Default to 1 minute ago if no creation time
@@ -1093,6 +1109,18 @@ function handleJobCancelled(message, rawMessage, source = 'unknown') {
             state.jobs[jobId].updated_at = Date.now();
             state.jobs[jobId].cancelledAt = message.cancelledAt || message.cancelled_at || (rawMessage && (rawMessage.cancelledAt || rawMessage.cancelled_at)) || Date.now();
             state.jobs[jobId].reason = reason;
+            
+            // [2025-04-06 20:50] Update client_id if it's provided and not already set
+            if (clientId && !state.jobs[jobId].client_id) {
+                state.jobs[jobId].client_id = clientId;
+                console.log(`[DEBUG] Updated client_id for job ${jobId} to ${clientId}`);
+            }
+            
+            // [2025-04-06 20:50] Update job_type if it's provided and not already set
+            if (jobType && (!state.jobs[jobId].job_type && !state.jobs[jobId].type)) {
+                state.jobs[jobId].job_type = jobType;
+                console.log(`[DEBUG] Updated job_type for job ${jobId} to ${jobType}`);
+            }
             
             // Calculate duration if possible
             if (state.jobs[jobId].createdAt || state.jobs[jobId].created_at) {
@@ -1126,15 +1154,20 @@ function handleJobCancelled(message, rawMessage, source = 'unknown') {
  * @param {Object} rawMessage - Raw message object (fallback)
  * @param {string} source - Source of the message ('monitor' or 'client')
  * [2025-04-06 19:35] Added to properly handle job failures
+ * [2025-04-06 20:50] Added job_type and client_id capture and preservation
  */
 function handleJobFailed(message, rawMessage, source = 'unknown') {
     // [2025-04-06 19:35] Handle both jobId (camelCase) and job_id (snake_case) formats
     const jobId = message.jobId || message.job_id || (rawMessage && (rawMessage.jobId || rawMessage.job_id));
     const workerId = message.workerId || message.worker_id || (rawMessage && (rawMessage.workerId || rawMessage.worker_id));
     const error = message.error || (rawMessage && rawMessage.error) || 'Unknown error';
+    // [2025-04-06 20:50] Capture job_type from the message
+    const jobType = message.job_type || message.type || (rawMessage && (rawMessage.job_type || rawMessage.type)) || null;
+    // [2025-04-06 20:50] Capture client_id from the message
+    const clientId = message.client_id || (rawMessage && rawMessage.client_id) || null;
     
-    console.log(`[DEBUG] Job failure received for jobId: ${jobId}, workerId: ${workerId}, source: ${source}`);
-    addLogEntry(`Job failed: ${jobId} - ${error}`, 'error');
+    console.log(`[DEBUG] Job failure received for jobId: ${jobId}, type: ${jobType || 'unknown'}, workerId: ${workerId}, client: ${clientId || 'unknown'}, source: ${source}`);
+    addLogEntry(`Job failed: ${jobId} (Type: ${jobType || 'unknown'}) - ${error}`, 'error');
     
     // Update the job in state
     if (jobId) {
@@ -1144,6 +1177,8 @@ function handleJobFailed(message, rawMessage, source = 'unknown') {
             state.jobs[jobId] = {
                 id: jobId,
                 worker_id: workerId,
+                client_id: clientId, // [2025-04-06 20:50] Store client ID
+                job_type: jobType, // [2025-04-06 20:50] Store job type
                 status: 'failed',
                 progress: 0,
                 createdAt: message.createdAt || message.created_at || (rawMessage && (rawMessage.createdAt || rawMessage.created_at)) || (Date.now() - 60000), // Default to 1 minute ago if no creation time
@@ -1160,6 +1195,18 @@ function handleJobFailed(message, rawMessage, source = 'unknown') {
             state.jobs[jobId].updated_at = Date.now();
             state.jobs[jobId].failedAt = message.failedAt || message.failed_at || (rawMessage && (rawMessage.failedAt || rawMessage.failed_at)) || Date.now();
             state.jobs[jobId].error = error;
+            
+            // [2025-04-06 20:50] Update client_id if it's provided and not already set
+            if (clientId && !state.jobs[jobId].client_id) {
+                state.jobs[jobId].client_id = clientId;
+                console.log(`[DEBUG] Updated client_id for job ${jobId} to ${clientId}`);
+            }
+            
+            // [2025-04-06 20:50] Update job_type if it's provided and not already set
+            if (jobType && (!state.jobs[jobId].job_type && !state.jobs[jobId].type)) {
+                state.jobs[jobId].job_type = jobType;
+                console.log(`[DEBUG] Updated job_type for job ${jobId} to ${jobType}`);
+            }
             
             // Calculate duration if possible
             if (state.jobs[jobId].createdAt || state.jobs[jobId].created_at) {
@@ -1192,70 +1239,89 @@ function handleJobFailed(message, rawMessage, source = 'unknown') {
  * @param {Object} message - Parsed job completion message
  * @param {string} source - Source of the message ('monitor' or 'client')
  * [2025-04-06 19:35] Added to properly handle job completion
+ * [2025-04-06 20:40] Added client_id capture from monitor messages
+ * [2025-04-06 20:50] Added job_type capture and preservation
  */
 function handleJobCompleted(message, source = 'unknown') {
-    // [2025-04-06 19:35] Handle both jobId (camelCase) and job_id (snake_case) formats
+    // [2025-04-06 19:35] Extract job details from message
     const jobId = message.jobId || message.job_id;
     const workerId = message.workerId || message.worker_id;
-    
-    console.log(`[DEBUG] Job completion received for jobId: ${jobId}, workerId: ${workerId}, source: ${source}`);
-    addLogEntry(`Job completed: ${jobId}`, 'success');
-    
-    // Update the job in state
+    const result = message.result || {};
+    // [2025-04-06 20:40] Capture client_id from the message
+    const clientId = message.client_id || null;
+    // [2025-04-06 20:50] Capture job_type from the message
+    const jobType = message.job_type || message.type || null;
+
+    // Log the completion with job type
+    console.log(`[DEBUG] Job completed: ${jobId} (type: ${jobType || 'unknown'}) by worker ${workerId}, client: ${clientId}`);
+    addLogEntry(`Job completed: ${jobId} (Type: ${jobType || 'unknown'}, Client: ${clientId || 'unknown'})`, 'success');
+
+    // Update the job in state or create if it doesn't exist
     if (jobId) {
-        // Create job if it doesn't exist yet (unlikely for completion, but just in case)
         if (!state.jobs[jobId]) {
-            console.log(`[DEBUG] Creating new completed job in state for ${jobId}`);
+            // Create a placeholder job if we don't have it yet
             state.jobs[jobId] = {
                 id: jobId,
                 worker_id: workerId,
+                client_id: clientId, // [2025-04-06 20:40] Store client ID
+                job_type: jobType, // [2025-04-06 20:50] Store job type
                 status: 'completed',
                 progress: 100,
-                createdAt: message.createdAt || message.created_at || (Date.now() - 60000), // Default to 1 minute ago if no creation time
-                completedAt: message.completedAt || message.completed_at || Date.now(),
+                result: result,
+                createdAt: Date.now() - 1000, // Assume it was created a second ago
+                completedAt: Date.now(),
                 updated_at: Date.now(),
-                duration: message.duration || null,
-                result: message.result || null
+                isPlaceholder: true, // Mark as placeholder for future updates
+                source_update: source
             };
+            console.log(`[DEBUG] Created placeholder completed job for ${jobId} with type ${jobType || 'unknown'}`);
         } else {
-            // Log before update
-            console.log(`[DEBUG] Before completion update, job status:`, state.jobs[jobId].status);
-            
-            // Update job properties
+            // Update existing job
             state.jobs[jobId].status = 'completed';
             state.jobs[jobId].progress = 100;
+            state.jobs[jobId].result = result;
+            state.jobs[jobId].completedAt = Date.now();
             state.jobs[jobId].updated_at = Date.now();
-            state.jobs[jobId].completedAt = message.completedAt || message.completed_at || Date.now();
-            
-            // Store the result if provided
-            if (message.result) {
-                state.jobs[jobId].result = message.result;
+            state.jobs[jobId].worker_id = workerId;
+            state.jobs[jobId].source_update = source;
+
+            // [2025-04-06 20:40] Update client_id if it's provided and not already set
+            if (clientId && !state.jobs[jobId].client_id) {
+                state.jobs[jobId].client_id = clientId;
+                console.log(`[DEBUG] Updated client_id for job ${jobId} to ${clientId}`);
             }
             
-            // Store the duration if provided, otherwise calculate it
-            if (message.duration) {
-                state.jobs[jobId].duration = message.duration;
-            } else if (state.jobs[jobId].createdAt || state.jobs[jobId].created_at) {
-                const startTime = state.jobs[jobId].createdAt || state.jobs[jobId].created_at;
-                const endTime = state.jobs[jobId].completedAt || state.jobs[jobId].completed_at || Date.now();
-                state.jobs[jobId].duration = Math.floor((endTime - startTime) / 1000); // Duration in seconds
+            // [2025-04-06 20:50] Update job_type if it's provided and not already set
+            if (jobType && (!state.jobs[jobId].job_type && !state.jobs[jobId].type)) {
+                state.jobs[jobId].job_type = jobType;
+                console.log(`[DEBUG] Updated job_type for job ${jobId} to ${jobType}`);
             }
-            
-            console.log(`[DEBUG] Job ${jobId} marked as completed with duration: ${state.jobs[jobId].duration}s`);
+
+            // Calculate and store job duration if we have a creation time
+            if (state.jobs[jobId].createdAt) {
+                const duration = Date.now() - state.jobs[jobId].createdAt;
+                state.jobs[jobId].duration = duration;
+                console.log(`[DEBUG] Job ${jobId} completed in ${duration}ms`);
+            }
+
+            console.log(`[DEBUG] Updated job ${jobId} to completed status`);
         }
-        
-        // Update worker's current_job_id if needed
-        if (workerId && state.workers[workerId] && state.workers[workerId].current_job_id === jobId) {
-            console.log(`[DEBUG] Clearing worker ${workerId} current_job_id as job is completed`);
-            state.workers[workerId].current_job_id = null;
+
+        // If this worker is assigned to this job, update its status
+        if (workerId && state.workers[workerId]) {
+            if (state.workers[workerId].current_job_id === jobId) {
+                state.workers[workerId].current_job_id = null;
+                state.workers[workerId].status = 'idle';
+                console.log(`[DEBUG] Updated worker ${workerId} status to idle`);
+            }
         }
-        
-        // Log after update
-        console.log(`[DEBUG] After completion update, job:`, state.jobs[jobId]);
+
+        // Show notification for job completion
+        showNotification(`Job ${jobId} completed successfully`, 'success');
     } else {
-        console.log(`[DEBUG] Job completion update missing job ID`, message);
+        console.log(`[DEBUG] Job completion message missing job ID`, message);
     }
-    
+
     // Update the UI
     updateUI();
 }
@@ -1265,6 +1331,7 @@ function handleJobCompleted(message, source = 'unknown') {
  * @param {Object} message - Parsed job progress message
  * @param {string} source - Source of the message ('monitor' or 'client')
  * [2025-04-06 19:32] Enhanced to prioritize client updates and preserve detailed job information
+ * [2025-04-06 20:40] Added client_id capture from monitor messages
  */
 function handleJobProgress(message, source = 'unknown') {
     // [2025-04-06 19:23] Fixed property name mismatch between camelCase and snake_case
@@ -1273,9 +1340,11 @@ function handleJobProgress(message, source = 'unknown') {
     const workerId = message.workerId || message.worker_id;
     const progress = message.progress || 0;
     const status = message.status || 'processing';
+    // [2025-04-06 20:40] Capture client_id from the message
+    const clientId = message.client_id || null;
     
-    console.log(`[DEBUG] Job progress update received with jobId: ${jobId}, workerId: ${workerId}, source: ${source}`);
-    addLogEntry(`Job progress update: ${jobId} - ${progress}%`, 'info');
+    console.log(`[DEBUG] Job progress update received with jobId: ${jobId}, workerId: ${workerId}, clientId: ${clientId}, source: ${source}`);
+    addLogEntry(`Job progress update: ${jobId} - ${progress}% (Client: ${clientId || 'unknown'})`, 'info');
     
     // Update the job in state
     if (jobId) {
@@ -1285,6 +1354,7 @@ function handleJobProgress(message, source = 'unknown') {
             state.jobs[jobId] = {
                 id: jobId,
                 worker_id: workerId,
+                client_id: clientId, // [2025-04-06 20:40] Store client ID
                 status: status,
                 progress: progress,
                 createdAt: Date.now(),
@@ -1295,39 +1365,22 @@ function handleJobProgress(message, source = 'unknown') {
             // Log before update
             console.log(`[DEBUG] Before update, job status:`, state.jobs[jobId].status);
             
-            // [2025-04-06 19:32] Special handling for client updates vs monitor updates
-            // Client updates have more detailed information and should be prioritized
-            if (source === 'client' || state.jobs[jobId].isPlaceholder) {
-                // Client updates or updates to placeholder jobs should always be applied
-                console.log(`[DEBUG] Applying client update or updating placeholder job ${jobId}`);
-                
-                // Update job properties
-                state.jobs[jobId].progress = progress;
-                state.jobs[jobId].updated_at = Date.now();
-                state.jobs[jobId].worker_id = workerId;
-                state.jobs[jobId].source_update = source;
-                
-                // If this was a placeholder, it's not anymore since we have real data
-                if (state.jobs[jobId].isPlaceholder) {
-                    delete state.jobs[jobId].isPlaceholder;
-                }
-            } else {
-                // For monitor updates to non-placeholder jobs, only update if we don't have recent client data
-                const lastUpdateTime = state.jobs[jobId].updated_at || 0;
-                const now = Date.now();
-                const timeSinceLastUpdate = now - lastUpdateTime;
-                
-                // Only apply monitor updates if it's been more than 5 seconds since the last client update
-                // or if the previous update wasn't from a client
-                if (timeSinceLastUpdate > 5000 || state.jobs[jobId].source_update !== 'client') {
-                    console.log(`[DEBUG] Applying monitor update to job ${jobId} after ${timeSinceLastUpdate}ms`);
-                    state.jobs[jobId].progress = progress;
-                    state.jobs[jobId].updated_at = now;
-                    state.jobs[jobId].worker_id = workerId;
-                    state.jobs[jobId].source_update = source;
-                } else {
-                    console.log(`[DEBUG] Skipping monitor update to job ${jobId}, preserving client data`);
-                }
+            // [2025-04-06 20:40] Always apply monitor updates since we're only using monitor connection
+            console.log(`[DEBUG] Applying monitor update to job ${jobId}`);
+            state.jobs[jobId].progress = progress;
+            state.jobs[jobId].updated_at = Date.now();
+            state.jobs[jobId].worker_id = workerId;
+            state.jobs[jobId].source_update = source;
+            
+            // [2025-04-06 20:40] Update client_id if it's provided and not already set
+            if (clientId && !state.jobs[jobId].client_id) {
+                state.jobs[jobId].client_id = clientId;
+                console.log(`[DEBUG] Updated client_id for job ${jobId} to ${clientId}`);
+            }
+            
+            // If this was a placeholder, it's not anymore since we have real data
+            if (state.jobs[jobId].isPlaceholder) {
+                delete state.jobs[jobId].isPlaceholder;
             }
             
             // [2025-04-06 20:10] Ensure job is marked as active/processing when we get progress updates
@@ -1997,8 +2050,10 @@ function updateUI() {
             const createdAtStr = formatDateTime(job.created_at ? new Date(job.created_at * 1000) : null);
             
             // Create the job row
+            // [2025-04-06 20:40] Added client_id column
             row.innerHTML = `
                 <td>${job.id}</td>
+                <td>${job.client_id || 'N/A'}</td>
                 <td>${job.job_type || job.type || ''}</td>
                 <td><span class="status ${statusClass}">${displayStatus}</span></td>
                 <td>${displayPriority}</td>
@@ -2087,9 +2142,11 @@ function updateUI() {
                 finishedTime = formatDateTime(job.updated_at);
             }
             
-            // Create the job row with worker ID column
+            // Create the job row with client ID and worker ID columns
+            // [2025-04-06 20:40] Added client_id column
             row.innerHTML = `
                 <td title="${job.id}">${job.id.substring(0, 8)}...</td>
+                <td>${job.client_id || 'N/A'}</td>
                 <td>${job.worker_id || job.workerId || 'N/A'}</td>
                 <td>${job.job_type || job.type || ''}</td>
                 <td><span class="status ${statusClass}">${statusText}</span></td>

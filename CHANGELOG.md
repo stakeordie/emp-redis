@@ -8,6 +8,15 @@ All notable changes to the EMP Redis project will be documented in this file.
 - [2025-04-06 20:21] Enhanced Redis hub to send all job progress information to monitors, including client IDs
 - [2025-04-06 20:21] Modified job completion notifications to also be sent to all monitors with client ID information
 
+## [0.1.1] - 2025-04-06
+
+### Added
+- [2025-04-06 21:00] Simple Redis Monitor: Added client ID column to job tables and enhanced connection handling
+
+### Fixed
+- [2025-04-06 21:00] Simple Redis Monitor: Fixed job type display in finished jobs table by properly capturing and preserving job type information in all job status handlers
+- [2025-04-06 21:00] Simple Redis Monitor: Restored proper connection handling for both monitor and client connections
+
 ## [0.1.0] - 2025-04-06
 
 ### Added
