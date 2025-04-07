@@ -435,19 +435,15 @@
                     <input type="password" id="auth-token" value="3u8sdj5389fj3kljsf90u" placeholder="Auth Token">
                 </div>
             </div>
-            <!-- Connection info display - will show IDs after connection -->
+            <!-- Connection info display - simplified to show connection status -->
             <div class="form-row" id="connection-info" style="display: none;">
                 <div class="connection-info-box">
-                    <span class="connection-info-label">Monitor ID:</span>
-                    <span id="monitor-id-display">Not connected</span>
+                    <span class="connection-info-label">Monitor:</span>
+                    <span id="monitor-id-display" style="color: #4CAF50; font-weight: bold;">Connected</span>
                 </div>
                 <div class="connection-info-box">
-                    <span class="connection-info-label">Client ID:</span>
-                    <span id="client-id-display">Not connected</span>
-                </div>
-                <div class="connection-info-box">
-                    <span class="connection-info-label">Worker ID:</span>
-                    <span id="worker-id-display">Not connected</span>
+                    <span class="connection-info-label">Client:</span>
+                    <span id="client-id-display" style="color: #4CAF50; font-weight: bold;">Connected</span>
                 </div>
             </div>
             <div class="form-row">
@@ -481,118 +477,332 @@
             <div id="active-jobs-count" class="stat-value">0</div>
         </div>
         <div class="stat-card">
-            <div class="stat-label">Completed Jobs</div>
-            <div id="completed-jobs-count" class="stat-value">0</div>
+            <div class="stat-label">Job History</div>
+            <div class="stat-value">
+                <a href="#" id="job-history-link"
+                    onclick="alert('Job History page will be implemented in a future update.')"
+                    style="text-decoration: none; color: #2196F3;">View</a>
+            </div>
         </div>
     </div>
+
+    <!-- [2025-04-06 19:05] Job Queue and Submission Section - Two Column Layout -->
+    <div class="job-management-row">
+        <!-- Left Column -->
+
+        <div class="card job-submission-column">
+            <h2>Submit Job</h2>
+            <div class="job-submission-container">
+                <!-- Priority buttons -->
+                <div class="priority-buttons">
+                    <div class="priority-label">Priority:</div>
+                    <button class="priority-btn" data-priority="0">Standard (0)</button>
+                    <button class="priority-btn" data-priority="5">Priority (5)</button>
+                    <button class="priority-btn" data-priority="10">Emergency (10)</button>
+                    <input type="hidden" id="job-priority" value="5">
+                </div>
+
+                <!-- Job details -->
+                <div class="job-details">
+                    <div class="form-group compact">
+                        <label for="job-type">Job Type</label>
+                        <input type="text" id="job-type" value="simulation">
+                    </div>
+                    <div class="form-group compact">
+                        <label for="job-payload">Payload (JSON)</label>
+                        <textarea id="job-payload" rows="3">{
+                            "3": {
+                              "inputs": {
+                                "seed": 1057618124930620,
+                                "steps": 20,
+                                "cfg": 8,
+                                "sampler_name": "euler",
+                                "scheduler": "normal",
+                                "denoise": 1,
+                                "model": [
+                                  "4",
+                                  0
+                                ],
+                                "positive": [
+                                  "6",
+                                  0
+                                ],
+                                "negative": [
+                                  "7",
+                                  0
+                                ],
+                                "latent_image": [
+                                  "5",
+                                  0
+                                ]
+                              },
+                              "class_type": "KSampler",
+                              "_meta": {
+                                "title": "KSampler"
+                              }
+                            },
+                            "4": {
+                              "inputs": {
+                                "ckpt_name": "sd_xl_base_1.0_0.9vae.safetensors"
+                              },
+                              "class_type": "CheckpointLoaderSimple",
+                              "_meta": {
+                                "title": "Load Checkpoint"
+                              }
+                            },
+                            "5": {
+                              "inputs": {
+                                "width": 1024,
+                                "height": 1024,
+                                "batch_size": 1
+                              },
+                              "class_type": "EmptyLatentImage",
+                              "_meta": {
+                                "title": "Empty Latent Image"
+                              }
+                            },
+                            "6": {
+                              "inputs": {
+                                "text": "dog and sdeal",
+                                "clip": [
+                                  "4",
+                                  1
+                                ]
+                              },
+                              "class_type": "CLIPTextEncode",
+                              "_meta": {
+                                "title": "CLIP Text Encode (Prompt)"
+                              }
+                            },
+                            "7": {
+                              "inputs": {
+                                "text": "text, watermark",
+                                "clip": [
+                                  "4",
+                                  1
+                                ]
+                              },
+                              "class_type": "CLIPTextEncode",
+                              "_meta": {
+                                "title": "CLIP Text Encode (Prompt)"
+                              }
+                            },
+                            "8": {
+                              "inputs": {
+                                "samples": [
+                                  "3",
+                                  0
+                                ],
+                                "vae": [
+                                  "4",
+                                  2
+                                ]
+                              },
+                              "class_type": "VAEDecode",
+                              "_meta": {
+                                "title": "VAE Decode"
+                              }
+                            },
+                            "9": {
+                              "inputs": {
+                                "filename_prefix": "ComfyUI",
+                                "images": [
+                                  "8",
+                                  0
+                                ]
+                              },
+                              "class_type": "SaveImage",
+                              "_meta": {
+                                "title": "Save Image"
+                              }
+                            }
+                          }</textarea>
+                    </div>
+                    <button id="submit-job-btn" class="btn-submit">Submit Job</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column -->
+
+        <div class="card job-queue-column">
+            <h2>Job Queue</h2>
+            <!-- [2025-04-06 18:59] Updated to only show queued jobs -->
+            <div id="jobs-table-container">
+                <table id="jobs-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Job Type</th>
+                            <th>Status</th>
+                            <th>Priority</th>
+                            <th>Position</th>
+                            <th>Created</th>
+                        </tr>
+                    </thead>
+                    <tbody id="jobs-table-body">
+                        <!-- Job rows will be added here dynamically -->
+                    </tbody>
+                </table>
+            </div>
+            <div id="no-jobs-message" class="hidden">
+                No queued jobs
+            </div>
+        </div>
+
+
+
+    </div>
+
+    <style>
+        /* [2025-04-06 19:05] Added styles for two-column job management layout */
+        .job-management-row {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 10px;
+        }
+
+        .job-queue-column {
+            flex: 3;
+            margin-bottom: 0;
+        }
+
+        .job-submission-column {
+            flex: 2;
+            margin-bottom: 0;
+        }
+
+        /* Responsive layout - stack on small screens */
+        @media (max-width: 768px) {
+            .job-management-row {
+                flex-direction: column;
+            }
+
+            .job-queue-column,
+            .job-submission-column {
+                width: 100%;
+                margin-bottom: 10px;
+            }
+        }
+    </style>
 
     <!-- Workers Section -->
     <div class="card">
         <h2>Connected Workers</h2>
-        <div id="workers-table-container">
-            <table id="workers-table">
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Status</th>
-                        <th>Accepting Jobs</th>
-                        <th>Connected Since</th>
-                        <th>Jobs Processed</th>
-                        <th>Capabilities</th>
-                    </tr>
-                </thead>
-                <tbody id="workers-table-body">
-                    <!-- Worker rows will be added here dynamically -->
-                </tbody>
-            </table>
+        <!-- [2025-04-06 18:59] Updated to use cards instead of table for workers -->
+        <div id="workers-container">
+            <!-- Worker cards will be added here dynamically -->
         </div>
         <div id="no-workers-message" class="hidden">
             No workers connected
         </div>
     </div>
 
-    <!-- Worker Simulation -->
-    <div class="card">
-        <h2>Worker Simulation</h2>
-        <div class="worker-simulation-container">
-            <div class="form-row">
-                <button id="subscribe-btn" class="btn-connect" disabled>Subscribe to Job Notifications</button>
-                <button id="unsubscribe-btn" class="btn-disconnect" disabled>Unsubscribe</button>
-            </div>
-            <div class="form-row">
-                <div class="worker-status">
-                    <span class="worker-status-label">Subscription Status:</span>
-                    <span id="subscription-status">Not subscribed</span>
-                </div>
-            </div>
-        </div>
-    </div>
+    <style>
+        /* [2025-04-06 18:59] Added styles for worker cards */
+        .worker-card {
+            background-color: white;
+            border-radius: 6px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            padding: 10px;
+            margin-bottom: 15px;
+        }
 
-    <!-- Job Submission -->
-    <div class="card">
-        <h2>Submit Job</h2>
-        <div class="job-submission-container">
-            <!-- Left column: Priority buttons -->
-            <div class="priority-buttons">
-                <div class="priority-label">Priority:</div>
-                <button class="priority-btn" data-priority="0">Standard (0)</button>
-                <button class="priority-btn" data-priority="5">Priority (5)</button>
-                <button class="priority-btn" data-priority="10">Emergency (10)</button>
-                <input type="hidden" id="job-priority" value="5">
-            </div>
+        .worker-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #eee;
+        }
 
-            <!-- Right column: Job details -->
-            <div class="job-details">
-                <div class="form-group compact">
-                    <label for="job-type">Job Type</label>
-                    <input type="text" id="job-type" value="simulation">
-                </div>
-                <div class="form-group compact">
-                    <label for="job-payload">Payload (JSON)</label>
-                    <textarea id="job-payload" rows="3">{
-                        "test": true,
-                        "message": "This is a test job",
-                        "timestamp": 1616161616
-                    }</textarea>
-                </div>
-                <button id="submit-job-btn" class="btn-submit">Submit Job</button>
-            </div>
-        </div>
-    </div>
+        .worker-title {
+            font-weight: bold;
+            font-size: 1rem;
+        }
 
-    <!-- Jobs Section -->
-    <div class="card">
-        <h2>Job Queue</h2>
-        <div id="jobs-table-container">
-            <table id="jobs-table">
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Job Type</th>
-                        <th>Status</th>
-                        <th>Priority</th>
-                        <th>Position</th>
-                        <th>Progress</th>
-                        <th>Raw Created At</th>
-                        <th>Created</th>
-                        <th>Updated</th>
-                    </tr>
-                </thead>
-                <tbody id="jobs-table-body">
-                    <!-- Job rows will be added here dynamically -->
-                </tbody>
-            </table>
-        </div>
-        <div id="no-jobs-message" class="hidden">
-            No active jobs
-        </div>
-    </div>
+        .worker-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .worker-info-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .worker-info-label {
+            font-size: 0.7rem;
+            color: #666;
+            text-transform: uppercase;
+        }
+
+        .worker-info-value {
+            font-size: 0.9rem;
+        }
+
+        .worker-jobs-table {
+            width: 100%;
+            margin-top: 10px;
+            font-size: 0.8rem;
+        }
+
+        .worker-jobs-table th {
+            text-align: left;
+            padding: 4px;
+            background-color: #f8f9fa;
+            font-size: 0.75rem;
+        }
+
+        .worker-jobs-table td {
+            padding: 4px;
+            border-top: 1px solid #eee;
+        }
+
+        .worker-jobs-empty {
+            font-style: italic;
+            color: #999;
+            text-align: center;
+            padding: 10px;
+        }
+    </style>
 
     <!-- Logs Section -->
     <div class="card">
         <h2>Logs</h2>
         <div id="logs" class="logs">
             <!-- Log entries will be added here dynamically -->
+        </div>
+    </div>
+
+    <!-- [2025-04-06 19:40] Finished Jobs Section -->
+    <div class="card">
+        <h2>Finished Jobs</h2>
+        <div id="finished-jobs-container">
+            <table id="finished-jobs-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Worker ID</th>
+                        <th>Job Type</th>
+                        <th>Status</th>
+                        <th>Progress</th>
+                        <th>Duration</th>
+                        <th>Started</th>
+                        <th>Finished</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="finished-jobs-table-body">
+                    <!-- Finished job rows will be added here dynamically -->
+                </tbody>
+            </table>
+        </div>
+        <div id="no-finished-jobs-message" class="hidden">
+            No finished jobs
         </div>
     </div>
 

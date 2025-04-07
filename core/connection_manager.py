@@ -1259,7 +1259,7 @@ class ConnectionManager(ConnectionManagerInterface):
         return successful_sends
     
     async def broadcast_job_notification(self, job_notification: BaseMessage) -> int:
-        """Broadcast job notification to subscribed clients only
+        """Broadcast job notification to subscribed clients and all monitors
         
         Args:
             job_notification: The notification to broadcast as a BaseMessage object
@@ -1270,9 +1270,9 @@ class ConnectionManager(ConnectionManagerInterface):
         # Note: This method now only accepts BaseMessage objects to ensure type consistency
         # All message objects in the system should inherit from BaseMessage
         successful_sends = 0
+        client_id = None
         
-        # Only send job completion notifications to subscribed clients, not to workers
-        # This prevents workers from receiving completion messages for jobs they didn't complete
+        # Send job completion notifications to subscribed clients
         if hasattr(job_notification, 'job_id'):
             job_id = job_notification.job_id
             
@@ -1288,14 +1288,48 @@ class ConnectionManager(ConnectionManagerInterface):
                 else:
                     logger.debug(f"[JOB-NOTIFY] Failed to send job notification to client {client_id}")
             else:
-                logger.debug(f"[JOB-NOTIFY] No clients subscribed to job {job_id}, skipping notification")
+                logger.debug(f"[JOB-NOTIFY] No clients subscribed to job {job_id}, skipping client notification")
+                
+            # Forward to all monitors regardless of client subscription status
+            if self.monitor_connections:
+                # Create a copy of the notification with client_id added
+                # We need to convert to dict first to add the client_id field
+                if hasattr(job_notification, 'model_dump'):
+                    # Pydantic v2
+                    notification_dict = job_notification.model_dump()
+                elif hasattr(job_notification, 'dict'):
+                    # Pydantic v1
+                    notification_dict = job_notification.dict()
+                else:
+                    # Fallback
+                    notification_dict = {"job_id": job_id}
+                    if hasattr(job_notification, "result"):
+                        notification_dict["result"] = job_notification.result
+                    if hasattr(job_notification, "message"):
+                        notification_dict["message"] = job_notification.message
+                
+                # Add client_id to the message for monitors
+                notification_dict["client_id"] = client_id
+                
+                # Send to all monitors
+                monitor_count = 0
+                for monitor_id, websocket in list(self.monitor_connections.items()):
+                    try:
+                        await websocket.send_text(json.dumps(notification_dict))
+                        monitor_count += 1
+                        successful_sends += 1
+                    except Exception as e:
+                        logger.warning(f"[JOB-NOTIFY] Failed to send to monitor {monitor_id}: {str(e)}")
+                
+                if monitor_count > 0:
+                    logger.debug(f"[JOB-NOTIFY] Forwarded job notification for job {job_id} to {monitor_count} monitors")
         else:
             logger.warning(f"[JOB-NOTIFY] Job notification missing job_id attribute, cannot route to subscribers")
         
         return successful_sends
         
     async def forward_job_progress(self, progress_message: BaseMessage) -> bool:
-        """Forward job progress update from a worker to the subscribed client
+        """Forward job progress update from a worker to the subscribed client and all monitors
         
         Args:
             progress_message: The job progress update message (UpdateJobProgressMessage)
@@ -1311,32 +1345,68 @@ class ConnectionManager(ConnectionManagerInterface):
                 return False
                 
             job_id = progress_message.job_id
+            client_id = None
+            client_success = False
             
             # Check if any client is subscribed to this job
-            if job_id not in self.job_subscriptions:
+            if job_id in self.job_subscriptions:
+                # Get the client ID subscribed to this job
+                client_id = self.job_subscriptions[job_id]
+                
+                # Check if the client is still connected
+                if client_id not in self.client_connections:
+                    logger.warning(f"[connection_manager.py forward_job_progress 4] Client {client_id} subscribed to job {job_id} is no longer connected")
+                    # Remove the subscription
+                    del self.job_subscriptions[job_id]
+                else:
+                    # Forward the progress update directly to the client
+                    # We use the same message format (UpdateJobProgressMessage) for consistency
+                    client_success = await self.send_to_client(client_id, progress_message)
+                    
+                    if client_success:
+                        logger.debug(f"[JOB-PROGRESS] Forwarded progress update for job {job_id} to client {client_id}")
+                    else:
+                        logger.warning(f"[JOB-PROGRESS] Failed to forward progress update for job {job_id} to client {client_id}")
+            else:
                 logger.debug(f"[connection_manager.py forward_job_progress 3] No clients subscribed to job {job_id}")
-                return False
-                
-            # Get the client ID subscribed to this job
-            client_id = self.job_subscriptions[job_id]
             
-            # Check if the client is still connected
-            if client_id not in self.client_connections:
-                logger.warning(f"[connection_manager.py forward_job_progress 4] Client {client_id} subscribed to job {job_id} is no longer connected")
-                # Remove the subscription
-                del self.job_subscriptions[job_id]
-                return False
+            # Forward to all monitors regardless of client subscription status
+            monitor_success = False
+            if self.monitor_connections:
+                # Create a copy of the progress message with client_id added
+                # We need to convert to dict first to add the client_id field
+                if hasattr(progress_message, 'model_dump'):
+                    # Pydantic v2
+                    progress_dict = progress_message.model_dump()
+                elif hasattr(progress_message, 'dict'):
+                    # Pydantic v1
+                    progress_dict = progress_message.dict()
+                else:
+                    # Fallback
+                    progress_dict = {"job_id": job_id}
+                    if hasattr(progress_message, "progress"):
+                        progress_dict["progress"] = progress_message.progress
+                    if hasattr(progress_message, "message"):
+                        progress_dict["message"] = progress_message.message
                 
-            # Forward the progress update directly to the client
-            # We use the same message format (UpdateJobProgressMessage) for consistency
-            success = await self.send_to_client(client_id, progress_message)
+                # Add client_id to the message for monitors
+                progress_dict["client_id"] = client_id
+                
+                # Send to all monitors
+                monitor_count = 0
+                for monitor_id, websocket in list(self.monitor_connections.items()):
+                    try:
+                        await websocket.send_text(json.dumps(progress_dict))
+                        monitor_count += 1
+                    except Exception as e:
+                        logger.warning(f"[connection_manager.py forward_job_progress] Failed to send to monitor {monitor_id}: {str(e)}")
+                
+                monitor_success = monitor_count > 0
+                if monitor_success:
+                    logger.debug(f"[JOB-PROGRESS] Forwarded progress update for job {job_id} to {monitor_count} monitors")
             
-            # if success:
-            #     logger.info(f"[JOB-PROGRESS] Forwarded progress update for job {job_id} to client {client_id}")
-            # else:
-            #     logger.warning(f"[JOB-PROGRESS] Failed to forward progress update for job {job_id} to client {client_id}")
-                
-            return success
+            # Return true if either client or monitor forwarding was successful
+            return client_success or monitor_success
             
         except Exception as e:
             logger.error(f"[connection_manager.py forward_job_progress 5] Error forwarding job progress update: {str(e)}")
