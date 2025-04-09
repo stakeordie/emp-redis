@@ -2145,8 +2145,9 @@ function updateUI() {
             
             // Create the job row
             // [2025-04-06 20:40] Added client_id column
+            // 2025-04-09 13:53: Modified to display full job ID without truncation
             row.innerHTML = `
-                <td>${job.id}</td>
+                <td class="job-id-cell" title="${job.id}">${job.id}</td>
                 <td>${job.client_id || 'N/A'}</td>
                 <td>${job.job_type || job.type || ''}</td>
                 <td><span class="status ${statusClass}">${displayStatus}</span></td>
@@ -2239,7 +2240,8 @@ function updateUI() {
             // Create the job row with client ID and worker ID columns
             // [2025-04-06 20:40] Added client_id column
             row.innerHTML = `
-                <td title="${job.id}">${job.id.substring(0, 8)}...</td>
+                <!-- 2025-04-09 13:53: Modified to display full job ID without truncation -->
+                <td class="job-id-cell" title="${job.id}">${job.id}</td>
                 <td>${job.client_id || 'N/A'}</td>
                 <td>${job.worker_id || job.workerId || 'N/A'}</td>
                 <td>${job.job_type || job.type || ''}</td>

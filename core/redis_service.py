@@ -209,30 +209,19 @@ class RedisService(RedisServiceInterface):
         """
         job_key = f"{JOB_PREFIX}{job_id}"
         
-        # 2025-04-09 13:39: Check if job already exists to prevent race conditions
+        # 2025-04-09 14:14: Always generate a unique job ID when a collision is detected
         if self.client.exists(job_key):
             # Job with this ID already exists, log the issue
-            logger.warning(f"[redis_service.py add_job()] Job ID collision detected: {job_id}. Job already exists.")
+            logger.warning(f"[redis_service.py add_job()] Job ID collision detected: {job_id}. Generating new unique ID.")
             
-            # Get the existing job data to return
-            existing_job = self.client.hgetall(job_key)
-            
-            # Convert Redis response to a proper dictionary
-            if existing_job:
-                # Convert byte keys/values to strings if needed
-                existing_job = {k.decode('utf-8') if isinstance(k, bytes) else k: 
-                               v.decode('utf-8') if isinstance(v, bytes) else v 
-                               for k, v in existing_job.items()}
-                
-                logger.info(f"[redis_service.py add_job()] Returning existing job data for job_id: {job_id}")
-                return existing_job  # type: ignore # We're returning a Dict[str, str] which is compatible with Dict[str, Any]
-            
-            # If we couldn't get the existing job data, generate a new unique ID
-            # This is a fallback and shouldn't normally happen
+            # Generate a new unique ID by appending a UUID
             new_job_id = f"{job_id}-{uuid.uuid4()}"
-            logger.warning(f"[redis_service.py add_job()] Generated new job_id: {new_job_id} to avoid collision")
+            logger.info(f"[redis_service.py add_job()] Generated new job_id: {new_job_id} to avoid collision")
             job_id = new_job_id
             job_key = f"{JOB_PREFIX}{job_id}"
+            
+            # Log that we're creating a new job with the unique ID
+            logger.info(f"[redis_service.py add_job()] Creating new job with unique ID: {job_id}")
         
         # Ensure job_request_payload is a JSON string
         if isinstance(job_request_payload, dict):

@@ -407,24 +407,34 @@
             margin-bottom: 3px;
             font-size: 0.9rem;
         }
-        /* 2025-04-09 13:46: Improved job ID column display */
+        /* 2025-04-09 13:55: Adjusted job ID column to a more reasonable size */
         .job-id-column {
-            min-width: 400px;
-            max-width: 400px;
-            width: 400px;
+            width: 250px !important;
         }
         
-        /* Ensure job IDs are fully visible */
-        td:first-child {
-            min-width: 400px;
-            max-width: 400px;
-            width: 400px;
-            overflow: visible;
-            white-space: normal;
-            word-break: break-all;
-            font-family: monospace;
-            font-size: 0.8rem;
-            text-align: left;
+        /* Style for job ID cells */
+        .job-id-cell, table td:first-child {
+            width: 250px !important;
+            max-width: 250px !important;
+            overflow: visible !important;
+            white-space: normal !important;
+            word-break: break-all !important;
+            font-family: monospace !important;
+            font-size: 0.8rem !important;
+            text-align: left !important;
+            padding-right: 10px !important;
+            display: table-cell !important;
+        }
+        
+        /* Override any table styles that might be causing truncation */
+        table {
+            table-layout: fixed !important;
+        }
+        
+        /* Ensure text doesn't get cut off */
+        #jobs-table-body td:first-child,
+        #finished-jobs-table-body td:first-child {
+            text-overflow: clip !important;
         }
     </style>
 </head>
