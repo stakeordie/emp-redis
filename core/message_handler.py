@@ -193,8 +193,13 @@ class MessageHandler(MessageHandlerInterface):
             client_id: Client identifier
             message: Job submission message
         """
-        # Generate job ID if not provided
-        job_id = f"job-{uuid.uuid4()}"
+        # Check if message_id is present in the request, use it as job_id if it exists
+        # Otherwise generate a new UUID
+        if 'message_id' in message and message['message_id']:
+            job_id = message['message_id']
+            logger.info(f"[message_handler.py handle_submit_job()] Using message_id as job_id: {job_id}")
+        else:
+            job_id = f"job-{uuid.uuid4()}"
 
         # Extract data directly from the message dictionary
         # Using .get() with default values to handle missing keys

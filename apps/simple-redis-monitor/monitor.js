@@ -1297,11 +1297,20 @@ function handleJobCompleted(message, source = 'unknown') {
                 console.log(`[DEBUG] Updated job_type for job ${jobId} to ${jobType}`);
             }
 
-            // Calculate and store job duration if we have a creation time
-            if (state.jobs[jobId].createdAt) {
-                const duration = Date.now() - state.jobs[jobId].createdAt;
-                state.jobs[jobId].duration = duration;
-                console.log(`[DEBUG] Job ${jobId} completed in ${duration}ms`);
+            // [2025-04-07 23:47] Calculate and store job duration based on processing start time
+            // Use processingStartedAt (when job was accepted by worker) instead of createdAt
+            // This provides a more accurate measure of actual processing time
+            const startTime = state.jobs[jobId].processingStartedAt 
+                ? new Date(state.jobs[jobId].processingStartedAt).getTime()
+                : state.jobs[jobId].createdAt;
+
+            if (startTime) {
+                const durationMs = Date.now() - startTime;
+                // Convert to seconds for the formatDuration function
+                const durationSec = Math.floor(durationMs / 1000);
+                state.jobs[jobId].duration = durationSec;
+                const startType = state.jobs[jobId].processingStartedAt ? "processing start" : "creation";
+                console.log(`[DEBUG] Job ${jobId} completed in ${durationSec}s (${durationMs}ms) from ${startType}`);
             }
 
             console.log(`[DEBUG] Updated job ${jobId} to completed status`);
@@ -1551,7 +1560,7 @@ function submitJob() {
     try {
         // Get job details from form
         const jobType = elements.jobType.value;
-        
+        const messageId = document.getElementById('message-id').value.trim();
         const priority = parseInt(elements.jobPriority.value, 10);
         
         let payload;
@@ -1567,8 +1576,13 @@ function submitJob() {
         // Create submit job message using Messages class
         const message = Messages.createSubmitJobMessage(jobType, priority, payload);
         
-        // Add a message ID for tracking
-        message.message_id = `job-submit-${Date.now()}`;
+        // Add a message ID for tracking - use custom message_id if provided, otherwise generate one
+        message.message_id = messageId || `job-submit-${Date.now()}`;
+        
+        // Add debug log for message_id usage
+        if (messageId) {
+            addLogEntry(`Using custom message_id: ${messageId}`, 'info');
+        }
         
         // Debug logging
         console.log('Submitting job:', message);
