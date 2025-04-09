@@ -1338,7 +1338,7 @@ class ConnectionManager(ConnectionManagerInterface):
             bool: True if the update was successfully forwarded, False otherwise
         """
         try:
-            #logger.debug(f"[connection_manager.py forward_job_progress 1] Forwarding progress update: {progress_message}")
+            logger.debug(f"[connection_manager.py forward_job_progress()] Forwarding progress update: {progress_message}")
             # Extract job_id from the message
             if not hasattr(progress_message, 'job_id'):
                 logger.warning(f"[connection_manager.py forward_job_progress()] Message does not contain job_id: {progress_message}")
