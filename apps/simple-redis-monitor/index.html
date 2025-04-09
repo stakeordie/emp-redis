@@ -407,6 +407,25 @@
             margin-bottom: 3px;
             font-size: 0.9rem;
         }
+        /* 2025-04-09 13:46: Improved job ID column display */
+        .job-id-column {
+            min-width: 400px;
+            max-width: 400px;
+            width: 400px;
+        }
+        
+        /* Ensure job IDs are fully visible */
+        td:first-child {
+            min-width: 400px;
+            max-width: 400px;
+            width: 400px;
+            overflow: visible;
+            white-space: normal;
+            word-break: break-all;
+            font-family: monospace;
+            font-size: 0.8rem;
+            text-align: left;
+        }
     </style>
 </head>
 
@@ -623,6 +642,17 @@
                           }</textarea>
                     </div>
                     <button id="submit-job-btn" class="btn-submit">Submit Job</button>
+                    
+                    <!-- 2025-04-09 13:41: Added batch submit section for testing race conditions -->
+                    <div class="batch-submit-section">
+                        <h3>Batch Submit (Testing)</h3>
+                        <div class="form-group compact">
+                            <label for="batch-count">Number of Jobs</label>
+                            <input type="number" id="batch-count" min="2" max="20" value="5">
+                        </div>
+                        <button id="batch-submit-btn" class="btn-submit">Batch Submit</button>
+                        <div id="batch-results" class="batch-results"></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -636,7 +666,7 @@
                 <table id="jobs-table">
                     <thead>
                         <tr>
-                            <th>ID</th>
+                            <th class="job-id-column">Job ID</th>
                             <th>Client ID</th>
                             <th>Job Type</th>
                             <th>Status</th>
@@ -790,7 +820,7 @@
             <table id="finished-jobs-table">
                 <thead>
                     <tr>
-                        <th>ID</th>
+                        <th class="job-id-column">Job ID</th>
                         <th>Client ID</th>
                         <th>Worker ID</th>
                         <th>Job Type</th>

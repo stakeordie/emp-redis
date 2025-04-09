@@ -106,6 +106,19 @@ function updateWebSocketUrl() {
 }
 
 /**
+ * Generate a UUID v4
+ * @returns {string} A random UUID
+ */
+function generateUUID() {
+    // 2025-04-09 13:35: Added UUID generation for message_id uniqueness
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+}
+
+/**
  * Initialize the application
  */
 function init() {
@@ -113,6 +126,8 @@ function init() {
     elements.connectBtn.addEventListener('click', connect);
     elements.disconnectBtn.addEventListener('click', disconnect);
     elements.submitJobBtn.addEventListener('click', submitJob);
+    // 2025-04-09 13:41: Added batch submit button event listener
+    document.getElementById('batch-submit-btn')?.addEventListener('click', batchSubmitJobs);
     elements.connectionType.addEventListener('change', updateWebSocketUrl);
     
     // Initialize WebSocket URL based on default connection type
@@ -1548,8 +1563,10 @@ function handleErrorMessage(message, source = 'unknown') {
 
 /**
  * Submit a job to Redis using the client connection
+ * @param {string} [customMessageId] - Optional custom message ID to use
+ * @returns {Promise<string|null>} - The message ID of the submitted job, or null if submission failed
  */
-function submitJob() {
+async function submitJob(customMessageId = null) {
     // Debug logging
     
     if (!state.clientConnected) {
@@ -1560,7 +1577,11 @@ function submitJob() {
     try {
         // Get job details from form
         const jobType = elements.jobType.value;
-        const messageId = document.getElementById('message-id').value.trim();
+        // If a custom message ID is provided, use it; otherwise get from the form
+        let userMessageId = customMessageId || document.getElementById('message-id').value.trim();
+        // Generate a UUID and concatenate with the user's message ID
+        const uuid = generateUUID();
+        const messageId = userMessageId ? `${userMessageId}-${uuid}` : `job-submit-${Date.now()}`;
         const priority = parseInt(elements.jobPriority.value, 10);
         
         let payload;
@@ -1576,12 +1597,13 @@ function submitJob() {
         // Create submit job message using Messages class
         const message = Messages.createSubmitJobMessage(jobType, priority, payload);
         
-        // Add a message ID for tracking - use custom message_id if provided, otherwise generate one
-        message.message_id = messageId || `job-submit-${Date.now()}`;
+        // Use the concatenated message_id (user input + UUID)
+        message.message_id = messageId;
         
         // Add debug log for message_id usage
-        if (messageId) {
-            addLogEntry(`Using custom message_id: ${messageId}`, 'info');
+        addLogEntry(`Using message_id: ${messageId}`, 'info');
+        if (userMessageId) {
+            addLogEntry(`(Based on user input: ${userMessageId})`, 'info');
         }
         
         // Debug logging
@@ -1605,19 +1627,77 @@ function submitJob() {
         
         // Update UI to give feedback
         const activeButton = document.querySelector('.priority-btn.active');
-        if (activeButton) {
-            // Flash the button to indicate submission
+        if (activeButton && !customMessageId) {
+            // Flash the button to indicate submission (only for manual submissions)
             activeButton.classList.add('btn-flash');
             setTimeout(() => {
                 activeButton.classList.remove('btn-flash');
             }, 500);
         }
         
-        addLogEntry(`Submitted job of type '${jobType}' with priority ${priority}`, 'success');
+        if (!customMessageId) {
+            addLogEntry(`Submitted job of type '${jobType}' with priority ${priority}`, 'success');
+        }
+        
+        // Return the message ID for tracking
+        return messageId;
     } catch (error) {
         console.error('Job submission error:', error);
-        addLogEntry(`Error submitting job: ${error.message}`, 'error');
+        if (!customMessageId) {
+            addLogEntry(`Error submitting job: ${error.message}`, 'error');
+        }
+        return null;
     }
+}
+
+/**
+ * 2025-04-09 13:41: Batch submit multiple jobs to test race conditions
+ * @param {Event} event - The click event
+ */
+async function batchSubmitJobs(event) {
+    if (event) event.preventDefault();
+    
+    if (!state.clientConnected) {
+        addLogEntry('Cannot submit batch: Client connection not active', 'error');
+        return;
+    }
+    
+    // Get the number of jobs to submit
+    const batchCount = parseInt(document.getElementById('batch-count').value, 10);
+    if (isNaN(batchCount) || batchCount < 1 || batchCount > 20) {
+        addLogEntry('Invalid batch count. Please enter a number between 1 and 20.', 'error');
+        return;
+    }
+    
+    const batchResults = document.getElementById('batch-results');
+    batchResults.innerHTML = `<div>Submitting ${batchCount} jobs simultaneously...</div>`;
+    
+    // Create a base message ID that will be made unique for each job
+    const baseMessageId = `batch-test-${Date.now()}`;
+    
+    // Create an array of promises for all job submissions
+    const submissionPromises = [];
+    const messageIds = [];
+    
+    // Submit all jobs nearly simultaneously
+    for (let i = 0; i < batchCount; i++) {
+        const uniqueMessageId = `${baseMessageId}-job-${i+1}`;
+        messageIds.push(uniqueMessageId);
+        submissionPromises.push(submitJob(uniqueMessageId));
+    }
+    
+    // Wait for all submissions to complete
+    const results = await Promise.all(submissionPromises);
+    
+    // Count successful submissions
+    const successCount = results.filter(Boolean).length;
+    
+    // Display results
+    let resultHTML = `<div class="batch-result-summary">Completed ${successCount}/${batchCount} submissions</div>`;
+    resultHTML += `<div class="batch-result-detail">Message IDs: ${messageIds.join(', ')}</div>`;
+    
+    batchResults.innerHTML = resultHTML;
+    addLogEntry(`Batch submission complete: ${successCount}/${batchCount} jobs submitted successfully`, 'info');
 }
 
 /**
