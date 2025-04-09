@@ -667,6 +667,7 @@ class ConnectionManager(ConnectionManagerInterface):
                 
             # Actually send the message
             await websocket.send_text(message_text)
+            logger.debug(f"[connection_manager.py send_to_client()] Sent message of type {message_type} to client {client_id}: {message_text}")
             return True
             
         except RuntimeError as e:
