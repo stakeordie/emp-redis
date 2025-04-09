@@ -255,6 +255,7 @@ class RedisService(RedisServiceInterface):
         pipe.exists(job_key)
         pipe.hset(job_key, mapping=job_data)
         results = pipe.execute()
+        logger.debug(f"[redis_service.py add_job()] Job added with ID: {job_data['id']}")
         
         # If the job already existed (first result is 1), log it
         if results[0] == 1:
@@ -283,6 +284,8 @@ class RedisService(RedisServiceInterface):
         
         # Notify idle workers about the new job
         self.notify_idle_workers_of_job(job_id, job_type, job_request_payload=job_request_payload_json)
+        
+
         
         # Return job data with position
         return job_data
@@ -349,8 +352,8 @@ class RedisService(RedisServiceInterface):
         if result:
             self.client.hset(job_key, "result", json.dumps(result))
         
+        logger.debug(f"[redis_service.py complete_job()] Job completed: {job_id}")
 
-        
         # Publish completion event
         self.publish_job_update(job_id, "completed", result=result, worker_id=worker_id)
         

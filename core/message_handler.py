@@ -197,9 +197,10 @@ class MessageHandler(MessageHandlerInterface):
         # Otherwise generate a new UUID
         if 'message_id' in message and message['message_id']:
             job_id = message['message_id']
-            logger.info(f"[message_handler.py handle_submit_job()] Using message_id as job_id: {job_id}")
+            logger.info(f"[message_handler.py handle_submit_job() {job_id}] Job Id set as message_id")
         else:
             job_id = f"job-{uuid.uuid4()}"
+            logger.info(f"[message_handler.py handle_submit_job() {job_id}] Job Id generated using UUID")
 
         # Extract data directly from the message dictionary
         # Using .get() with default values to handle missing keys
@@ -212,7 +213,7 @@ class MessageHandler(MessageHandlerInterface):
         # the method signature expects Dict[str, Any] rather than SubmitJobMessage
 
         # Debug logging
-        logger.debug(f"[message_handler.py  handle_submit_job()] Job Data Values: Job ID: {job_id}, Job Type: {job_type}, Priority: {priority}, Payload: {payload}, Client ID: {client_id}")
+        #logger.debug(f"[message_handler.py handle_submit_job() ] Job Data Values: Job ID: {job_id}, Job Type: {job_type}, Priority: {priority}, Payload: {payload}, Client ID: {client_id}")
         # Add job to Redis
         job_data = self.redis_service.add_job(
             job_id=job_id,
@@ -223,7 +224,7 @@ class MessageHandler(MessageHandlerInterface):
         )
 
         # Debug logging for job addition
-        logger.debug(f"[message_handler.py  handle_submit_job()] Job added to Redis: {job_data}")
+        logger.debug(f"[message_handler.py  handle_submit_job() {job_id}] Job added to Redis")
 
         # Send confirmation response
         # Note: We're not directly notifying workers here anymore
@@ -239,13 +240,13 @@ class MessageHandler(MessageHandlerInterface):
         job = next((job for job in job_queue if job['job_id'] == job_id), None)
 
         if job is None:
-            logger.error(f"[message_handler.py  handle_submit_job()] Job {job_id} not found in queue")
+            logger.error(f"[message_handler.py  handle_submit_job() {job_id}] Job not found in queue")
             position = -1
             return
         else:
             position = job.get('position', -1)
 
-        logger.debug(f"[message_handler.py  handle_submit_job()] the position is: {position}")
+        logger.debug(f"[message_handler.py  handle_submit_job() {job_id}] Job position is: {position}")
 
         response = JobAcceptedMessage(
             job_id=job_id,
@@ -598,7 +599,7 @@ class MessageHandler(MessageHandlerInterface):
             )
             # Send it back to the worker
             await self.connection_manager.send_to_worker(worker_id, heartbeat_ack)
-            logger.debug(f"[message_handler.py handle_worker_heartbeat()]: Sent heartbeat acknowledgment to worker {worker_id}")
+            #logger.debug(f"[message_handler.py handle_worker_heartbeat()]: Sent heartbeat acknowledgment to worker {worker_id}")
         except Exception as e:
             logger.error(f"[message_handler.py handle_worker_heartbeat()]: Error sending heartbeat acknowledgment to worker {worker_id}: {str(e)}")
 

@@ -125,7 +125,11 @@ function init() {
     // Add event listeners
     elements.connectBtn.addEventListener('click', connect);
     elements.disconnectBtn.addEventListener('click', disconnect);
-    elements.submitJobBtn.addEventListener('click', submitJob);
+    // 2025-04-09 15:02: Fix event handling to prevent passing the event object to submitJob
+    elements.submitJobBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        submitJob(null);
+    });
     // 2025-04-09 13:41: Added batch submit button event listener
     document.getElementById('batch-submit-btn')?.addEventListener('click', batchSubmitJobs);
     elements.connectionType.addEventListener('change', updateWebSocketUrl);
@@ -1577,8 +1581,9 @@ async function submitJob(customMessageId = null) {
     try {
         // Get job details from form
         const jobType = elements.jobType.value;
-        // If a custom message ID is provided, use it; otherwise get from the form
-        let userMessageId = customMessageId || document.getElementById('message-id').value.trim();
+        // 2025-04-09 15:01: Fix job ID generation to ensure only string values are used
+        // If a custom message ID is provided and it's a string, use it; otherwise get from the form
+        let userMessageId = (typeof customMessageId === 'string') ? customMessageId : document.getElementById('message-id').value.trim();
         // Generate a UUID and concatenate with the user's message ID
         const uuid = generateUUID();
         const messageId = userMessageId ? `${userMessageId}-${uuid}` : `job-submit-${Date.now()}`;

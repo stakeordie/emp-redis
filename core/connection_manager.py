@@ -1338,10 +1338,10 @@ class ConnectionManager(ConnectionManagerInterface):
             bool: True if the update was successfully forwarded, False otherwise
         """
         try:
-            logger.debug(f"[connection_manager.py forward_job_progress 1] Forwarding progress update: {progress_message}")
+            #logger.debug(f"[connection_manager.py forward_job_progress 1] Forwarding progress update: {progress_message}")
             # Extract job_id from the message
             if not hasattr(progress_message, 'job_id'):
-                logger.warning(f"[connection_manager.py forward_job_progress 2] Message does not contain job_id: {progress_message}")
+                logger.warning(f"[connection_manager.py forward_job_progress()] Message does not contain job_id: {progress_message}")
                 return False
                 
             job_id = progress_message.job_id
@@ -1355,7 +1355,7 @@ class ConnectionManager(ConnectionManagerInterface):
                 
                 # Check if the client is still connected
                 if client_id not in self.client_connections:
-                    logger.warning(f"[connection_manager.py forward_job_progress 4] Client {client_id} subscribed to job {job_id} is no longer connected")
+                    #logger.warning(f"[connection_manager.py forward_job_progress 4] Client {client_id} subscribed to job {job_id} is no longer connected")
                     # Remove the subscription
                     del self.job_subscriptions[job_id]
                 else:
@@ -1363,10 +1363,8 @@ class ConnectionManager(ConnectionManagerInterface):
                     # We use the same message format (UpdateJobProgressMessage) for consistency
                     client_success = await self.send_to_client(client_id, progress_message)
                     
-                    if client_success:
-                        logger.debug(f"[JOB-PROGRESS] Forwarded progress update for job {job_id} to client {client_id}")
-                    else:
-                        logger.warning(f"[JOB-PROGRESS] Failed to forward progress update for job {job_id} to client {client_id}")
+                    if not client_success:
+                        logger.warning(f"[connection_manager.py forward_job_progress()] Failed to forward progress update for job {job_id} to client {client_id}")
             else:
                 logger.debug(f"[connection_manager.py forward_job_progress 3] No clients subscribed to job {job_id}")
             
@@ -1402,8 +1400,8 @@ class ConnectionManager(ConnectionManagerInterface):
                         logger.warning(f"[connection_manager.py forward_job_progress] Failed to send to monitor {monitor_id}: {str(e)}")
                 
                 monitor_success = monitor_count > 0
-                if monitor_success:
-                    logger.debug(f"[JOB-PROGRESS] Forwarded progress update for job {job_id} to {monitor_count} monitors")
+                # if monitor_success:
+                #     logger.debug(f"[JOB-PROGRESS] Forwarded progress update for job {job_id} to {monitor_count} monitors")
             
             # Return true if either client or monitor forwarding was successful
             return client_success or monitor_success
