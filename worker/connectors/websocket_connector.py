@@ -67,7 +67,7 @@ class WebSocketConnector(ConnectorInterface):
     connector_name = None  # Set to None to indicate this is not directly usable
     
     # Version identifier to verify code deployment
-    VERSION = "2025-04-17-13:59-connection-timeout-update"
+    VERSION = "2025-04-17-14:35-handshake-error-fix"
     
     def __init__(self):
         """Initialize the WebSocket connector base class"""
@@ -126,6 +126,7 @@ class WebSocketConnector(ConnectorInterface):
             # Connect with timeout
             try:
                 # Use asyncio.wait_for to implement connection timeout
+                # Updated: 2025-04-17T14:35:00-04:00 - Removed protocols parameter to avoid handshake issues
                 self.ws = await asyncio.wait_for(
                     self.session.ws_connect(
                         self.ws_url,
@@ -133,7 +134,7 @@ class WebSocketConnector(ConnectorInterface):
                         heartbeat=30.0,  # Enable WebSocket protocol-level heartbeats
                         receive_timeout=60.0,  # Timeout for receiving messages
                         # Set up event handlers
-                        protocols=['websocket'],
+                        # protocols=['websocket'],  # Removed to avoid handshake issues
                         autoclose=False,  # We'll handle closing ourselves
                         autoping=True     # Automatically respond to pings
                     ),
@@ -161,10 +162,27 @@ class WebSocketConnector(ConnectorInterface):
                 logger.error(f"[connectors/websocket_connector.py connect()] {error_msg}")
                 self.connection_error = Exception(error_msg)
                 return False
+            except aiohttp.WSServerHandshakeError as e:
+                # Updated: 2025-04-17T14:35:00-04:00 - Added specific handling for handshake errors
+                error_msg = f"WebSocket handshake failed: {str(e)}"
+                logger.error(f"[connectors/websocket_connector.py connect()] {error_msg}")
+                # Store as connection_error and raise immediately to ensure job fails fast
+                self.connection_error = e
+                raise e  # Re-raise to ensure immediate failure
                 
         except Exception as e:
-            logger.error(f"[connectors/websocket_connector.py connect()] Error connecting to WebSocket service: {str(e)}")
+            # Updated: 2025-04-17T14:36:00-04:00 - Improved error handling for connection failures
+            error_msg = f"Error connecting to WebSocket service: {str(e)}"
+            logger.error(f"[connectors/websocket_connector.py connect()] {error_msg}")
             self.connection_error = e
+            
+            # Check for specific error types that should cause immediate failure
+            if isinstance(e, aiohttp.ClientConnectorError) or \
+               isinstance(e, aiohttp.WSServerHandshakeError) or \
+               "protocol" in str(e).lower():
+                logger.error(f"[connectors/websocket_connector.py connect()] Critical connection error - raising to fail job immediately")
+                raise e  # Re-raise to ensure immediate failure
+            
             return False
     
     def _get_connection_headers(self) -> Dict[str, str]:
@@ -402,29 +420,52 @@ class WebSocketConnector(ConnectorInterface):
             self.connection_error = None
             
             # Connect to the WebSocket service if not already connected
+            # Updated: 2025-04-17T14:36:00-04:00 - Improved connection error handling
             if not self.connected:
                 logger.info(f"[connectors/websocket_connector.py process_job] Connecting to {self.get_job_type()} service with timeout {self.connection_timeout}s")
-                connected = await self.connect()
-                if not connected:
-                    error_msg = f"Failed to connect to {self.get_job_type()} service"
-                    if self.connection_error:
-                        error_msg += f": {str(self.connection_error)}"
-                    raise Exception(error_msg)
+                try:
+                    connected = await self.connect()
+                    if not connected:
+                        error_msg = f"Failed to connect to {self.get_job_type()} service"
+                        if self.connection_error:
+                            error_msg += f": {str(self.connection_error)}"
+                        raise Exception(error_msg)
+                except Exception as e:
+                    # Catch and report any connection errors
+                    logger.error(f"[connectors/websocket_connector.py process_job] Connection error: {str(e)}")
+                    await send_progress_update(job_id, 0, "error", f"Connection error: {str(e)}")
+                    return {
+                        "status": "failed",
+                        "error": f"Connection error: {str(e)}"
+                    }
             
             # Check if connection was lost during preparation
             if self.connection_error is not None:
-                raise self.connection_error
+                error_msg = f"Connection error detected: {str(self.connection_error)}"
+                logger.error(f"[connectors/websocket_connector.py process_job] {error_msg}")
+                await send_progress_update(job_id, 0, "error", error_msg)
+                return {
+                    "status": "failed",
+                    "error": error_msg
+                }
             
             # Prepare the job for processing
             await self._prepare_job(job_id, payload)
             
             # Check again if connection was lost during preparation
             if self.connection_error is not None:
-                raise self.connection_error
+                error_msg = f"Connection lost during preparation: {str(self.connection_error)}"
+                logger.error(f"[connectors/websocket_connector.py process_job] {error_msg}")
+                await send_progress_update(job_id, 0, "error", error_msg)
+                return {
+                    "status": "failed",
+                    "error": error_msg
+                }
             
             # Process the job using service-specific implementation
             # AI-generated fix: 2025-04-04T20:13:55 - Added call to _process_service_job before monitoring progress
             # Updated: 2025-04-17T14:02:00-04:00 - Added connection error checks
+            # Updated: 2025-04-17T14:36:00-04:00 - Improved error handling
             logger.info(f"[connectors/websocket_connector.py process_job] Calling service-specific job processing for {job_id}")
             result = await self._process_service_job(websocket, job_id, payload, send_progress_update)
             
