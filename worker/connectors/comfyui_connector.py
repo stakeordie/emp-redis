@@ -366,9 +366,25 @@ class ComfyUIConnector(WebSocketConnector):
         logger.info(f"[comfyui_connector.py _process_service_job] Job payload: {payload}")
         
         try:
+            # Check if connection is still valid before proceeding
+            # Updated: 2025-04-17T14:05:00-04:00 - Added connection validation before processing
+            if self.connection_error is not None:
+                logger.error(f"[comfyui_connector.py _process_service_job] Connection error detected before processing: {str(self.connection_error)}")
+                raise self.connection_error
+            
+            if self.ws is None or self.ws.closed:
+                logger.error(f"[comfyui_connector.py _process_service_job] WebSocket connection is closed or invalid")
+                raise Exception("WebSocket connection is closed or invalid")
+            
             # Send workflow to ComfyUI
             logger.info(f"[comfyui_connector.py _process_service_job] Sending workflow to ComfyUI")
             await self.send_workflow(payload)
+            
+            # Check again if connection is still valid after sending workflow
+            # Updated: 2025-04-17T14:05:00-04:00 - Added connection validation after sending workflow
+            if self.connection_error is not None:
+                logger.error(f"[comfyui_connector.py _process_service_job] Connection error detected after sending workflow: {str(self.connection_error)}")
+                raise self.connection_error
             
             # Call monitor_progress to enable heartbeats and progress tracking
             logger.info(f"[comfyui_connector.py _process_service_job] Starting progress monitoring for job {job_id}")

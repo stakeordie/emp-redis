@@ -12,17 +12,49 @@ from typing import Dict, Any, Optional, Union, Callable
 
 # Standard import approach - works in both Docker and local environments
 # when the package structure is properly set up
+# Updated: 2025-04-17T14:15:00-04:00 - Simplified import logic to avoid duplicate imports
 try:
     # For when the module is imported as part of the worker package
     from worker.connector_interface import ConnectorInterface
 except ImportError:
-    # For when the module is imported directly or in Docker
-    # where the worker directory is in the Python path
     try:
+        # For when the module is imported directly or in Docker
+        # where the worker directory is in the Python path
         from connector_interface import ConnectorInterface
     except ImportError:
-        # Last resort - absolute imports
-        from ..connector_interface import ConnectorInterface
+        try:
+            # Last resort - absolute imports
+            from ..connector_interface import ConnectorInterface
+        except ImportError:
+            # If all else fails, define a minimal interface for type checking
+            # This won't be used at runtime but helps with static analysis
+            from abc import ABC, abstractmethod
+            from typing import Dict, Any, Optional, Union, Callable
+            
+            class ConnectorInterface(ABC):
+                """Minimal interface definition for type checking"""
+                connector_name = None
+                
+                @abstractmethod
+                async def initialize(self) -> bool: pass
+                
+                @abstractmethod
+                def get_job_type(self) -> str: pass
+                
+                @abstractmethod
+                def get_capabilities(self) -> Dict[str, Any]: pass
+                
+                @abstractmethod
+                def get_connection_status(self) -> Dict[str, Any]: pass
+                
+                @abstractmethod
+                def is_processing_job(self, job_id: str) -> bool: pass
+                
+                @abstractmethod
+                async def process_job(self, websocket, job_id: str, payload: Dict[str, Any], send_progress_update) -> Dict[str, Any]: pass
+                
+                @abstractmethod
+                async def shutdown(self) -> None: pass
 
 # Import logger - this should be available in all environments
 from core.utils.logger import logger
@@ -35,7 +67,7 @@ class WebSocketConnector(ConnectorInterface):
     connector_name = None  # Set to None to indicate this is not directly usable
     
     # Version identifier to verify code deployment
-    VERSION = "2025-04-04-19:36-connector-details-update"
+    VERSION = "2025-04-17-13:59-connection-timeout-update"
     
     def __init__(self):
         """Initialize the WebSocket connector base class"""
@@ -56,9 +88,17 @@ class WebSocketConnector(ConnectorInterface):
         
         # Job tracking
         self.current_job_id = None
+        
+        # Connection timeout settings
+        # Updated: 2025-04-17T13:59:00-04:00 - Added connection timeout
+        self.connection_timeout = float(os.environ.get("WORKER_CONNECTION_TIMEOUT", os.environ.get("CONNECTION_TIMEOUT", "30.0")))
+        
+        # Connection event handlers
+        self.connection_event = asyncio.Event()
+        self.connection_error = None
     
     async def connect(self) -> bool:
-        """Connect to the WebSocket service
+        """Connect to the WebSocket service with timeout
         
         Returns:
             bool: True if connection was successful, False otherwise
@@ -67,8 +107,10 @@ class WebSocketConnector(ConnectorInterface):
             logger.error(f"[connectors/websocket_connector.py connect()] WebSocket URL not set")
             return False
             
-        logger.info(f"[connectors/websocket_connector.py connect()] Attempting to connect to {self.ws_url}")
+        logger.info(f"[connectors/websocket_connector.py connect()] Attempting to connect to {self.ws_url} (timeout: {self.connection_timeout}s)")
         self.connected = False
+        self.connection_event.clear()
+        self.connection_error = None
 
         try:
             # Prepare headers
@@ -78,23 +120,51 @@ class WebSocketConnector(ConnectorInterface):
             if hasattr(self, 'session') and self.session:
                 await self.session.close()
 
-            # Create new session and connect
+            # Create new session
             self.session = aiohttp.ClientSession()
-            self.ws = await self.session.ws_connect(
-                self.ws_url,
-                headers=headers
-            )
             
-            # Mark as connected and return success
-            self.connected = True
-            logger.info(f"[connectors/websocket_connector.py connect()] Successfully connected to WebSocket service")
-            
-            # Handle any service-specific connection steps
-            await self._on_connect()
-            
-            return True
+            # Connect with timeout
+            try:
+                # Use asyncio.wait_for to implement connection timeout
+                self.ws = await asyncio.wait_for(
+                    self.session.ws_connect(
+                        self.ws_url,
+                        headers=headers,
+                        heartbeat=30.0,  # Enable WebSocket protocol-level heartbeats
+                        receive_timeout=60.0,  # Timeout for receiving messages
+                        # Set up event handlers
+                        protocols=['websocket'],
+                        autoclose=False,  # We'll handle closing ourselves
+                        autoping=True     # Automatically respond to pings
+                    ),
+                    timeout=self.connection_timeout
+                )
+                
+                # Set up event handlers for the WebSocket if available
+                # Updated: 2025-04-17T14:16:00-04:00 - Added type checking to avoid attribute errors
+                if hasattr(self.ws, 'on_close'):
+                    self.ws.on_close = self._on_ws_close
+                if hasattr(self.ws, 'on_error'):
+                    self.ws.on_error = self._on_ws_error
+                
+                # Mark as connected and return success
+                self.connected = True
+                logger.info(f"[connectors/websocket_connector.py connect()] Successfully connected to WebSocket service")
+                
+                # Handle any service-specific connection steps
+                await self._on_connect()
+                
+                return True
+                
+            except asyncio.TimeoutError:
+                error_msg = f"Connection timed out after {self.connection_timeout} seconds"
+                logger.error(f"[connectors/websocket_connector.py connect()] {error_msg}")
+                self.connection_error = Exception(error_msg)
+                return False
+                
         except Exception as e:
             logger.error(f"[connectors/websocket_connector.py connect()] Error connecting to WebSocket service: {str(e)}")
+            self.connection_error = e
             return False
     
     def _get_connection_headers(self) -> Dict[str, str]:
@@ -135,9 +205,43 @@ class WebSocketConnector(ConnectorInterface):
         Override this method in subclasses to handle service-specific disconnection steps
         """
         pass
+        
+    async def _on_ws_close(self, ws, code, message):
+        """Handle WebSocket close event
+        
+        Args:
+            ws: The WebSocket connection
+            code: The close code
+            message: The close message
+        """
+        # Updated: 2025-04-17T14:00:00-04:00 - Added WebSocket close handler
+        logger.warning(f"[connectors/websocket_connector.py _on_ws_close] WebSocket connection closed: code={code}, message={message}")
+        self.connected = False
+        
+        # Set connection error to trigger job failure
+        self.connection_error = Exception(f"WebSocket connection closed: code={code}, message={message}")
+        
+        # Signal the connection event to unblock any waiting tasks
+        self.connection_event.set()
+        
+    async def _on_ws_error(self, ws, error):
+        """Handle WebSocket error event
+        
+        Args:
+            ws: The WebSocket connection
+            error: The error
+        """
+        # Updated: 2025-04-17T14:00:00-04:00 - Added WebSocket error handler
+        logger.error(f"[connectors/websocket_connector.py _on_ws_error] WebSocket error: {str(error)}")
+        
+        # Set connection error to trigger job failure
+        self.connection_error = error
+        
+        # Signal the connection event to unblock any waiting tasks
+        self.connection_event.set()
     
     async def monitor_progress(self, job_id: str, send_progress_update: Callable) -> Dict[str, Any]:
-        """Monitor job progress with heartbeat mechanism
+        """Monitor job progress with heartbeat mechanism and connection monitoring
         
         Args:
             job_id (str): The ID of the current job
@@ -152,6 +256,7 @@ class WebSocketConnector(ConnectorInterface):
         final_result = None
         job_completed = False
         heartbeat_task = None
+        connection_monitor_task = None
         
         # Heartbeat function that runs as a separate task
         async def send_heartbeats():
@@ -192,9 +297,38 @@ class WebSocketConnector(ConnectorInterface):
                 logger.error(f"[connectors/websocket_connector.py send_heartbeats] Heartbeat error: {str(e)}")
                 raise
         
+        # Connection monitor function that checks for WebSocket events
+        # Updated: 2025-04-17T14:01:00-04:00 - Added connection monitor
+        async def monitor_connection():
+            try:
+                while True:
+                    # Check if we have a connection error
+                    if self.connection_error is not None:
+                        logger.error(f"[connectors/websocket_connector.py monitor_connection] Connection error detected: {str(self.connection_error)}")
+                        raise self.connection_error
+                    
+                    # Check if the WebSocket is closed
+                    if self.ws is None or self.ws.closed:
+                        logger.error(f"[connectors/websocket_connector.py monitor_connection] WebSocket connection is closed")
+                        raise Exception("WebSocket connection is closed")
+                    
+                    # Wait a short time before checking again
+                    await asyncio.sleep(1)
+            except asyncio.CancelledError:
+                # Task was cancelled, this is normal during cleanup
+                logger.debug(f"[connectors/websocket_connector.py monitor_connection] Connection monitor task cancelled for job {job_id}")
+            except Exception as e:
+                # Propagate other exceptions
+                logger.error(f"[connectors/websocket_connector.py monitor_connection] Connection monitor error: {str(e)}")
+                raise
+        
         try:
             # Start heartbeat task
             heartbeat_task = asyncio.create_task(send_heartbeats())
+            
+            # Start connection monitor task
+            # Updated: 2025-04-17T14:01:00-04:00 - Added connection monitor task
+            connection_monitor_task = asyncio.create_task(monitor_connection())
             
             # Send initial progress update
             await send_progress_update(job_id, 0, "started", f"Starting {self.get_job_type()} job")
@@ -220,6 +354,17 @@ class WebSocketConnector(ConnectorInterface):
                     pass  # This is expected
                 except Exception as e:
                     logger.error(f"[connectors/websocket_connector.py monitor_progress] Error cancelling heartbeat task: {str(e)}")
+            
+            # Always cancel the connection monitor task if it exists
+            # Updated: 2025-04-17T14:01:00-04:00 - Added connection monitor task cleanup
+            if connection_monitor_task and not connection_monitor_task.done():
+                connection_monitor_task.cancel()
+                try:
+                    await connection_monitor_task
+                except asyncio.CancelledError:
+                    pass  # This is expected
+                except Exception as e:
+                    logger.error(f"[connectors/websocket_connector.py monitor_progress] Error cancelling connection monitor task: {str(e)}")
     
     async def _monitor_service_progress(self, job_id: str, send_progress_update: Callable) -> Dict[str, Any]:
         """Service-specific implementation of progress monitoring
@@ -252,17 +397,34 @@ class WebSocketConnector(ConnectorInterface):
             self.current_job_id = job_id
             logger.info(f"[connectors/websocket_connector.py process_job] Starting job {job_id} for {self.get_job_type()} service")
             
+            # Reset connection error before starting
+            # Updated: 2025-04-17T14:02:00-04:00 - Reset connection error before starting
+            self.connection_error = None
+            
             # Connect to the WebSocket service if not already connected
             if not self.connected:
+                logger.info(f"[connectors/websocket_connector.py process_job] Connecting to {self.get_job_type()} service with timeout {self.connection_timeout}s")
                 connected = await self.connect()
                 if not connected:
-                    raise Exception(f"Failed to connect to {self.get_job_type()} service")
+                    error_msg = f"Failed to connect to {self.get_job_type()} service"
+                    if self.connection_error:
+                        error_msg += f": {str(self.connection_error)}"
+                    raise Exception(error_msg)
+            
+            # Check if connection was lost during preparation
+            if self.connection_error is not None:
+                raise self.connection_error
             
             # Prepare the job for processing
             await self._prepare_job(job_id, payload)
             
+            # Check again if connection was lost during preparation
+            if self.connection_error is not None:
+                raise self.connection_error
+            
             # Process the job using service-specific implementation
             # AI-generated fix: 2025-04-04T20:13:55 - Added call to _process_service_job before monitoring progress
+            # Updated: 2025-04-17T14:02:00-04:00 - Added connection error checks
             logger.info(f"[connectors/websocket_connector.py process_job] Calling service-specific job processing for {job_id}")
             result = await self._process_service_job(websocket, job_id, payload, send_progress_update)
             
@@ -321,6 +483,12 @@ class WebSocketConnector(ConnectorInterface):
                 self.session = None
                 
             self.connected = False
+            
+            # Reset connection event and error
+            # Updated: 2025-04-17T14:03:00-04:00 - Reset connection event and error
+            self.connection_event.clear()
+            self.connection_error = None
+            
         except Exception as e:
             logger.error(f"[connectors/websocket_connector.py _disconnect] Error disconnecting: {str(e)}")
     
@@ -344,8 +512,15 @@ class WebSocketConnector(ConnectorInterface):
             "ws_url": self.ws_url,
             "use_ssl": self.use_ssl,
             "current_job_id": self.current_job_id,
-            "version": self.VERSION  # Include version to verify code deployment
+            "version": self.VERSION,  # Include version to verify code deployment
+            "connection_timeout": self.connection_timeout  # Added: 2025-04-17T14:03:00-04:00
         }
+        
+        # Add connection error if present
+        # Updated: 2025-04-17T14:03:00-04:00 - Added connection error to status
+        if self.connection_error is not None:
+            result["connection_error"] = str(self.connection_error)
+            
         return result
         
     def is_processing_job(self, job_id: str) -> bool:

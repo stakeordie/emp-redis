@@ -32,7 +32,7 @@ class A1111Connector(RESTSyncConnector):
     """Connector for Automatic1111 Stable Diffusion Web UI REST API"""
     
     # Version identifier to verify code deployment
-    VERSION = "2025-04-07-23:25-fixed-type-error"
+    VERSION = "2025-04-17-14:10-improved-timeout-handling"
     
     # Class attribute to identify the connector type
     # This should match the name used in the WORKER_CONNECTORS environment variable
@@ -45,7 +45,7 @@ class A1111Connector(RESTSyncConnector):
         
         # Override REST API connection settings with A1111-specific ones
         self.host = os.environ.get("WORKER_A1111_HOST", "localhost")
-        self.port = os.environ.get("WORKER_A1111_PORT", "7860")
+        self.port = os.environ.get("WORKER_A1111_PORT", "3001")
         self.base_url = f"http://{self.host}:{self.port}"
         self.api_prefix = "/sdapi/v1"
         # Use the connector name for job_type
@@ -55,6 +55,11 @@ class A1111Connector(RESTSyncConnector):
         self.username = os.environ.get("WORKER_COMFYUI_USERNAME", os.environ.get("COMFYUI_USERNAME"))
         self.password = os.environ.get("WORKER_COMFYUI_PASSWORD", os.environ.get("COMFYUI_PASSWORD"))
         
+        # Connection timeout settings
+        # Updated: 2025-04-17T14:10:00-04:00 - Added configurable connection timeout
+        self.connection_timeout = float(os.environ.get("WORKER_A1111_CONNECTION_TIMEOUT", os.environ.get("A1111_CONNECTION_TIMEOUT", "30.0")))
+        self.request_timeout = aiohttp.ClientTimeout(total=self.connection_timeout)
+        
         # Log which variables we're using
         logger.info(f"[a1111_connector.py __init__] Using environment variables:")
         logger.info(f"[a1111_connector.py __init__] WORKER_A1111_HOST: {self.host}")
@@ -62,6 +67,7 @@ class A1111Connector(RESTSyncConnector):
         logger.info(f"[a1111_connector.py __init__] Base URL: {self.base_url}")
         logger.info(f"[a1111_connector.py __init__] API Prefix: {self.api_prefix}")
         logger.info(f"[a1111_connector.py __init__] WORKER_A1111_JOB_TYPE/A1111_JOB_TYPE: {self.job_type}")
+        logger.info(f"[a1111_connector.py __init__] Connection timeout: {self.connection_timeout}s")
         logger.info(f"[a1111_connector.py __init__] Username environment variable: {'set' if self.username else 'not set'}")
         
         # Update connection details
@@ -69,7 +75,8 @@ class A1111Connector(RESTSyncConnector):
             "host": self.host,
             "port": self.port,
             "base_url": self.base_url,
-            "api_prefix": self.api_prefix
+            "api_prefix": self.api_prefix,
+            "connection_timeout": self.connection_timeout
         }
     
     def get_job_type(self) -> str:
@@ -112,9 +119,10 @@ class A1111Connector(RESTSyncConnector):
             self.current_job_id = job_id
             logger.info(f"[a1111_connector.py process_job] Processing job {job_id}")
             
-            # Create session if it doesn't exist
+            # Create session if it doesn't exist with proper timeout
+            # Updated: 2025-04-17T14:10:00-04:00 - Added timeout to client session
             if self.session is None:
-                self.session = aiohttp.ClientSession()
+                self.session = aiohttp.ClientSession(timeout=self.request_timeout)
             
             # Send initial progress update
             await send_progress_update(job_id, 0, "started", f"Starting {self.get_job_type()} job")
@@ -141,6 +149,7 @@ class A1111Connector(RESTSyncConnector):
             # Log detailed request information for debugging
             logger.info(f"[a1111_connector.py process_job] Sending {method.upper()} request to {url}")
             logger.info(f"[a1111_connector.py process_job] Request payload: {json.dumps(request_payload)[:1000]}")
+            logger.info(f"[a1111_connector.py process_job] Using timeout: {self.connection_timeout}s")
             
             # Send progress update
             await send_progress_update(job_id, 10, "processing", f"Sending {method.upper()} request to A1111 API")
@@ -151,51 +160,79 @@ class A1111Connector(RESTSyncConnector):
                 **request_payload
             }
             
-            # Send request to A1111 API with the appropriate HTTP method
-            start_time = time.time()
-            
-            # Choose the appropriate HTTP method
-            http_method = getattr(self.session, method, self.session.post)
-            
-            async with http_method(
-                url,
-                headers=self._get_headers(),
-                json=request_data if method != "get" else None,
-                params=request_data if method == "get" else None,
-                timeout=self.timeout
-            ) as response:
-                elapsed_time = time.time() - start_time
+            # Use asyncio.wait_for to implement a more reliable timeout
+            # Updated: 2025-04-17T14:11:00-04:00 - Added asyncio.wait_for for better timeout handling
+            try:
+                # Send request to A1111 API with the appropriate HTTP method
+                start_time = time.time()
                 
-                # Send progress update
-                await send_progress_update(job_id, 50, "processing", f"Received response from A1111 API in {elapsed_time:.2f}s")
+                # Choose the appropriate HTTP method
+                http_method = getattr(self.session, method, self.session.post)
                 
-                # Check response status
-                if response.status != 200:
-                    error_text = await response.text()
-                    logger.error(f"[a1111_connector.py process_job] Error response from A1111 API: {response.status} - {error_text}")
-                    await send_progress_update(job_id, 100, "error", f"A1111 API error: {response.status}")
+                # Create the request coroutine
+                request_coroutine = http_method(
+                    url,
+                    headers=self._get_headers(),
+                    json=request_data if method != "get" else None,
+                    params=request_data if method == "get" else None,
+                    timeout=self.timeout  # Keep this for backward compatibility
+                )
+                
+                # Execute the request with a timeout
+                async with await asyncio.wait_for(request_coroutine, timeout=self.connection_timeout) as response:
+                    elapsed_time = time.time() - start_time
+                    
+                    # Send progress update
+                    await send_progress_update(job_id, 50, "processing", f"Received response from A1111 API in {elapsed_time:.2f}s")
+                    
+                    # Check response status
+                    if response.status != 200:
+                        error_text = await response.text()
+                        logger.error(f"[a1111_connector.py process_job] Error response from A1111 API: {response.status} - {error_text}")
+                        await send_progress_update(job_id, 100, "error", f"A1111 API error: {response.status}")
+                        return {
+                            "status": "failed",
+                            "error": f"A1111 API returned status {response.status}: {error_text}"
+                        }
+                    
+                    # Parse response with timeout
+                    # Updated: 2025-04-17T14:11:00-04:00 - Added timeout for response parsing
+                    result = await asyncio.wait_for(response.json(), timeout=self.connection_timeout)
+                    logger.info(f"[a1111_connector.py process_job] Received successful response from A1111 API")
+                    
+                    # Send completion update
+                    await send_progress_update(job_id, 100, "completed", "Job completed successfully")
+                    
                     return {
-                        "status": "failed",
-                        "error": f"A1111 API returned status {response.status}: {error_text}"
+                        "status": "success",
+                        "output": result
                     }
-                
-                # Parse response
-                result = await response.json()
-                logger.info(f"[a1111_connector.py process_job] Received successful response from A1111 API")
-                
-                # Send completion update
-                await send_progress_update(job_id, 100, "completed", "Job completed successfully")
-                
+                    
+            except asyncio.TimeoutError:
+                # Updated: 2025-04-17T14:11:00-04:00 - Improved timeout error handling
+                logger.error(f"[a1111_connector.py process_job] Request timed out after {self.connection_timeout} seconds")
+                await send_progress_update(job_id, 100, "error", f"Request timed out after {self.connection_timeout} seconds")
                 return {
-                    "status": "success",
-                    "output": result
+                    "status": "failed",
+                    "error": f"Request timed out after {self.connection_timeout} seconds"
                 }
+                
         except asyncio.TimeoutError:
-            logger.error(f"[a1111_connector.py process_job] Request timed out after {self.timeout} seconds")
-            await send_progress_update(job_id, 100, "error", f"Request timed out after {self.timeout} seconds")
+            # This handles the outer timeout
+            logger.error(f"[a1111_connector.py process_job] Request timed out after {self.connection_timeout} seconds")
+            await send_progress_update(job_id, 100, "error", f"Request timed out after {self.connection_timeout} seconds")
             return {
                 "status": "failed",
-                "error": f"Request timed out after {self.timeout} seconds"
+                "error": f"Request timed out after {self.connection_timeout} seconds"
+            }
+        except aiohttp.ClientConnectorError as e:
+            # Updated: 2025-04-17T14:12:00-04:00 - Added specific handling for connection errors
+            error_msg = f"Connection error to A1111 API at {self.base_url}: {str(e)}"
+            logger.error(f"[a1111_connector.py process_job] {error_msg}")
+            await send_progress_update(job_id, 100, "error", error_msg)
+            return {
+                "status": "failed",
+                "error": error_msg
             }
         except Exception as e:
             logger.error(f"[a1111_connector.py process_job] Error processing job {job_id}: {str(e)}")
@@ -205,6 +242,6 @@ class A1111Connector(RESTSyncConnector):
                 "error": str(e)
             }
         finally:
-            # Clear current job ID when done
+            # Updated: 2025-04-17T14:12:00-04:00 - Always clear current job ID
             logger.info(f"[a1111_connector.py process_job] Completed job {job_id}")
             self.current_job_id = None
