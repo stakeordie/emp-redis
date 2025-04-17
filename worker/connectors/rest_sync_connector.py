@@ -32,7 +32,7 @@ class RESTSyncConnector(ConnectorInterface):
     """Connector for synchronous REST API calls"""
     
     # Version identifier to verify code deployment
-    VERSION = "2025-04-06-21:10-initial-implementation"
+    VERSION = "2025-04-17-14:20-improved-timeout-handling"
     
     def __init__(self):
         """Initialize the REST synchronous connector"""
@@ -40,7 +40,21 @@ class RESTSyncConnector(ConnectorInterface):
         self.base_url = os.environ.get("WORKER_REST_BASE_URL", os.environ.get("REST_BASE_URL", "http://localhost:8000"))
         self.endpoint = os.environ.get("WORKER_REST_ENDPOINT", os.environ.get("REST_ENDPOINT", "/api/process"))
         self.use_ssl = os.environ.get("WORKER_REST_USE_SSL", os.environ.get("REST_USE_SSL", "false")).lower() in ("true", "1", "yes")
+        
+        # Timeout settings
+        # Updated: 2025-04-17T14:20:00-04:00 - Enhanced timeout handling
         self.timeout = int(os.environ.get("WORKER_REST_TIMEOUT", os.environ.get("REST_TIMEOUT", "60")))
+        self.connection_timeout = float(os.environ.get("WORKER_REST_CONNECTION_TIMEOUT", os.environ.get("REST_CONNECTION_TIMEOUT", str(self.timeout))))
+        self.total_timeout = float(os.environ.get("WORKER_REST_TOTAL_TIMEOUT", os.environ.get("REST_TOTAL_TIMEOUT", str(self.timeout * 1.5))))
+        
+        # Create aiohttp timeout configuration
+        self.request_timeout = aiohttp.ClientTimeout(
+            total=self.total_timeout,
+            connect=self.connection_timeout,
+            sock_connect=self.connection_timeout,
+            sock_read=self.timeout
+        )
+        
         self.job_type = os.environ.get("WORKER_REST_JOB_TYPE", os.environ.get("REST_JOB_TYPE", "rest"))
         
         # Authentication settings
@@ -54,6 +68,8 @@ class RESTSyncConnector(ConnectorInterface):
         logger.info(f"[rest_sync_connector.py __init__] WORKER_REST_ENDPOINT/REST_ENDPOINT: {self.endpoint}")
         logger.info(f"[rest_sync_connector.py __init__] WORKER_REST_USE_SSL/REST_USE_SSL: {self.use_ssl}")
         logger.info(f"[rest_sync_connector.py __init__] WORKER_REST_TIMEOUT/REST_TIMEOUT: {self.timeout}")
+        logger.info(f"[rest_sync_connector.py __init__] WORKER_REST_CONNECTION_TIMEOUT: {self.connection_timeout}")
+        logger.info(f"[rest_sync_connector.py __init__] WORKER_REST_TOTAL_TIMEOUT: {self.total_timeout}")
         logger.info(f"[rest_sync_connector.py __init__] WORKER_REST_JOB_TYPE/REST_JOB_TYPE: {self.job_type}")
         
         # Connection status
@@ -62,11 +78,17 @@ class RESTSyncConnector(ConnectorInterface):
             "base_url": self.base_url,
             "endpoint": self.endpoint,
             "use_ssl": self.use_ssl,
-            "timeout": self.timeout
+            "timeout": self.timeout,
+            "connection_timeout": self.connection_timeout,
+            "total_timeout": self.total_timeout
         }
         
         # Job tracking
         self.current_job_id = None
+        
+        # Connection error tracking
+        # Updated: 2025-04-17T14:20:00-04:00 - Added connection error tracking
+        self.connection_error = None
     
     async def initialize(self) -> bool:
         """Initialize the connector
@@ -146,13 +168,20 @@ class RESTSyncConnector(ConnectorInterface):
         Returns:
             Dict[str, Any]: Connection status information
         """
-        return {
+        result = {
             "connected": self.session is not None,
             "service": self.get_job_type(),
             "details": self.connection_details,
             "current_job_id": self.current_job_id,
             "version": self.VERSION
         }
+        
+        # Add connection error if present
+        # Updated: 2025-04-17T14:22:00-04:00 - Added connection error to status
+        if hasattr(self, 'connection_error') and self.connection_error is not None:
+            result["connection_error"] = str(self.connection_error)
+            
+        return result
     
     def is_processing_job(self, job_id: str) -> bool:
         """Check if this connector is currently processing the specified job
@@ -182,9 +211,14 @@ class RESTSyncConnector(ConnectorInterface):
             self.current_job_id = job_id
             logger.info(f"[rest_sync_connector.py process_job] Processing job {job_id}")
             
-            # Create session if it doesn't exist
+            # Reset connection error
+            # Updated: 2025-04-17T14:21:00-04:00 - Reset connection error before processing
+            self.connection_error = None
+            
+            # Create session if it doesn't exist with proper timeout
+            # Updated: 2025-04-17T14:21:00-04:00 - Added timeout to client session
             if self.session is None:
-                self.session = aiohttp.ClientSession()
+                self.session = aiohttp.ClientSession(timeout=self.request_timeout)
             
             # Send initial progress update
             await send_progress_update(job_id, 0, "started", f"Starting {self.get_job_type()} job")
@@ -198,47 +232,81 @@ class RESTSyncConnector(ConnectorInterface):
             # Send request to REST API
             url = f"{self.base_url}{self.endpoint}"
             logger.info(f"[rest_sync_connector.py process_job] Sending request to {url}")
+            logger.info(f"[rest_sync_connector.py process_job] Using timeout settings: connect={self.connection_timeout}s, read={self.timeout}s, total={self.total_timeout}s")
             await send_progress_update(job_id, 10, "processing", f"Sending request to REST API")
             
-            start_time = time.time()
-            async with self.session.post(
-                url,
-                headers=self._get_headers(),
-                json=request_data,
-                timeout=self.timeout
-            ) as response:
-                elapsed_time = time.time() - start_time
+            # Use asyncio.wait_for to implement a more reliable timeout
+            # Updated: 2025-04-17T14:21:00-04:00 - Added asyncio.wait_for for better timeout handling
+            try:
+                start_time = time.time()
                 
-                # Send progress update
-                await send_progress_update(job_id, 50, "processing", f"Received response from REST API in {elapsed_time:.2f}s")
+                # Create the request coroutine
+                request_coroutine = self.session.post(
+                    url,
+                    headers=self._get_headers(),
+                    json=request_data,
+                    # Don't specify timeout here as it's already in the session
+                )
                 
-                # Check response status
-                if response.status != 200:
-                    error_text = await response.text()
-                    logger.error(f"[rest_sync_connector.py process_job] Error response from REST API: {response.status} - {error_text}")
-                    await send_progress_update(job_id, 100, "error", f"REST API error: {response.status}")
+                # Execute the request with a timeout
+                async with await asyncio.wait_for(request_coroutine, timeout=self.total_timeout) as response:
+                    elapsed_time = time.time() - start_time
+                    
+                    # Send progress update
+                    await send_progress_update(job_id, 50, "processing", f"Received response from REST API in {elapsed_time:.2f}s")
+                    
+                    # Check response status
+                    if response.status != 200:
+                        error_text = await asyncio.wait_for(response.text(), timeout=self.timeout)
+                        logger.error(f"[rest_sync_connector.py process_job] Error response from REST API: {response.status} - {error_text}")
+                        await send_progress_update(job_id, 100, "error", f"REST API error: {response.status}")
+                        return {
+                            "status": "failed",
+                            "error": f"REST API returned status {response.status}: {error_text}"
+                        }
+                    
+                    # Parse response with timeout
+                    # Updated: 2025-04-17T14:21:00-04:00 - Added timeout for response parsing
+                    result = await asyncio.wait_for(response.json(), timeout=self.timeout)
+                    logger.info(f"[rest_sync_connector.py process_job] Received successful response from REST API")
+                    
+                    # Send completion update
+                    await send_progress_update(job_id, 100, "completed", "Job completed successfully")
+                    
                     return {
-                        "status": "failed",
-                        "error": f"REST API returned status {response.status}: {error_text}"
+                        "status": "success",
+                        "output": result
                     }
-                
-                # Parse response
-                result = await response.json()
-                logger.info(f"[rest_sync_connector.py process_job] Received successful response from REST API")
-                
-                # Send completion update
-                await send_progress_update(job_id, 100, "completed", "Job completed successfully")
-                
+                    
+            except asyncio.TimeoutError:
+                # Updated: 2025-04-17T14:21:00-04:00 - Improved timeout error handling
+                logger.error(f"[rest_sync_connector.py process_job] Request timed out after {self.total_timeout} seconds")
+                await send_progress_update(job_id, 100, "error", f"Request timed out after {self.total_timeout} seconds")
                 return {
-                    "status": "success",
-                    "output": result
+                    "status": "failed",
+                    "error": f"Request timed out after {self.total_timeout} seconds"
                 }
+                
         except asyncio.TimeoutError:
-            logger.error(f"[rest_sync_connector.py process_job] Request timed out after {self.timeout} seconds")
-            await send_progress_update(job_id, 100, "error", f"Request timed out after {self.timeout} seconds")
+            # This handles the outer timeout
+            logger.error(f"[rest_sync_connector.py process_job] Request timed out after {self.total_timeout} seconds")
+            await send_progress_update(job_id, 100, "error", f"Request timed out after {self.total_timeout} seconds")
             return {
                 "status": "failed",
-                "error": f"Request timed out after {self.timeout} seconds"
+                "error": f"Request timed out after {self.total_timeout} seconds"
+            }
+        except aiohttp.ClientConnectorError as e:
+            # Updated: 2025-04-17T14:22:00-04:00 - Added specific handling for connection errors
+            error_msg = f"Connection error to REST API at {self.base_url}: {str(e)}"
+            logger.error(f"[rest_sync_connector.py process_job] {error_msg}")
+            
+            # Store connection error for status reporting
+            self.connection_error = e
+            
+            await send_progress_update(job_id, 100, "error", error_msg)
+            return {
+                "status": "failed",
+                "error": error_msg
             }
         except Exception as e:
             logger.error(f"[rest_sync_connector.py process_job] Error processing job {job_id}: {str(e)}")
