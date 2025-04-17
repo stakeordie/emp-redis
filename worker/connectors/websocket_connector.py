@@ -67,7 +67,7 @@ class WebSocketConnector(ConnectorInterface):
     connector_name = None  # Set to None to indicate this is not directly usable
     
     # Version identifier to verify code deployment
-    VERSION = "2025-04-17-14:45-enhanced-diagnostic-logging"
+    VERSION = "2025-04-17-15:05-error-handling-fix"
     
     def __init__(self):
         """Initialize the WebSocket connector base class"""
@@ -506,11 +506,15 @@ class WebSocketConnector(ConnectorInterface):
                         raise Exception(error_msg)
                 except Exception as e:
                     # Catch and report any connection errors
-                    logger.error(f"[connectors/websocket_connector.py process_job] Connection error: {str(e)}")
-                    await send_progress_update(job_id, 0, "error", f"Connection error: {str(e)}")
+                    error_type = type(e).__name__
+                    error_msg = f"Connection error: {error_type} - {str(e)}"
+                    logger.error(f"[connectors/websocket_connector.py process_job] {error_msg}")
+                    await send_progress_update(job_id, 0, "error", error_msg)
+                    
+                    # Return failure status
                     return {
                         "status": "failed",
-                        "error": f"Connection error: {str(e)}"
+                        "error": error_msg
                     }
             
             # Check if connection was lost during preparation
@@ -518,19 +522,36 @@ class WebSocketConnector(ConnectorInterface):
                 error_msg = f"Connection error detected: {str(self.connection_error)}"
                 logger.error(f"[connectors/websocket_connector.py process_job] {error_msg}")
                 await send_progress_update(job_id, 0, "error", error_msg)
+                
+                # Return failure status
                 return {
                     "status": "failed",
                     "error": error_msg
                 }
             
             # Prepare the job for processing
-            await self._prepare_job(job_id, payload)
+            try:
+                await self._prepare_job(job_id, payload)
+            except Exception as e:
+                # Catch and report any preparation errors
+                error_type = type(e).__name__
+                error_msg = f"Job preparation error: {error_type} - {str(e)}"
+                logger.error(f"[connectors/websocket_connector.py process_job] {error_msg}")
+                await send_progress_update(job_id, 0, "error", error_msg)
+                
+                # Return failure status
+                return {
+                    "status": "failed",
+                    "error": error_msg
+                }
             
             # Check again if connection was lost during preparation
             if self.connection_error is not None:
                 error_msg = f"Connection lost during preparation: {str(self.connection_error)}"
                 logger.error(f"[connectors/websocket_connector.py process_job] {error_msg}")
                 await send_progress_update(job_id, 0, "error", error_msg)
+                
+                # Return failure status
                 return {
                     "status": "failed",
                     "error": error_msg
@@ -538,13 +559,52 @@ class WebSocketConnector(ConnectorInterface):
             
             # Process the job using service-specific implementation
             logger.info(f"[connectors/websocket_connector.py process_job] Calling service-specific job processing for {job_id}")
-            result = await self._process_service_job(websocket, job_id, payload, send_progress_update)
-            
-            # Return the result
-            return result
+            try:
+                result = await self._process_service_job(websocket, job_id, payload, send_progress_update)
+                
+                # Validate result to ensure it has a status
+                if not isinstance(result, dict):
+                    logger.warning(f"[connectors/websocket_connector.py process_job] Result is not a dictionary: {result}")
+                    result = {"status": "completed", "data": result}
+                
+                # Ensure result has a status field
+                if "status" not in result:
+                    result["status"] = "completed"
+                    
+                # Log the final result status
+                logger.info(f"[connectors/websocket_connector.py process_job] Completed job {job_id} with status: {result.get('status')}")
+                
+                # Return the result
+                return result
+                
+            except Exception as e:
+                # Catch and report any processing errors
+                error_type = type(e).__name__
+                error_msg = f"Job processing error: {error_type} - {str(e)}"
+                logger.error(f"[connectors/websocket_connector.py process_job] {error_msg}")
+                await send_progress_update(job_id, 0, "error", error_msg)
+                
+                # Return failure status
+                return {
+                    "status": "failed",
+                    "error": error_msg
+                }
         except Exception as e:
-            logger.error(f"[connectors/websocket_connector.py process_job] Error processing job {job_id}: {str(e)}")
-            raise
+            # Catch-all for any unexpected errors
+            error_type = type(e).__name__
+            error_msg = f"Unexpected error: {error_type} - {str(e)}"
+            logger.error(f"[connectors/websocket_connector.py process_job] {error_msg}")
+            
+            try:
+                await send_progress_update(job_id, 0, "error", error_msg)
+            except Exception as send_error:
+                logger.error(f"[connectors/websocket_connector.py process_job] Failed to send error update: {str(send_error)}")
+            
+            # Return failure status
+            return {
+                "status": "failed",
+                "error": error_msg
+            }
         finally:
             # Clear current job ID when done
             logger.info(f"[connectors/websocket_connector.py process_job] Completed job {job_id} for {self.get_job_type()} service")
@@ -574,8 +634,10 @@ class WebSocketConnector(ConnectorInterface):
             send_progress_update: Function to send progress updates
             
         Returns:
-            Dict[str, Any]: Job result
+            Dict[str, Any]: Job result with status field ("completed" or "failed")
         """
+        # Updated: 2025-04-17T15:05:00-04:00 - Added note about required status field
+        logger.error(f"[connectors/websocket_connector.py _process_service_job] Subclass must implement this method")
         raise NotImplementedError("Subclasses must implement _process_service_job")
     
     async def _disconnect(self) -> None:

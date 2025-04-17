@@ -359,34 +359,91 @@ class RedisService(RedisServiceInterface):
         
         return True
         
-    def fail_job(self, job_id: str, error: str) -> bool:
-        """Mark a job as failed.
+    def fail_job(self, job_id: str, error: str, max_retries: int = 4) -> bool:
+        """Mark a job as failed and requeue it for processing if retry limit not exceeded.
         
         Args:
             job_id: ID of the job that failed
             error: Error message
+            max_retries: Maximum number of retries before marking job as permanently failed
             
         Returns:
             bool: True if failure was recorded successfully, False otherwise
         """
-        # Get the worker_id from the job data
-        job_key = f"{JOB_PREFIX}{job_id}"
-        worker_id = self.client.hget(job_key, "worker_id")
+        # 2025-04-17-15:47 - Added retry counter and max retry limit
+        import time
+        current_time = time.time()
+        
+        # Get the job data
         job_key = f"{JOB_PREFIX}{job_id}"
         
         # Check if job exists
         if not self.client.exists(job_key):
-
+            logger.warning(f"[redis_service.py fail_job()]: Job {job_id} not found, cannot mark as failed")
             return False
         
-        # Update job status
-        self.client.hset(job_key, "status", "failed")
-        self.client.hset(job_key, "error", error if error else "Unknown error")
+        # Get job details
+        worker_id = self.client.hget(job_key, "worker_id")
+        job_type = self.client.hget(job_key, "job_type")
+        priority_str = self.client.hget(job_key, "priority")
+        retry_count_str = self.client.hget(job_key, "retry_count")
         
-
+        # Get current retry count or initialize to 0
+        try:
+            retry_count = int(retry_count_str) if retry_count_str else 0
+        except (ValueError, TypeError):
+            retry_count = 0
+            
+        # Increment retry count
+        retry_count += 1
+        self.client.hset(job_key, "retry_count", retry_count)
+        
+        try:
+            # Convert priority to integer if it exists
+            priority = int(priority_str) if priority_str else 5  # Default priority
+        except (ValueError, TypeError):
+            priority = 5  # Default priority if conversion fails
+            
+        logger.info(f"[redis_service.py fail_job()]: Marking job {job_id} as failed with error: {error} (retry {retry_count}/{max_retries})")
+        
+        # Record the failure details
+        self.client.hset(job_key, "last_error", error if error else "Unknown error")
+        self.client.hset(job_key, "failed_at", str(current_time))
+        
+        # Clear worker assignment
+        self.client.hdel(job_key, "worker_id")
+        
+        # Check if we've exceeded the retry limit
+        if retry_count > max_retries:
+            # Mark job as permanently failed
+            self.client.hset(job_key, "status", "failed")
+            self.client.hset(job_key, "permanent_failure", "true")
+            self.client.hset(job_key, "failure_reason", f"Exceeded maximum retry limit of {max_retries}. Last error: {error}")
+            
+            logger.warning(f"[redis_service.py fail_job()]: Job {job_id} permanently failed after {retry_count} retries. Last error: {error}")
+            
+            # Publish permanent failure event
+            self.publish_job_update(job_id, "failed", error=f"Exceeded maximum retry limit of {max_retries}. Last error: {error}", worker_id=worker_id, permanent=True)
+            
+            return True
+        
+        # If we haven't exceeded the retry limit, requeue the job
+        # Update job status to pending so it can be processed again
+        self.client.hset(job_key, "status", "pending")
+        
+        # Calculate composite score for priority queue (same logic as in add_job)
+        created_at_str = self.client.hget(job_key, "created_at") or str(current_time)
+        created_at = float(created_at_str)
+        adjusted_priority = priority + 1
+        composite_score = (adjusted_priority * 10000000000) - created_at
+        
+        # Add job back to the priority queue
+        self.client.zadd(PRIORITY_QUEUE, {job_id: composite_score})
+        
+        logger.info(f"[redis_service.py fail_job()]: Job {job_id} requeued with priority {priority} (retry {retry_count}/{max_retries})")
         
         # Publish failure event
-        self.publish_job_update(job_id, "failed", error=error, worker_id=worker_id)
+        self.publish_job_update(job_id, "failed", error=error, worker_id=worker_id, retry_count=retry_count, max_retries=max_retries)
         
         return True
     

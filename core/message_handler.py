@@ -23,7 +23,8 @@ from .message_models import (
     ClaimJobMessage, ClaimJobMessage,
     JobAssignedMessage, SubscriptionConfirmedMessage,
     AckMessage, JobNotificationsSubscribedMessage,
-    ResponseJobStatusMessage, WorkerCapabilities
+    ResponseJobStatusMessage, WorkerCapabilities,
+    FailJobMessage
     # SubscribeJobNotificationsMessage has been removed - functionality now in RegisterWorkerMessage
 )
 from .utils.logger import logger
@@ -402,6 +403,17 @@ class MessageHandler(MessageHandlerInterface):
                 # This ensures proper type validation while maintaining the original data
                 complete_message = CompleteJobMessage(**message_obj.dict())
                 await self.handle_complete_job(worker_id, complete_message)
+            case "fail_job":
+                # Cast message to the expected type for type checking
+                # Create a properly typed message object for job failure
+                # Note: We use .dict() here only for creating a new typed object, not for sending
+                # This ensures proper type validation while maintaining the original data
+                try:
+                    fail_message = FailJobMessage(**message_obj.dict())
+                    await self.handle_fail_job(worker_id, fail_message)
+                except Exception as e:
+                    error_message = ErrorMessage(error=f"Invalid FailJobMessage: {str(e)}")
+                    await self.connection_manager.send_to_worker(worker_id, error_message)
             case "worker_heartbeat":
                 # Validate that the message has the required fields for WorkerHeartbeatMessage
                 if not isinstance(message_obj, WorkerHeartbeatMessage):
@@ -556,6 +568,55 @@ class MessageHandler(MessageHandlerInterface):
             worker_id=worker_id
         )
         await self.connection_manager.send_to_worker(worker_id, ack_message)
+
+    async def handle_fail_job(self, worker_id: str, message: FailJobMessage) -> None:
+        """
+        Handle job failure message from a worker.
+        
+        This method marks the job as failed in Redis and requeues it for processing.
+
+        Args:
+            worker_id: Worker identifier
+            message: Job failure message
+        """
+        # 2025-04-17-15:44 - Restored handle_fail_job method to process fail_job messages
+        job_id = message.job_id
+        # Ensure error is a string, not None
+        error = message.error if hasattr(message, 'error') and message.error is not None else "Unknown error"
+
+        # Log the failure
+        logger.info(f"[message_handler.py handle_fail_job()]: Job {job_id} failed on worker {worker_id} with error: {error}")
+
+        # Mark the job as failed in Redis
+        success = self.redis_service.fail_job(job_id, error)
+
+        if success:
+            # Send acknowledgment to worker using the new JobFailedAckMessage
+            # 2025-04-17-16:00 - Updated to use JobFailedAckMessage instead of generic AckMessage
+            ack_message = self.message_models.create_job_failed_ack_message(
+                job_id=job_id,
+                worker_id=worker_id,
+                error=error
+            )
+            await self.connection_manager.send_to_worker(worker_id, ack_message)
+            
+            # Update worker status to idle and clear job assignment
+            # This also updates worker_info with the new status
+            self.connection_manager.update_worker_job_assignment(worker_id, "idle")
+            
+            # The fail_job method in redis_service already handles the requeuing logic
+            # by marking the job as failed and publishing a job update
+            
+            logger.info(f"[message_handler.py handle_fail_job()]: Job {job_id} marked as failed and requeued")
+            
+            # Broadcast pending jobs to idle workers
+            await self.broadcast_pending_jobs_to_idle_workers()
+        else:
+            # Send error to worker
+            error_message = ErrorMessage(error=f"Failed to mark job {job_id} as failed")
+            await self.connection_manager.send_to_worker(worker_id, error_message)
+            
+            logger.warning(f"[message_handler.py handle_fail_job()]: Failed to mark job {job_id} as failed by worker {worker_id}")
 
         # Forward completion update to subscribed clients
         # Pass the message object directly without .dict() conversion

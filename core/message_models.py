@@ -102,6 +102,14 @@ class FailJobMessage(BaseMessage):
     worker_id: str
     error: Optional[str] = None
     timestamp: float = Field(default_factory=time.time)
+    
+class JobFailedAckMessage(BaseMessage):
+    """Message for acknowledging receipt of a job failure message"""
+    type: str = MessageType.JOB_FAILED_ACK
+    job_id: str
+    worker_id: str
+    error: Optional[str] = None
+    timestamp: float = Field(default_factory=time.time)
 
 
 # Worker Heartbeat and Status Messages
@@ -517,6 +525,19 @@ class MessageModels(MessageModelsInterface):
                         type=MessageType.JOB_COMPLETED_ACK,
                         job_id=data.get("job_id", ""),
                         worker_id=data.get("worker_id", ""),
+                        timestamp=data.get("timestamp", time.time())
+                    ),
+                    message_type
+                )
+                
+            case MessageType.JOB_FAILED_ACK:
+                # 2025-04-17-16:04 - Added case for JOB_FAILED_ACK message type
+                return self._try_parse_message(
+                    lambda: JobFailedAckMessage(
+                        type=MessageType.JOB_FAILED_ACK,
+                        job_id=data.get("job_id", ""),
+                        worker_id=data.get("worker_id", ""),
+                        error=data.get("error", None),
                         timestamp=data.get("timestamp", time.time())
                     ),
                     message_type
@@ -942,6 +963,25 @@ class MessageModels(MessageModelsInterface):
         return JobCompletedAckMessage(
             job_id=job_id,
             worker_id=worker_id
+        )
+        
+    def create_job_failed_ack_message(self, job_id: str, worker_id: str, error: Optional[str] = None) -> JobFailedAckMessage:
+        """
+        Create a job failed acknowledgment message.
+        
+        Args:
+            job_id: ID of the failed job
+            worker_id: ID of the worker that reported the failure
+            error: Optional error message
+            
+        Returns:
+            JobFailedAckMessage: Job failed acknowledgment message model
+        """
+        # 2025-04-17-15:59 - Added method to create JobFailedAckMessage
+        return JobFailedAckMessage(
+            job_id=job_id,
+            worker_id=worker_id,
+            error=error
         )
 
     def create_connector_ws_status_message(self, worker_id: str, connector_type: str, 

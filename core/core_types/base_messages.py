@@ -82,6 +82,9 @@ class MessageType:
 
     #WORKER_SEND_JOB_FAILURE_TO_SERVER
     FAIL_JOB = "fail_job"                           # Worker → Server: Notifies that a job has failed
+    
+    #SERVER_SEND_JOB_FAILURE_ACK_TO_WORKER
+    JOB_FAILED_ACK = "job_failed_ack"               # Server → Worker: Acknowledges receipt of a job failure message
 
     #SERVER_SEND_JOB_COMPLETION_ACK_TO_WORKER
     JOB_COMPLETED_ACK = "job_completed_ack"         # Server → Worker: Acknowledges receipt of a job completion message

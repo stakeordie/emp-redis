@@ -103,6 +103,36 @@ class ComfyUIConnector(WebSocketConnector):
         
         logger.info(f"[comfyui_connector.py __init__] Initializing connector")
         logger.info(f"[comfyui_connector.py __init__] Username environment variable: {'set' if self.username else 'not set'}")
+        
+    def _get_connection_url(self) -> str:
+        """Get the WebSocket connection URL for ComfyUI
+        
+        Returns:
+            str: The WebSocket connection URL
+        """
+        # 2025-04-17-15:54 - Added missing _get_connection_url method
+        protocol = "wss" if self.use_ssl else "ws"
+        return f"{protocol}://{self.host}:{self.port}/ws"
+    
+    def _get_connection_headers(self) -> Dict[str, str]:
+        """Get the headers for the WebSocket connection
+        
+        Returns:
+            Dict[str, str]: The headers for the WebSocket connection
+        """
+        # 2025-04-17-15:54 - Added missing _get_connection_headers method
+        headers = {}
+        
+        # Add authentication headers if credentials are provided
+        if self.username and self.password:
+            import base64
+            auth_string = f"{self.username}:{self.password}"
+            auth_bytes = auth_string.encode('ascii')
+            base64_bytes = base64.b64encode(auth_bytes)
+            base64_auth = base64_bytes.decode('ascii')
+            headers['Authorization'] = f'Basic {base64_auth}'
+            
+        return headers
 
         # ComfyUI WebSocket URL
         protocol = "wss" if self.use_ssl else "ws"

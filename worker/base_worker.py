@@ -101,7 +101,8 @@ from core.message_models import (
     JobAvailableMessage,
     UpdateJobProgressMessage,
     MessageModels,
-    RegisterWorkerMessage
+    RegisterWorkerMessage,
+    FailJobMessage  # Added: 2025-04-17T15:12:00-04:00 - For properly reporting failed jobs
 )
 
 class WorkerStatus(Enum):
@@ -374,6 +375,22 @@ class BaseWorker:
                     else:
                         logger.warning(f"[base_worker.py handle_message()]: Received JOB_COMPLETED_ACK message with invalid format")
                 
+                case MessageType.JOB_FAILED_ACK:
+                    # 2025-04-17-16:01 - Added handler for JOB_FAILED_ACK message
+                    # Handle job failure acknowledgment from the server
+                    if hasattr(message_obj, 'job_id'):
+                        job_id = message_obj.job_id
+                        error = getattr(message_obj, 'error', 'Unknown error')
+                        logger.info(f"[base_worker.py handle_message()]: Job failure acknowledged by server: {job_id} - Error: {error}")
+                        
+                        # Ensure worker state is reset to idle
+                        if self.status != WorkerStatus.IDLE:
+                            logger.info(f"[base_worker.py handle_message()]: Resetting worker state to idle after job failure acknowledgment")
+                            self.status = WorkerStatus.IDLE
+                            self.current_job_id = None
+                    else:
+                        logger.warning(f"[base_worker.py handle_message()]: Received JOB_FAILED_ACK message with invalid format")
+                
                 case MessageType.WORKER_REGISTERED:
                     # Handle worker registration confirmation
                     worker_id = getattr(message_obj, 'worker_id', self.worker_id)
@@ -390,6 +407,13 @@ class BaseWorker:
                         logger.info(f"[base_worker.py handle_message()]: Resetting worker state to idle after claim error")
                         self.status = WorkerStatus.IDLE
                         self.current_job_id = None
+                
+                case MessageType.ACK:
+                    # Handle generic acknowledgment messages from the server
+                    # 2025-04-17-16:02 - Removed fail_job specific handling as it's now handled by JOB_FAILED_ACK
+                    original_id = getattr(message_obj, 'original_id', None)
+                    original_type = getattr(message_obj, 'original_type', None)
+                    logger.info(f"[base_worker.py handle_message()]: Received ACK from server for {original_type} message with ID {original_id}")
                 case _:
                     logger.debug(f"[base_worker.py handle_message()]: Received unhandled message type: {message_type}")
         except json.JSONDecodeError:
@@ -511,17 +535,22 @@ class BaseWorker:
                     "Worker connectors not initialized"
                 )
                 
-                # Send job failure message
+                # Send job failure message using FailJobMessage
+                # Updated: 2025-04-17T15:15:00-04:00 - Using FailJobMessage with detailed logging
                 job_id_str = str(job_id) if job_id is not None else "unknown_job"
-                fail_message = CompleteJobMessage(
+                fail_message = FailJobMessage(
                     job_id=job_id_str,
                     worker_id=self.worker_id,
-                    result={
-                        "status": "failed",
-                        "error": "Worker connectors not initialized"
-                    }
+                    error="Worker connectors not initialized"
                 )
-                await websocket.send(fail_message.model_dump_json())
+                
+                # Add detailed logging to verify the message is being sent
+                fail_message_json = fail_message.model_dump_json()
+                logger.info(f"[base_worker.py handle_job_assigned()]: SENDING FAIL_JOB MESSAGE: {fail_message_json}")
+                
+                # Send the message
+                await websocket.send(fail_message_json)
+                logger.info(f"[base_worker.py handle_job_assigned()]: Sent FailJobMessage for job {job_id_str} to be requeued")
                 
                 # Reset worker state
                 self.status = WorkerStatus.IDLE
@@ -540,17 +569,22 @@ class BaseWorker:
                     f"No connector available for job type: {job_type}"
                 )
                 
-                # Send job failure message
+                # Send job failure message using FailJobMessage
+                # Updated: 2025-04-17T15:15:00-04:00 - Using FailJobMessage with detailed logging
                 job_id_str = str(job_id) if job_id is not None else "unknown_job"
-                fail_message = CompleteJobMessage(
+                fail_message = FailJobMessage(
                     job_id=job_id_str,
                     worker_id=self.worker_id,
-                    result={
-                        "status": "failed",
-                        "error": f"No connector available for job type: {job_type}"
-                    }
+                    error=f"No connector available for job type: {job_type}"
                 )
-                await websocket.send(fail_message.model_dump_json())
+                
+                # Add detailed logging to verify the message is being sent
+                fail_message_json = fail_message.model_dump_json()
+                logger.info(f"[base_worker.py handle_job_assigned()]: SENDING FAIL_JOB MESSAGE: {fail_message_json}")
+                
+                # Send the message
+                await websocket.send(fail_message_json)
+                logger.info(f"[base_worker.py handle_job_assigned()]: Sent FailJobMessage for job {job_id_str} to be requeued")
                 
                 # Reset worker state
                 self.status = WorkerStatus.IDLE
@@ -570,39 +604,71 @@ class BaseWorker:
                 # Send initial progress update
                 await self.send_progress_update(websocket, job_id, 0, "started", f"Starting {job_type} job")
                 
+                # Updated: 2025-04-17T15:05:00-04:00 - Improved error handling for job completion
                 result = await connector.process_job(
                     websocket, job_id, payload, 
                     lambda job_id, progress, status, message: self.send_progress_update(websocket, job_id, progress, status, message)
                 )
                 
-                # Send final 100% progress update
-                await self.send_progress_update(websocket, job_id, 100, "completed", "Job completed successfully")
-                
-                logger.info(f"[base_worker.py handle_job_assigned()]: Job {job_id} completed successfully")
-                
-                # Send job completion message using CompleteJobMessage class
-                job_id_str = str(job_id) if job_id is not None else "unknown_job"
-                completion_message = CompleteJobMessage(
-                    worker_id=self.worker_id,
-                    job_id=job_id_str,
-                    result=result
-                )
-                await websocket.send(completion_message.model_dump_json())
+                # Check if the result indicates a failure
+                is_failed = False
+                if isinstance(result, dict) and result.get("status") == "failed":
+                    is_failed = True
+                    error_msg = result.get("error", "Unknown error")
+                    logger.error(f"[base_worker.py handle_job_assigned()]: Job {job_id} failed: {error_msg}")
+                    
+                    # Send error progress update if not already sent
+                    await self.send_progress_update(websocket, job_id, 0, "error", f"Job failed: {error_msg}")
+                    
+                    # Updated: 2025-04-17T15:23:00-04:00 - Using FailJobMessage for failed jobs
+                    # Send job failure message using FailJobMessage
+                    job_id_str = str(job_id) if job_id is not None else "unknown_job"
+                    fail_message = FailJobMessage(
+                        job_id=job_id_str,
+                        worker_id=self.worker_id,
+                        error=error_msg
+                    )
+                    
+                    # Add detailed logging to verify the message is being sent
+                    fail_message_json = fail_message.model_dump_json()
+                    logger.info(f"[base_worker.py handle_job_assigned()]: SENDING FAIL_JOB MESSAGE FOR NORMAL FAILURE: {fail_message_json}")
+                    
+                    # Send the message
+                    await websocket.send(fail_message_json)
+                    logger.info(f"[base_worker.py handle_job_assigned()]: Sent FailJobMessage for job {job_id_str} to be requeued")
+                else:
+                    # Only send 100% completion update for successful jobs
+                    await self.send_progress_update(websocket, job_id, 100, "completed", "Job completed successfully")
+                    logger.info(f"[base_worker.py handle_job_assigned()]: Job {job_id} completed successfully")
+                    
+                    # Send job completion message using CompleteJobMessage class only for successful jobs
+                    job_id_str = str(job_id) if job_id is not None else "unknown_job"
+                    completion_message = CompleteJobMessage(
+                        worker_id=self.worker_id,
+                        job_id=job_id_str,
+                        result=result
+                    )
+                    await websocket.send(completion_message.model_dump_json())
                 
             except Exception as e:
                 logger.error(f"[base_worker.py handle_job_assigned()]: Error processing job {job_id}: {str(e)}")
                 
-                # Send job failure message
+                # Send job failure message using FailJobMessage
+                # Updated: 2025-04-17T15:15:00-04:00 - Using FailJobMessage with detailed logging
                 job_id_str = str(job_id) if job_id is not None else "unknown_job"
-                fail_message = CompleteJobMessage(
+                fail_message = FailJobMessage(
                     job_id=job_id_str,
                     worker_id=self.worker_id,
-                    result={
-                        "status": "failed",
-                        "error": str(e)
-                    }
+                    error=str(e)
                 )
-                await websocket.send(fail_message.model_dump_json())
+                
+                # Add detailed logging to verify the message is being sent
+                fail_message_json = fail_message.model_dump_json()
+                logger.info(f"[base_worker.py handle_job_assigned()]: SENDING FAIL_JOB MESSAGE: {fail_message_json}")
+                
+                # Send the message
+                await websocket.send(fail_message_json)
+                logger.info(f"[base_worker.py handle_job_assigned()]: Sent FailJobMessage for job {job_id_str} to be requeued")
             
             finally:
                 # Reset worker state
