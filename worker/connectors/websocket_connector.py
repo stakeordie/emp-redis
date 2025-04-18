@@ -267,6 +267,24 @@ class WebSocketConnector(ConnectorInterface):
             self.error_count += 1
             return False
     
+    def _get_connection_url(self) -> str:
+        """Get the WebSocket connection URL
+        
+        Override this method in subclasses to provide service-specific URL generation.
+        Base implementation returns self.ws_url if it's already set, otherwise raises an error.
+        
+        Returns:
+            str: The WebSocket connection URL
+        
+        Raises:
+            ValueError: If ws_url is not set and method is not overridden by subclass
+        """
+        # 2025-04-17-19:48 - Added default implementation of _get_connection_url method
+        if hasattr(self, 'ws_url') and self.ws_url is not None:
+            return self.ws_url
+        else:
+            raise ValueError("WebSocket URL not set. Either set self.ws_url directly or override _get_connection_url() in subclass.")
+    
     def _get_connection_headers(self) -> Dict[str, str]:
         """Get headers for WebSocket connection
         

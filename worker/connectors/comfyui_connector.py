@@ -77,22 +77,25 @@ class ComfyUIConnector(WebSocketConnector):
     connector_name = "comfyui"
     
     def __init__(self):
-        # Call the parent class's __init__ method
+        # Call the parent class's __init__ method first
         super().__init__()
         
-        """Initialize the ComfyUI connector"""
         # ComfyUI connection settings (support both namespaced and non-namespaced)
         self.host = os.environ.get("WORKER_COMFYUI_HOST", os.environ.get("COMFYUI_HOST", "localhost"))
         self.port = int(os.environ.get("WORKER_COMFYUI_PORT", os.environ.get("COMFYUI_PORT", "8188")))
         self.use_ssl = os.environ.get("WORKER_COMFYUI_USE_SSL", os.environ.get("COMFYUI_USE_SSL", "false")).lower() in ("true", "1", "yes")
         
         # Connection management settings
-        # Updated: 2025-04-07T15:56:00-04:00 - Added option to control connection persistence
         self.keep_connection_open = os.environ.get("WORKER_COMFYUI_KEEP_CONNECTION", os.environ.get("COMFYUI_KEEP_CONNECTION", "false")).lower() in ("true", "1", "yes")
         
         # Authentication settings
         self.username = os.environ.get("WORKER_COMFYUI_USERNAME", os.environ.get("COMFYUI_USERNAME"))
         self.password = os.environ.get("WORKER_COMFYUI_PASSWORD", os.environ.get("COMFYUI_PASSWORD"))
+        
+        # ComfyUI-specific attributes
+        # 2025-04-17-19:36 - Fixed initialization of ComfyUI-specific attributes
+        self.client_id = None
+        self.prompt_id = None
         
         # Log which variables we're using
         logger.info(f"[comfyui_connector.py __init__] Using environment variables:")
@@ -101,9 +104,22 @@ class ComfyUIConnector(WebSocketConnector):
         logger.info(f"[comfyui_connector.py __init__] WORKER_COMFYUI_USE_SSL/COMFYUI_USE_SSL: {self.use_ssl}")
         logger.info(f"[comfyui_connector.py __init__] WORKER_COMFYUI_KEEP_CONNECTION/COMFYUI_KEEP_CONNECTION: {self.keep_connection_open}")
         
+        # Get the WebSocket URL using the _get_connection_url method
+        ws_url = self._get_connection_url()
+        logger.info(f"[comfyui_connector.py __init__] WebSocket URL: {ws_url}")
+        
         logger.info(f"[comfyui_connector.py __init__] Initializing connector")
         logger.info(f"[comfyui_connector.py __init__] Username environment variable: {'set' if self.username else 'not set'}")
         
+        # Set connection details for status reporting
+        self.connection_details = {
+            "host": self.host,
+            "port": self.port,
+            "client_id": self.client_id,
+            "ws_url": ws_url,
+            "last_prompt_id": self.prompt_id
+        }
+    
     def _get_connection_url(self) -> str:
         """Get the WebSocket connection URL for ComfyUI
         
@@ -133,23 +149,6 @@ class ComfyUIConnector(WebSocketConnector):
             headers['Authorization'] = f'Basic {base64_auth}'
             
         return headers
-
-        # ComfyUI WebSocket URL
-        protocol = "wss" if self.use_ssl else "ws"
-        self.ws_url = f"{protocol}://{self.host}:{self.port}/ws"
-
-        # ComfyUI-specific attributes
-        self.client_id = None
-        self.prompt_id = None
-        
-        # Set connection details for status reporting
-        self.connection_details = {
-            "host": self.host,
-            "port": self.port,
-            "client_id": self.client_id,
-            "ws_url": self.ws_url,
-            "last_prompt_id": self.prompt_id
-        }
     
     async def _on_connect(self) -> None:
         """Handle ComfyUI-specific connection steps"""
@@ -236,7 +235,7 @@ class ComfyUIConnector(WebSocketConnector):
         Returns:
             Optional[str]: The prompt ID if successful, None otherwise
         """
-        # Updated: 2025-04-17T14:50:00-04:00 - Enhanced diagnostic logging
+        # Updated: 2025-04-17-19:58 - Fixed to handle ComfyUI WebSocket protocol correctly
         if not self.connected or self.ws is None:
             logger.error(f"[comfyui_connector.py send_workflow] COMFYUI_STATUS: Cannot send workflow: not connected")
             logger.debug(f"[comfyui_connector.py send_workflow] COMFYUI_STATUS: Connection state: connected={self.connected}, ws={self.ws}, ws_closed={self.ws.closed if self.ws else True}")
@@ -247,10 +246,53 @@ class ComfyUIConnector(WebSocketConnector):
             ws_state = "closed" if self.ws.closed else "open"
             logger.info(f"[comfyui_connector.py send_workflow] COMFYUI_STATUS: WebSocket state before sending: {ws_state}")
             
-            # Create the prompt message
+            # If we don't have a client_id yet, we need to wait for it first
+            if not hasattr(self, 'client_id') or self.client_id is None:
+                logger.info(f"[comfyui_connector.py send_workflow] COMFYUI_STATUS: Waiting for client_id message")
+                try:
+                    response = await asyncio.wait_for(self.ws.receive_json(), timeout=10.0)
+                    logger.debug(f"[comfyui_connector.py send_workflow] COMFYUI_STATUS: Received initial message: {response}")
+                    
+                    # Check if it's a client_id message
+                    if response.get("type") == "client_id":
+                        self.client_id = response.get("data", {}).get("client_id")
+                        logger.info(f"[comfyui_connector.py send_workflow] COMFYUI_STATUS: Received client_id: {self.client_id}")
+                    else:
+                        logger.warning(f"[comfyui_connector.py send_workflow] COMFYUI_STATUS: Expected client_id message, got: {response}")
+                except asyncio.TimeoutError:
+                    logger.error(f"[comfyui_connector.py send_workflow] COMFYUI_STATUS: Timeout waiting for client_id message")
+            
+            # Create the prompt message with the correct structure
+            # Handle both cases where workflow_data might already have the nested structure
+            # or might be just the prompt object itself
+            # 2025-04-17-20:01 - Added support for both nested and non-nested workflow data formats
+            
+            # Check if workflow_data already has a nested structure with 'prompt' key
+            if 'prompt' in workflow_data and isinstance(workflow_data.get('prompt'), dict):
+                # Already in nested format, use as-is but ensure client_id is set
+                message_data = workflow_data.copy()
+                
+                # Make sure extra_data exists and contains client_id
+                if 'extra_data' not in message_data:
+                    message_data['extra_data'] = {}
+                
+                # Set client_id in extra_data
+                message_data['extra_data']['client_id'] = self.client_id if hasattr(self, 'client_id') else None
+                
+                logger.debug(f"[comfyui_connector.py send_workflow] COMFYUI_STATUS: Using pre-nested workflow structure")
+            else:
+                # Not in nested format, create the proper structure
+                message_data = {
+                    "prompt": workflow_data,
+                    "extra_data": {
+                        "client_id": self.client_id if hasattr(self, 'client_id') else None
+                    }
+                }
+                logger.debug(f"[comfyui_connector.py send_workflow] COMFYUI_STATUS: Created nested workflow structure")
+            
             prompt_message = {
                 "type": "prompt",
-                "data": workflow_data
+                "data": message_data
             }
             
             # Log workflow details (without the full prompt data which could be large)
@@ -266,31 +308,53 @@ class ComfyUIConnector(WebSocketConnector):
             
             # Log successful send
             send_duration = time.time() - send_start_time
-            logger.info(f"[comfyui_connector.py send_workflow] COMFYUI_STATUS: Workflow sent in {send_duration:.2f}s, waiting for response")
+            logger.info(f"[comfyui_connector.py send_workflow] COMFYUI_STATUS: Workflow sent in {send_duration:.2f}s, waiting for prompt_queued response")
             
             # Check connection state after sending
             if self.ws.closed:
                 logger.error(f"[comfyui_connector.py send_workflow] COMFYUI_STATUS: WebSocket closed immediately after sending workflow")
                 raise Exception("WebSocket closed immediately after sending workflow")
             
-            # Wait for the prompt response with timeout
-            logger.debug(f"[comfyui_connector.py send_workflow] COMFYUI_STATUS: Waiting for response with 30s timeout")
-            try:
-                response = await asyncio.wait_for(self.ws.receive_json(), timeout=30.0)
-                logger.debug(f"[comfyui_connector.py send_workflow] COMFYUI_STATUS: Received response: {response}")
-            except asyncio.TimeoutError:
-                logger.error(f"[comfyui_connector.py send_workflow] COMFYUI_STATUS: Timeout waiting for response after 30s")
-                raise Exception("Timeout waiting for ComfyUI response after sending workflow")
+            # Wait for the prompt_queued message with timeout
+            # We need to process multiple messages until we get the prompt_queued one
+            timeout = 30.0
+            start_time = time.time()
             
-            # Check if the response is valid
-            if response.get("type") == "prompt":
-                # Get the prompt ID
-                self.prompt_id = response.get("data", {}).get("prompt_id")
-                logger.info(f"[comfyui_connector.py send_workflow] COMFYUI_STATUS: Workflow sent successfully, prompt ID: {self.prompt_id}")
-                return self.prompt_id
-            else:
-                logger.error(f"[comfyui_connector.py send_workflow] COMFYUI_STATUS: Invalid response from ComfyUI: {response}")
-                return None
+            while (time.time() - start_time) < timeout:
+                try:
+                    # Set a shorter timeout for each individual message
+                    response = await asyncio.wait_for(self.ws.receive_json(), timeout=5.0)
+                    logger.debug(f"[comfyui_connector.py send_workflow] COMFYUI_STATUS: Received response: {response}")
+                    
+                    # Check message type
+                    msg_type = response.get("type")
+                    
+                    if msg_type == "prompt_queued":
+                        # Got the prompt_queued message, extract prompt_id
+                        self.prompt_id = response.get("data", {}).get("prompt_id")
+                        logger.info(f"[comfyui_connector.py send_workflow] COMFYUI_STATUS: Workflow queued successfully, prompt ID: {self.prompt_id}")
+                        return self.prompt_id
+                    elif msg_type == "error":
+                        # Error message from ComfyUI
+                        error_msg = response.get("data", {}).get("message", "Unknown error")
+                        logger.error(f"[comfyui_connector.py send_workflow] COMFYUI_STATUS: Error from ComfyUI: {error_msg}")
+                        raise Exception(f"ComfyUI error: {error_msg}")
+                    else:
+                        # Other message type, log and continue waiting
+                        logger.debug(f"[comfyui_connector.py send_workflow] COMFYUI_STATUS: Received {msg_type} message, continuing to wait for prompt_queued")
+                        
+                except asyncio.TimeoutError:
+                    # Timeout waiting for this message, but we'll continue until the overall timeout
+                    remaining = timeout - (time.time() - start_time)
+                    if remaining > 0:
+                        logger.debug(f"[comfyui_connector.py send_workflow] COMFYUI_STATUS: No message received in 5s, continuing to wait ({remaining:.1f}s remaining)")
+                    else:
+                        logger.error(f"[comfyui_connector.py send_workflow] COMFYUI_STATUS: Overall timeout waiting for prompt_queued message")
+                        raise Exception("Timeout waiting for ComfyUI prompt_queued response")
+            
+            # If we get here, we timed out waiting for the prompt_queued message
+            logger.error(f"[comfyui_connector.py send_workflow] COMFYUI_STATUS: Timeout waiting for prompt_queued message")
+            return None
                 
         except Exception as e:
             error_type = type(e).__name__
@@ -313,9 +377,14 @@ class ComfyUIConnector(WebSocketConnector):
         Returns:
             Dict[str, Any]: Final job result
         """
+        # 2025-04-17-19:44 - Focused on monitoring time between status messages
         node_progress = {}
         final_result = None
         job_completed = False
+        
+        # Initialize tracking variables
+        last_message_time = time.time()
+        message_count = 0
         
         # Send initial progress update
         await send_progress_update(job_id, 0, "queued", "Waiting for ComfyUI workflow")
@@ -323,13 +392,13 @@ class ComfyUIConnector(WebSocketConnector):
         
         # Process messages from ComfyUI
         try:
-            # Set a timeout for the entire monitoring process
-            max_monitoring_time = 600  # 10 minutes max
+            # Set maximum inactivity time
+            max_inactivity_time = 120  # 2 minutes without messages is an error
             
-            logger.info(f"[comfyui_connector.py _monitor_service_progress] COMFYUI_STATUS: Starting message processing loop with {max_monitoring_time}s max duration")
+            logger.info(f"[comfyui_connector.py _monitor_service_progress] COMFYUI_STATUS: Starting message processing loop with {max_inactivity_time}s max inactivity time")
             
-            # Use a timeout to prevent infinite waiting
-            while not job_completed and (time.time() - monitoring_start_time) < max_monitoring_time:
+            # Monitor until job is completed or connection is lost
+            while not job_completed:
                 # Check if connection is still valid
                 if self.ws is None or self.ws.closed:
                     logger.error(f"[comfyui_connector.py _monitor_service_progress] COMFYUI_STATUS: WebSocket connection closed during monitoring")
@@ -337,7 +406,11 @@ class ComfyUIConnector(WebSocketConnector):
                 
                 # Check for inactivity
                 time_since_last_message = time.time() - last_message_time
-                if time_since_last_message > 60:  # 1 minute without messages
+                if time_since_last_message > max_inactivity_time:
+                    logger.error(f"[comfyui_connector.py _monitor_service_progress] COMFYUI_STATUS: No messages received for {time_since_last_message:.1f}s - exceeds maximum inactivity time of {max_inactivity_time}s")
+                    raise Exception(f"Service inactivity timeout - no messages received for {time_since_last_message:.1f}s")
+                
+                if time_since_last_message > 60:  # Warning at 1 minute
                     logger.warning(f"[comfyui_connector.py _monitor_service_progress] COMFYUI_STATUS: No messages received for {time_since_last_message:.1f}s")
                     # Send a ping to check connection
                     logger.debug(f"[comfyui_connector.py _monitor_service_progress] COMFYUI_STATUS: Sending ping to check connection")
@@ -362,7 +435,12 @@ class ComfyUIConnector(WebSocketConnector):
                         data = json.loads(msg.data)
                         msg_type = data.get('type', 'unknown')
                         
-                        logger.debug(f"[comfyui_connector.py _monitor_service_progress] COMFYUI_STATUS: Message #{message_count} - type={msg_type}")
+                        # 2025-04-17-20:22 - Show ComfyUI messages directly with minimal formatting
+                        # Only log the full message for non-progress updates to reduce noise
+                        if msg_type != 'progress':
+                            # Format the message to be more readable
+                            message_data = data.get('data', {})
+                            logger.info(f"COMFYUI → {msg_type.upper()}: {message_data}")
                         
                         # Handle different message types
                         if msg_type == 'progress':
@@ -372,26 +450,32 @@ class ComfyUIConnector(WebSocketConnector):
                             
                             if node_id is not None:
                                 node_progress[node_id] = progress
-                                logger.debug(f"[comfyui_connector.py _monitor_service_progress] COMFYUI_STATUS: Node {node_id} progress: {progress}")
+                                # Don't log every node progress update to reduce noise
                             
                             # Dynamic progress calculation (10-90%)
                             if node_progress:
                                 avg_progress = min(90, 10 + (sum(node_progress.values()) / len(node_progress) * 80))
                                 await send_progress_update(job_id, int(avg_progress), "processing", f"Progress across {len(node_progress)} nodes")
-                                logger.debug(f"[comfyui_connector.py _monitor_service_progress] COMFYUI_STATUS: Overall progress: {avg_progress:.1f}%")
+                                # Only log progress updates every 10%
+                                if int(avg_progress) % 10 == 0:
+                                    logger.info(f"COMFYUI → PROGRESS: {int(avg_progress)}% complete across {len(node_progress)} nodes")
                                 
                         elif msg_type == 'executing' and data.get('data', {}).get('node') == None:
                             job_completed = True
                             final_result = data.get('data', {})
-                            logger.info(f"[comfyui_connector.py _monitor_service_progress] COMFYUI_STATUS: Workflow execution completed after {message_count} messages")
-                            logger.debug(f"[comfyui_connector.py _monitor_service_progress] COMFYUI_STATUS: Final data: {data}")
+                            logger.info(f"COMFYUI → COMPLETED: Workflow execution completed after {message_count} messages")
+                            # Show the final data in a more readable format
+                            final_data = data.get('data', {})
+                            logger.info(f"COMFYUI → RESULT: {final_data}")
                             await send_progress_update(job_id, 100, "finalizing", "Workflow execution completed")
                             break
                             
                         elif msg_type == 'execution_error':
                             error_details = data.get('data', {}).get('exception_message', 'Unknown error')
-                            logger.error(f"[comfyui_connector.py _monitor_service_progress] COMFYUI_STATUS: Execution error: {error_details}")
-                            logger.debug(f"[comfyui_connector.py _monitor_service_progress] COMFYUI_STATUS: Error data: {data}")
+                            logger.error(f"COMFYUI → ERROR: {error_details}")
+                            # Show the full error data for debugging
+                            error_data = data.get('data', {})
+                            logger.error(f"COMFYUI → ERROR_DETAILS: {error_data}")
                             await send_progress_update(job_id, 0, "error", f"ComfyUI execution error: {error_details}")
                             raise Exception(f"ComfyUI Execution Error: {error_details}")
                             
@@ -422,7 +506,9 @@ class ComfyUIConnector(WebSocketConnector):
             
             # Check if we timed out the entire monitoring process
             if not job_completed:
-                total_time = time.time() - monitoring_start_time
+                # 2025-04-17-19:45 - Removed reference to undefined monitoring_start_time
+                # Calculate time since the beginning of the method using last_message_time as reference
+                total_time = time.time() - last_message_time
                 logger.error(f"[comfyui_connector.py _monitor_service_progress] COMFYUI_STATUS: Monitoring timed out after {total_time:.1f}s")
                 raise Exception(f"Workflow monitoring timed out after {total_time:.1f} seconds")
                 
@@ -438,7 +524,9 @@ class ComfyUIConnector(WebSocketConnector):
             return {"status": "error", "message": str(e)}
         
         # Log successful completion
-        total_time = time.time() - monitoring_start_time
+        # 2025-04-17-19:46 - Removed reference to undefined monitoring_start_time
+        # Calculate time since the beginning of the method using last_message_time as reference
+        total_time = time.time() - last_message_time
         logger.info(f"[comfyui_connector.py _monitor_service_progress] COMFYUI_STATUS: Monitoring completed successfully after {total_time:.1f}s with {message_count} messages")
         
         return final_result or {}

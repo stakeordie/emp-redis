@@ -1757,11 +1757,32 @@ function updateUI() {
     
     // Then filter by status for accurate display
     const queuedJobs = validJobs.filter(job => job.status === 'pending');
-    const activeJobs = validJobs.filter(job => job.status === 'active' || job.status === 'processing');
+    
+    // 2025-04-17-20:10 - Fixed job categorization to properly handle completed jobs
+    // Check for jobs with 100% progress and completed status or explicitly marked as completed
+    const completedJobs = validJobs.filter(job => job.status === 'completed');
+    
+    // Jobs are only active if they're explicitly marked as active/processing AND not at 100% progress
+    const activeJobs = validJobs.filter(job => 
+        (job.status === 'active' || job.status === 'processing') && 
+        // If a job has 100% progress and a completedAt timestamp, treat it as completed
+        !(job.progress === 100 && job.completedAt)
+    );
+    
+    // Move jobs with 100% progress to completed if they're still marked as active/processing
+    validJobs.forEach(job => {
+        if ((job.status === 'active' || job.status === 'processing') && job.progress === 100) {
+            // If the job has 100% progress but is still marked as active, update it to completed
+            console.log(`[DEBUG] Moving job ${job.id} from active to completed (100% progress)`); 
+            job.status = 'completed';
+            job.completedAt = job.completedAt || Date.now();
+        }
+    });
+    
     const failedJobs = validJobs.filter(job => job.status === 'failed');
     
     // Log job counts by status for debugging
-    console.log(`[2025-04-06 18:50] Job counts by status: queued=${queuedJobs.length}, active=${activeJobs.length}, failed=${failedJobs.length}`);
+    console.log(`[2025-04-17-20:10] Job counts by status: queued=${queuedJobs.length}, active=${activeJobs.length}, completed=${completedJobs.length}, failed=${failedJobs.length}`);
     
     // Update UI with accurate counts
     elements.workersCount.textContent = state.stats.totalWorkers;
@@ -1858,9 +1879,20 @@ function updateUI() {
             if (currentJob) {
                 // Ensure the job is linked to this worker
                 currentJob.worker_id = worker.id;
-                // Ensure job is marked as processing
-                if (currentJob.status !== 'processing' && currentJob.status !== 'active') {
+                
+                // 2025-04-17-20:13 - Don't override completed or failed job statuses
+                // Only set status to processing if it's not already in a terminal state
+                if (currentJob.status !== 'processing' && 
+                    currentJob.status !== 'active' && 
+                    currentJob.status !== 'completed' && 
+                    currentJob.status !== 'failed') {
                     currentJob.status = 'processing';
+                }
+                
+                // If job is completed or failed, clear it from the worker's current_job_id
+                if (currentJob.status === 'completed' || currentJob.status === 'failed') {
+                    console.log(`[DEBUG] Clearing worker ${worker.id} current_job_id as job ${currentJob.id} is in terminal state: ${currentJob.status}`);
+                    worker.current_job_id = null;
                 }
                 console.log(`[DEBUG] Current job for worker ${worker.id}:`, {
                     id: currentJob.id || currentJob.jobId,
