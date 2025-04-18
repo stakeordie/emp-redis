@@ -141,7 +141,7 @@ services:
       dockerfile: ./apps/mock-env/Dockerfile.worker
     environment:
       - WORKER_ID=worker1r
-      - WORKER_REDIS_API_HOST=redisserver-production.up.railway.app
+      - WORKER_REDIS_API_HOST=redisservernew-production.up.railway.app
       - WORKER_USE_SSL=FALSE
       - WORKER_HEARTBEAT_INTERVAL=20
       - WORKER_LOG_LEVEL=INFO
@@ -164,7 +164,7 @@ services:
       dockerfile: ./apps/mock-env/Dockerfile.worker
     environment:
       - WORKER_ID=worker2r
-      - WORKER_REDIS_API_HOST=redisserver-production.up.railway.app
+      - WORKER_REDIS_API_HOST=redisservernew-production.up.railway.app
       - WORKER_USE_SSL=FALSE
       - WORKER_HEARTBEAT_INTERVAL=20
       - WORKER_LOG_LEVEL=INFO
@@ -187,7 +187,7 @@ services:
       dockerfile: ./apps/mock-env/Dockerfile.worker
     environment:
       - WORKER_ID=worker3r
-      - WORKER_REDIS_API_HOST=redisserver-production.up.railway.app
+      - WORKER_REDIS_API_HOST=redisservernew-production.up.railway.app
       - WORKER_USE_SSL=FALSE
       - WORKER_HEARTBEAT_INTERVAL=20
       - WORKER_LOG_LEVEL=INFO
@@ -210,7 +210,7 @@ services:
       dockerfile: ./apps/mock-env/Dockerfile.worker
     environment:
       - WORKER_ID=worker4r
-      - WORKER_REDIS_API_HOST=redisserver-production.up.railway.app
+      - WORKER_REDIS_API_HOST=redisservernew-production.up.railway.app
       - WORKER_USE_SSL=FALSE
       - WORKER_HEARTBEAT_INTERVAL=20
       - WORKER_LOG_LEVEL=INFO
