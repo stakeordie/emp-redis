@@ -370,7 +370,7 @@ class RedisService(RedisServiceInterface):
         Returns:
             bool: True if failure was recorded successfully, False otherwise
         """
-        # 2025-04-17-15:47 - Added retry counter and max retry limit
+        # 2025-04-25-15:30 - Added tracking of failed workers to ensure job alternates between workers
         import time
         current_time = time.time()
         
@@ -409,6 +409,10 @@ class RedisService(RedisServiceInterface):
         # Record the failure details
         self.client.hset(job_key, "last_error", error if error else "Unknown error")
         self.client.hset(job_key, "failed_at", str(current_time))
+        
+        # Store the worker that failed this job to exclude it next time
+        if worker_id:
+            self.client.hset(job_key, "last_failed_worker", worker_id)
         
         # Clear worker assignment
         self.client.hdel(job_key, "worker_id")
@@ -946,7 +950,15 @@ class RedisService(RedisServiceInterface):
                 
                 if job_status != "pending":
                     pipe.unwatch()
-
+                    return None
+                
+                # Check if this worker was the last one to fail this job
+                last_failed_worker = pipe.hget(job_key, "last_failed_worker")
+                
+                # If this worker was the last one to fail this job, don't let it claim it again
+                if last_failed_worker == worker_id:
+                    logger.info(f"[redis_service.py claim_job()]: Worker {worker_id} was the last to fail job {job_id}, skipping claim")
+                    pipe.unwatch()
                     return None
                 
                 # Start transaction
@@ -972,11 +984,10 @@ class RedisService(RedisServiceInterface):
                     if isinstance(params_str, str):
                         job_data["params"] = json.loads(params_str)
                 
-
                 return job_data
                 
             except Exception as e:
-
+                logger.error(f"[redis_service.py claim_job()]: Error claiming job {job_id} for worker {worker_id}: {str(e)}")
                 return None
     
     def get_pending_jobs_by_type(self, job_type: str) -> List[Dict[str, Any]]:

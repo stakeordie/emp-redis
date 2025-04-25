@@ -5,6 +5,11 @@ All notable changes to the EMP Redis project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- [2025-04-25 15:30] Added smart job reassignment for failed jobs:
+  - Failed jobs now alternate between available workers
+  - Jobs will not be reassigned to the same worker that just failed them
+  - Implemented by tracking the last worker that failed each job
+  - Modified job claim logic to check and respect worker exclusion
 - [2025-04-07 10:04] Added REST connectors for workers:
   - `rest_sync_connector.py` for synchronous REST API calls
   - `rest_async_connector.py` for asynchronous REST API calls with polling
