@@ -40,6 +40,7 @@ const state = {
 // Connection URLs
 const CONNECTION_URLS = {
     railway: "wss://redisserver-production.up.railway.app",
+    railwaynew: "wss://redisservernew-production.up.railway.app",
     local: "ws://localhost:8001"
 };
 
@@ -252,9 +253,10 @@ function connect() {
  * @param {string} authToken - Authentication token
  */
 function connectMonitorSocket(baseUrl, monitorId, authToken) {
-    // Always use wss:// for Railway (production) and ws:// for local
-    const isRailway = elements.connectionType.value === 'railway';
-    const protocol = isRailway ? 'wss' : 'ws';
+    // 2025-04-17-20:50 - Updated to handle both railway and railwaynew connection types
+    const connectionType = elements.connectionType.value;
+    const isProduction = connectionType === 'railway' || connectionType === 'railwaynew';
+    const protocol = isProduction ? 'wss' : 'ws';
     
     // Extract host and port from baseUrl
     let host = baseUrl;
@@ -289,9 +291,12 @@ function connectMonitorSocket(baseUrl, monitorId, authToken) {
         // Listen for messages
         state.monitorSocket.addEventListener('message', handleMonitorMessage);
         
-        // Listen for errors
+        // Listen for errors - 2025-04-17-20:52 - Enhanced error logging
         state.monitorSocket.addEventListener('error', (event) => {
+            console.error('Monitor socket error details:', event);
             addLogEntry(`Monitor socket error: ${event}`, 'error');
+            // Try to get more details about the error
+            addLogEntry(`Connection to ${monitorUrl} failed. Please check if the server is running and accessible.`, 'error');
             handleDisconnect();
         });
         
@@ -314,9 +319,10 @@ function connectMonitorSocket(baseUrl, monitorId, authToken) {
  * @param {string} authToken - Authentication token
  */
 function connectClientSocket(baseUrl, clientId, authToken) {
-    // Always use wss:// for Railway (production) and ws:// for local
-    const isRailway = elements.connectionType.value === 'railway';
-    const protocol = isRailway ? 'wss' : 'ws';
+    // 2025-04-17-20:50 - Updated to handle both railway and railwaynew connection types
+    const connectionType = elements.connectionType.value;
+    const isProduction = connectionType === 'railway' || connectionType === 'railwaynew';
+    const protocol = isProduction ? 'wss' : 'ws';
     
     // Extract host and port from baseUrl
     let host = baseUrl;
@@ -348,9 +354,12 @@ function connectClientSocket(baseUrl, clientId, authToken) {
         // Listen for messages
         state.clientSocket.addEventListener('message', handleClientMessage);
         
-        // Listen for errors
+        // Listen for errors - 2025-04-17-20:52 - Enhanced error logging
         state.clientSocket.addEventListener('error', (event) => {
+            console.error('Client socket error details:', event);
             addLogEntry(`Client socket error: ${event}`, 'error');
+            // Try to get more details about the error
+            addLogEntry(`Connection to ${clientUrl} failed. Please check if the server is running and accessible.`, 'error');
             handleDisconnect();
         });
         
