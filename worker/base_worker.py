@@ -429,19 +429,87 @@ class BaseWorker:
             message_obj: The job notification message object
         """
         try:
+            # 2025-04-25-18:45 - Add comprehensive logging to understand message structure
+            logger.info(f"""[base_worker.py handle_job_notification()]
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ JOB NOTIFICATION RECEIVED - DETAILED MESSAGE STRUCTURE                      ║
+║ Message Type: {type(message_obj)}                                            ║
+║ Worker ID: {self.worker_id}                                                   ║
+║ Raw Message: {str(message_obj)[:500]}                                         ║
+╚══════════════════════════════════════════════════════════════════════════════╝""")
+            
             # First check if worker is idle before proceeding
             if self.status != WorkerStatus.IDLE:
                 logger.info(f"[base_worker.py handle_job_notification()]: Ignoring job notification - worker is busy")
                 return
                 
             # Extract job details safely with fallbacks
-            job_id = getattr(message_obj, 'job_id', None)
+            job_id = None
+            job_type = 'unknown'
+            priority = 0
+            last_failed_worker = None
+            
+            # Log all available attributes and methods
+            if hasattr(message_obj, '__dict__'):
+                logger.info(f"[base_worker.py handle_job_notification()]: Message attributes: {message_obj.__dict__}")
+            
+            # Try different ways to access message data
+            if isinstance(message_obj, dict):
+                # It's a dictionary
+                logger.info(f"[base_worker.py handle_job_notification()]: Message is a dictionary with keys: {message_obj.keys()}")
+                job_id = message_obj.get('job_id')
+                job_type = message_obj.get('job_type', 'unknown')
+                priority = message_obj.get('priority', 0)
+                last_failed_worker = message_obj.get('last_failed_worker')
+            elif hasattr(message_obj, 'job_id'):
+                # It has direct attributes
+                logger.info(f"[base_worker.py handle_job_notification()]: Message has direct attributes")
+                job_id = message_obj.job_id
+                job_type = getattr(message_obj, 'job_type', 'unknown')
+                priority = getattr(message_obj, 'priority', 0)
+                last_failed_worker = getattr(message_obj, 'last_failed_worker', None)
+            else:
+                # Try to parse as JSON string
+                logger.info(f"[base_worker.py handle_job_notification()]: Trying to parse message as JSON string")
+                try:
+                    import json
+                    if isinstance(message_obj, str):
+                        parsed = json.loads(message_obj)
+                        job_id = parsed.get('job_id')
+                        job_type = parsed.get('job_type', 'unknown')
+                        priority = parsed.get('priority', 0)
+                        last_failed_worker = parsed.get('last_failed_worker')
+                        logger.info(f"[base_worker.py handle_job_notification()]: Successfully parsed JSON with keys: {parsed.keys()}")
+                except Exception as e:
+                    logger.error(f"[base_worker.py handle_job_notification()]: Failed to parse message as JSON: {str(e)}")
+            
+            # Check if we got a job_id
             if job_id is None:
                 logger.error(f"[base_worker.py handle_job_notification()]: Job notification missing job_id")
                 return
-                
-            job_type = getattr(message_obj, 'job_type', 'unknown')
-            priority = getattr(message_obj, 'priority', 0)
+            
+            # Log the extracted values
+            logger.info(f"""[base_worker.py handle_job_notification()]
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ EXTRACTED JOB NOTIFICATION VALUES                                           ║
+║ Job ID: {job_id}                                                             ║
+║ Job Type: {job_type}                                                          ║
+║ Priority: {priority}                                                          ║
+║ Last Failed Worker: {last_failed_worker}                                      ║
+╚══════════════════════════════════════════════════════════════════════════════╝""")
+            
+            # Check if this worker previously failed this job
+            if last_failed_worker and last_failed_worker == self.worker_id:
+                # Log with eye-catching format to make it obvious in the logs
+                logger.info(f"""[base_worker.py handle_job_notification()]
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ IGNORING JOB NOTIFICATION - WORKER PREVIOUSLY FAILED THIS JOB                ║
+║ Job ID: {job_id}                                                             ║
+║ Worker ID: {self.worker_id}                                                   ║
+║ Last Failed Worker: {last_failed_worker}                                      ║
+║ Job Type: {job_type}                                                          ║
+╚══════════════════════════════════════════════════════════════════════════════╝""")
+                return
             
             logger.info(f"[base_worker.py handle_job_notification()]: Received job notification - job_id: {job_id}, type: {job_type}, priority: {priority}")
             

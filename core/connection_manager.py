@@ -74,6 +74,11 @@ class ConnectionManager(ConnectionManagerInterface):
         # Track worker registration time and stats
         self.worker_info: Dict[str, Dict[str, Any]] = {}
         
+        # 2025-04-25-23:05 - Added in-memory tracking for failed jobs per worker
+        # This replaces the Redis-based last_failed_worker tracking with a more comprehensive approach
+        # Maps worker_id to a set of job_ids that the worker has failed
+        self.worker_failed_jobs: Dict[str, Set[str]] = {}
+        
         # Reference to MessageHandler for delegating message processing
         self.message_handler = None
         self.redis_service = None
@@ -90,6 +95,36 @@ class ConnectionManager(ConnectionManagerInterface):
     
     # Note: Stale worker detection and cleanup is now handled by the message handler's _mark_stale_workers_task
     # and the Redis service's mark_stale_workers method
+    
+    def record_failed_job(self, worker_id: str, job_id: str) -> None:
+        """
+        Record that a worker has failed a specific job
+        
+        This method updates the in-memory tracking of which jobs a worker has failed.
+        This information is used to prevent reassigning failed jobs to the same worker.
+        
+        Args:
+            worker_id: The ID of the worker that failed the job
+            job_id: The ID of the job that failed
+        """
+        # 2025-04-25-23:15 - Added method to record failed jobs in memory
+        logger.info(f"[connection_manager.py record_failed_job()] Recording that worker {worker_id} failed job {job_id}")
+        
+        # Initialize the set if it doesn't exist
+        if worker_id not in self.worker_failed_jobs:
+            self.worker_failed_jobs[worker_id] = set()
+        
+        # Add the job ID to the set of failed jobs for this worker
+        self.worker_failed_jobs[worker_id].add(job_id)
+        
+        # Log the updated failed jobs for this worker
+        logger.info(f"""[connection_manager.py record_failed_job()]
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ WORKER FAILURE RECORDED                                                      ║
+║ Worker ID: {worker_id}                                                       ║
+║ Job ID: {job_id}                                                             ║
+║ Total Failed Jobs: {len(self.worker_failed_jobs.get(worker_id, set()))}      ║
+╚══════════════════════════════════════════════════════════════════════════════╝""")
     
     async def disconnect_worker(self, worker_id: str) -> None:
         """
@@ -712,6 +747,7 @@ class ConnectionManager(ConnectionManagerInterface):
             msg_type = "unknown"
             msg_id = "unknown"
             job_type = None
+            last_failed_worker = None
             
             if isinstance(message, dict):
                 if "type" in message:
@@ -722,6 +758,9 @@ class ConnectionManager(ConnectionManagerInterface):
                     msg_id = message["job_id"]
                 if "job_type" in message:
                     job_type = message["job_type"]
+                # 2025-04-25-18:55 - Check for last_failed_worker field
+                if "last_failed_worker" in message:
+                    last_failed_worker = message["last_failed_worker"]
             elif hasattr(message, "type"):
                 msg_type = message.type
                 if hasattr(message, "id"):
@@ -730,6 +769,9 @@ class ConnectionManager(ConnectionManagerInterface):
                     msg_id = message.job_id
                 if hasattr(message, "job_type"):
                     job_type = message.job_type
+                # 2025-04-25-18:55 - Check for last_failed_worker field
+                if hasattr(message, "last_failed_worker"):
+                    last_failed_worker = message.last_failed_worker
             
             # Log concise message details
             log_details = f"type={msg_type}, id={msg_id}"
@@ -748,6 +790,30 @@ class ConnectionManager(ConnectionManagerInterface):
                 logger.info(f"[WORKER-MSG] Sent job notification for job type {job_type} to worker {worker_id}")
                 if hasattr(message, "job_request_payload") and message.job_request_payload:
                     logger.info(f"[WORKER-MSG] Job request payload: {message.job_request_payload}")
+                
+                # 2025-04-25-18:55 - Add boxed logging for last_failed_worker field
+                box_width = 80
+                logger.info("╔" + "═" * (box_width - 2) + "╗")
+                logger.info("║ JOB NOTIFICATION SERIALIZATION CHECK " + " " * (box_width - 38) + "║")
+                logger.info("║" + "─" * (box_width - 2) + "║")
+                logger.info(f"║ Job ID: {msg_id}" + " " * (box_width - 11 - len(str(msg_id))) + "║")
+                logger.info(f"║ Job Type: {job_type}" + " " * (box_width - 13 - len(str(job_type))) + "║")
+                logger.info(f"║ Worker ID: {worker_id}" + " " * (box_width - 14 - len(str(worker_id))) + "║")
+                logger.info(f"║ Message Type: {msg_type}" + " " * (box_width - 17 - len(str(msg_type))) + "║")
+                
+                if last_failed_worker:
+                    logger.info(f"║ Last Failed Worker: {last_failed_worker}" + " " * (box_width - 24 - len(str(last_failed_worker))) + "║")
+                    logger.info("║ WORKER REASSIGNMENT: This job will NOT be reassigned to the last failed worker ║")
+                else:
+                    logger.info("║ Last Failed Worker: None" + " " * (box_width - 24 - 4) + "║")
+                    logger.info("║ WORKER REASSIGNMENT: No last_failed_worker specified for this job" + " " * 12 + "║")
+                
+                # Log the actual serialized message content for debugging
+                logger.info("║" + "─" * (box_width - 2) + "║")
+                logger.info("║ Serialized Message Preview (first 50 chars):" + " " * (box_width - 47) + "║")
+                preview = message_text[:50] + "..." if len(message_text) > 50 else message_text
+                logger.info(f"║ {preview}" + " " * (box_width - 3 - len(preview)) + "║")
+                logger.info("╚" + "═" * (box_width - 2) + "╝")
             
             # logger.debug(f"[WORKER-MSG] Successfully sent message to worker {worker_id}")
             return True
@@ -1226,7 +1292,22 @@ class ConnectionManager(ConnectionManagerInterface):
         base_notification = notification_dict.copy()
         
         # Send to eligible workers
+        excluded_workers = []
+        
         for worker_id in idle_workers:
+            # 2025-04-25-23:20 - Check if worker has previously failed this job
+            # This is the new in-memory approach to prevent reassigning failed jobs
+            if worker_id in self.worker_failed_jobs and job_id in self.worker_failed_jobs[worker_id]:
+                logger.info(f"""[connection_manager.py notify_idle_workers()]
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ WORKER EXCLUDED FROM JOB NOTIFICATION                                        ║
+║ Worker ID: {worker_id}                                                       ║
+║ Job ID: {job_id}                                                             ║
+║ Reason: Worker previously failed this job                                     ║
+╚══════════════════════════════════════════════════════════════════════════════╝""")
+                excluded_workers.append(worker_id)
+                continue
+                
             # Create a worker-specific notification with accurate worker count
             worker_notification = base_notification.copy()
             # If this is a worker_notification type message, ensure worker_count is correct
@@ -1241,7 +1322,6 @@ class ConnectionManager(ConnectionManagerInterface):
             capabilities = WorkerCapabilities(**raw_capabilities)
 
             capabilities_dict = capabilities.dict()
-            #logger.info(f"[JOB-NOTIFY] Worker {worker_id} capabilities: {capabilities}")
             
             # Get supported job types
             supported_job_types = capabilities_dict.get("supported_job_types", [])
@@ -1257,6 +1337,16 @@ class ConnectionManager(ConnectionManagerInterface):
             else:
                 logger.warning(f"[JOB-NOTIFY] Worker {worker_id} does not support job type {job_type}, skipping notification")
                 logger.info(f"[JOB-NOTIFY] Worker {worker_id} capabilities: {capabilities}")
+                
+        # Log summary of excluded workers
+        if excluded_workers:
+            logger.info(f"""[connection_manager.py notify_idle_workers()]
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ WORKER EXCLUSION SUMMARY                                                    ║
+║ Job ID: {job_id}                                                             ║
+║ Excluded Workers: {len(excluded_workers)}                                     ║
+║ Remaining Eligible Workers: {len(idle_workers) - len(excluded_workers)}       ║
+╚══════════════════════════════════════════════════════════════════════════════╝""")
         return successful_sends
     
     async def broadcast_job_notification(self, job_notification: BaseMessage) -> int:

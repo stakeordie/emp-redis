@@ -112,29 +112,41 @@ class WebSocketConnector(ConnectorInterface):
         """Connect to the WebSocket service
         
         Returns:
-            bool: True if connected successfully, False otherwise
+            bool: True if connected successfully
+            
+        Raises:
+            Exception: If connection fails for any reason
         """
+        # 2025-04-25-17:55 - Updated to use a much shorter timeout (5 seconds) for initial connection
+        # This ensures we fail fast if the connection can't be established
+        connection_timeout = 5.0  # Use a fixed 5-second timeout for initial connection
+        
         try:
             # Record connection attempt
             self.connection_attempts += 1
             self.last_connection_attempt_time = time.time()
             self.connection_start_time = time.time()
             
-            # Log detailed connection attempt information
-            logger.info(f"[connectors/websocket_connector.py connect()] WEBSOCKET_STATUS: Connection attempt #{self.connection_attempts} started at {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(self.connection_start_time))}")
-            logger.info(f"[connectors/websocket_connector.py connect()] WEBSOCKET_STATUS: Connecting to {self.ws_url} with timeout {self.connection_timeout}s")
+            # 2025-04-25-18:02 - Added eye-catching log entries for connection attempts
+            logger.info(f"""[connectors/websocket_connector.py connect()] 
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ WEBSOCKET CONNECTION ATTEMPT #{self.connection_attempts}                                  ║
+║ URL: {self.ws_url}                                                           ║
+║ Timeout: {connection_timeout}s                                               ║
+║ Time: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(self.connection_start_time))}   ║
+╚══════════════════════════════════════════════════════════════════════════════╝""")
             
             # Create a new aiohttp session if needed
             if self.session is None or self.session.closed:
                 # Configure timeout settings
                 timeout = aiohttp.ClientTimeout(
                     total=None,  # No total timeout
-                    connect=self.connection_timeout,
-                    sock_connect=self.connection_timeout,
+                    connect=connection_timeout,
+                    sock_connect=connection_timeout,
                     sock_read=60.0  # Default read timeout
                 )
                 self.session = aiohttp.ClientSession(timeout=timeout)
-                logger.info(f"[connectors/websocket_connector.py connect()] WEBSOCKET_STATUS: Created new aiohttp session with timeout settings: connect={self.connection_timeout}s, sock_connect={self.connection_timeout}s, sock_read=60.0s")
+                logger.info(f"[connectors/websocket_connector.py connect()] WEBSOCKET_STATUS: Created new aiohttp session with timeout settings: connect={connection_timeout}s, sock_connect={connection_timeout}s, sock_read=60.0s")
             
             # Get connection URL and headers
             self.ws_url = self._get_connection_url()
@@ -159,7 +171,7 @@ class WebSocketConnector(ConnectorInterface):
                         autoclose=False,  # We'll handle closing ourselves
                         autoping=True     # Automatically respond to pings
                     ),
-                    timeout=self.connection_timeout
+                    timeout=connection_timeout
                 )
                 
                 connection_time = time.time() - connection_start
@@ -183,7 +195,13 @@ class WebSocketConnector(ConnectorInterface):
                 self.connected = True
                 self.last_message_received_time = time.time()
                 self.last_message_sent_time = time.time()
-                logger.info(f"[connectors/websocket_connector.py connect()] WEBSOCKET_STATUS: Successfully connected to WebSocket service")
+                # 2025-04-25-18:02 - Added eye-catching log entry for successful connection
+                logger.info(f"""[connectors/websocket_connector.py connect()] 
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ WEBSOCKET CONNECTION SUCCESS!!! ✓✓✓                                          ║
+║ URL: {self.ws_url}                                                           ║
+║ Connected in: {time.time() - self.connection_start_time:.2f}s                ║
+╚══════════════════════════════════════════════════════════════════════════════╝""")
                 
                 # Handle any service-specific connection steps
                 logger.debug(f"[connectors/websocket_connector.py connect()] WEBSOCKET_STATUS: Calling service-specific _on_connect() handler")
@@ -191,11 +209,18 @@ class WebSocketConnector(ConnectorInterface):
                 
                 return True
                 
-            except asyncio.TimeoutError:
-                error_msg = f"Connection timed out after {self.connection_timeout} seconds"
-                logger.error(f"[connectors/websocket_connector.py connect()] WEBSOCKET_STATUS: {error_msg}")
+            except asyncio.TimeoutError as e:
+                error_msg = f"Connection timed out after {connection_timeout} seconds"
+                # 2025-04-25-18:02 - Added eye-catching log entry for connection timeout
+                logger.error(f"""[connectors/websocket_connector.py connect()] 
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ WEBSOCKET CONNECTION FAILED!!! ✗✗✗                                          ║
+║ URL: {self.ws_url}                                                           ║
+║ Error: CONNECTION TIMEOUT after {connection_timeout}s                         ║
+╚══════════════════════════════════════════════════════════════════════════════╝""")
                 self.connection_error = Exception(error_msg)
-                return False
+                # 2025-04-25-17:40 - Always raise exceptions for connection failures
+                raise Exception(error_msg) from e
                 
             except aiohttp.WSServerHandshakeError as e:
                 error_msg = f"WebSocket handshake failed: {str(e)}"
@@ -208,17 +233,19 @@ class WebSocketConnector(ConnectorInterface):
         except Exception as e:
             error_type = type(e).__name__
             error_msg = f"Error connecting to WebSocket service: {error_type} - {str(e)}"
-            logger.error(f"[connectors/websocket_connector.py connect()] WEBSOCKET_STATUS: {error_msg}")
+            # 2025-04-25-18:02 - Added eye-catching log entry for connection errors
+            logger.error(f"""[connectors/websocket_connector.py connect()] 
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ WEBSOCKET CONNECTION FAILED!!! ✗✗✗                                          ║
+║ URL: {self.ws_url}                                                           ║
+║ Error Type: {error_type}                                                     ║
+║ Error: {str(e)}                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝""")
             self.connection_error = e
             
-            # Check for specific error types that should cause immediate failure
-            if isinstance(e, aiohttp.ClientConnectorError) or \
-               isinstance(e, aiohttp.WSServerHandshakeError) or \
-               "protocol" in str(e).lower():
-                logger.error(f"[connectors/websocket_connector.py connect()] WEBSOCKET_STATUS: Critical connection error - raising to fail job immediately")
-                raise e  # Re-raise to ensure immediate failure
-            
-            return False
+            # 2025-04-25-17:40 - Always raise exceptions for connection failures
+            # No more returning False, all connection errors should raise exceptions
+            raise
     
     async def send_message(self, message: Dict[str, Any]) -> bool:
         """Send a message to the WebSocket service
@@ -516,12 +543,10 @@ class WebSocketConnector(ConnectorInterface):
             if not self.connected:
                 logger.info(f"[connectors/websocket_connector.py process_job] Connecting to {self.get_job_type()} service with timeout {self.connection_timeout}s")
                 try:
-                    connected = await self.connect()
-                    if not connected:
-                        error_msg = f"Failed to connect to {self.get_job_type()} service"
-                        if self.connection_error:
-                            error_msg += f": {str(self.connection_error)}"
-                        raise Exception(error_msg)
+                    # 2025-04-25-17:45 - connect() now always raises exceptions on failure
+                    await self.connect()
+                    # If we get here, connection was successful
+                    logger.info(f"[connectors/websocket_connector.py process_job] Successfully connected to {self.get_job_type()} service")
                 except Exception as e:
                     # Catch and report any connection errors
                     error_type = type(e).__name__
@@ -529,11 +554,23 @@ class WebSocketConnector(ConnectorInterface):
                     logger.error(f"[connectors/websocket_connector.py process_job] {error_msg}")
                     await send_progress_update(job_id, 0, "error", error_msg)
                     
-                    # Return failure status
+                    # Return failure status immediately
                     return {
                         "status": "failed",
                         "error": error_msg
                     }
+            
+            # Double-check connection state
+            if not self.connected or self.ws is None or (hasattr(self.ws, 'closed') and self.ws.closed):
+                error_msg = "WebSocket connection is not established or was closed"
+                logger.error(f"[connectors/websocket_connector.py process_job] {error_msg}")
+                await send_progress_update(job_id, 0, "error", error_msg)
+                
+                # Return failure status
+                return {
+                    "status": "failed",
+                    "error": error_msg
+                }
             
             # Check if connection was lost during preparation
             if self.connection_error is not None:

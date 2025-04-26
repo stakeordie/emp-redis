@@ -78,6 +78,15 @@ PENDING_JOBS_KEY = "jobs:pending"
 # Redis key prefixes
 JOB_PREFIX = "job:"
 WORKER_PREFIX = "worker:"
+CLIENT_PREFIX = "client:"
+PRIORITY_QUEUE = "job_priority_queue"
+JOB_CHANNEL = "job_notifications"
+WORKER_CHANNEL = "worker_notifications"
+CLIENT_CHANNEL = "client_notifications"
+
+# 2025-04-25-19:15 - Default values for job processing
+DEFAULT_MAX_RETRIES = 3
+DEFAULT_JOB_PRIORITY = 1
 
 class RedisService(RedisServiceInterface):
     """Core service for interacting with Redis for job queue operations
@@ -385,56 +394,90 @@ class RedisService(RedisServiceInterface):
         # Get job details
         worker_id = self.client.hget(job_key, "worker_id")
         job_type = self.client.hget(job_key, "job_type")
-        priority_str = self.client.hget(job_key, "priority")
+        
+        # 2025-04-25-19:14 - BUGFIX: Get retry_count from Redis before incrementing
         retry_count_str = self.client.hget(job_key, "retry_count")
-        
-        # Get current retry count or initialize to 0
-        try:
-            retry_count = int(retry_count_str) if retry_count_str else 0
-        except (ValueError, TypeError):
-            retry_count = 0
-            
-        # Increment retry count
+        retry_count = int(retry_count_str) if retry_count_str else 0
         retry_count += 1
-        self.client.hset(job_key, "retry_count", retry_count)
         
-        try:
-            # Convert priority to integer if it exists
-            priority = int(priority_str) if priority_str else 5  # Default priority
-        except (ValueError, TypeError):
-            priority = 5  # Default priority if conversion fails
-            
+        # Convert bytes to string if needed
+        if isinstance(worker_id, bytes):
+            worker_id = worker_id.decode('utf-8')
+        if isinstance(job_type, bytes):
+            job_type = job_type.decode('utf-8')
+        
+        # Get max retries from job or use default
+        max_retries = self.client.hget(job_key, "max_retries")
+        max_retries = int(max_retries) if max_retries else DEFAULT_MAX_RETRIES
+        
+        # Log the failure with retry information
         logger.info(f"[redis_service.py fail_job()]: Marking job {job_id} as failed with error: {error} (retry {retry_count}/{max_retries})")
         
-        # Record the failure details
-        self.client.hset(job_key, "last_error", error if error else "Unknown error")
-        self.client.hset(job_key, "failed_at", str(current_time))
-        
-        # Store the worker that failed this job to exclude it next time
+        # 2025-04-25-18:50 - Explicitly store the worker_id that failed this job
+        # This is critical for preventing the same worker from being reassigned the job
+        # 2025-04-25-19:17 - BUGFIX: Only set last_failed_worker if worker_id is not None
         if worker_id:
             self.client.hset(job_key, "last_failed_worker", worker_id)
+            
+            # Log the worker ID being stored
+            logger.info(f"""[redis_service.py fail_job()]
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ STORED LAST_FAILED_WORKER IN REDIS                                        ║
+║ Job ID: {job_id}                                                             ║
+║ Worker ID: {worker_id}                                                       ║
+║ Redis Key: {job_key}                                                         ║
+╚══════════════════════════════════════════════════════════════════════════════╝""")
+        else:
+            logger.warning(f"""[redis_service.py fail_job()]
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ NO WORKER ID TO STORE AS LAST_FAILED_WORKER                               ║
+║ Job ID: {job_id}                                                             ║
+║ Redis Key: {job_key}                                                         ║
+╚══════════════════════════════════════════════════════════════════════════════╝""")
         
-        # Clear worker assignment
-        self.client.hdel(job_key, "worker_id")
+        # Worker ID logging is now handled in the conditional block above
         
-        # Check if we've exceeded the retry limit
+        # Update job with failure information
+        self.client.hset(job_key, "status", "failed")
+        self.client.hset(job_key, "error", error)
+        self.client.hset(job_key, "retry_count", retry_count)
+        
+        # Check if we've exceeded max retries
         if retry_count > max_retries:
-            # Mark job as permanently failed
-            self.client.hset(job_key, "status", "failed")
-            self.client.hset(job_key, "permanent_failure", "true")
-            self.client.hset(job_key, "failure_reason", f"Exceeded maximum retry limit of {max_retries}. Last error: {error}")
-            
             logger.warning(f"[redis_service.py fail_job()]: Job {job_id} permanently failed after {retry_count} retries. Last error: {error}")
+            return False
             
-            # Publish permanent failure event
-            self.publish_job_update(job_id, "failed", error=f"Exceeded maximum retry limit of {max_retries}. Last error: {error}", worker_id=worker_id, permanent=True)
-            
-            return True
+        # Requeue the job with the same priority
+        priority = self.client.hget(job_key, "priority")
+        priority = int(priority) if priority else DEFAULT_JOB_PRIORITY
         
         # If we haven't exceeded the retry limit, requeue the job
-        # Update job status to pending so it can be processed again
-        self.client.hset(job_key, "status", "pending")
+        # 2025-04-25-18:58 - CRITICAL FIX: Preserve last_failed_worker when requeuing
+        # First, get the current last_failed_worker value to verify it's set
+        current_last_failed_worker = self.client.hget(job_key, "last_failed_worker")
+        if isinstance(current_last_failed_worker, bytes):
+            current_last_failed_worker = current_last_failed_worker.decode('utf-8')
+            
+        # 2025-04-25-19:14 - BUGFIX: Remove duplicate code block
+        # The current_last_failed_worker is already retrieved and decoded above
+            
+        # Create a dictionary with all the fields we want to update atomically
+        update_fields = {
+            "status": "pending",
+        }
         
+        # Ensure we're explicitly preserving the last_failed_worker field
+        if current_last_failed_worker:
+            update_fields["last_failed_worker"] = current_last_failed_worker
+            
+        # Update job status and preserve last_failed_worker in a single operation
+        self.client.hmset(job_key, update_fields)
+        
+        # Verify last_failed_worker is still set after changing status
+        post_status_last_failed_worker = self.client.hget(job_key, "last_failed_worker")
+        if isinstance(post_status_last_failed_worker, bytes):
+            post_status_last_failed_worker = post_status_last_failed_worker.decode('utf-8')
+            
         # Calculate composite score for priority queue (same logic as in add_job)
         created_at_str = self.client.hget(job_key, "created_at") or str(current_time)
         created_at = float(created_at_str)
@@ -443,6 +486,23 @@ class RedisService(RedisServiceInterface):
         
         # Add job back to the priority queue
         self.client.zadd(PRIORITY_QUEUE, {job_id: composite_score})
+        
+        # Verify last_failed_worker is still set after adding to queue
+        final_last_failed_worker = self.client.hget(job_key, "last_failed_worker")
+        if isinstance(final_last_failed_worker, bytes):
+            final_last_failed_worker = final_last_failed_worker.decode('utf-8')
+            
+        # Log the requeuing with last_failed_worker tracking
+        logger.info(f"""[redis_service.py fail_job()]
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ JOB REQUEUED WITH LAST_FAILED_WORKER TRACKING                               ║
+║ Job ID: {job_id}                                                             ║
+║ Priority: {priority}                                                         ║
+║ Retry: {retry_count}/{max_retries}                                          ║
+║ Initial last_failed_worker: {current_last_failed_worker}                     ║
+║ After status change: {post_status_last_failed_worker}                        ║
+║ Final last_failed_worker: {final_last_failed_worker}                         ║
+╚══════════════════════════════════════════════════════════════════════════════╝""")
         
         logger.info(f"[redis_service.py fail_job()]: Job {job_id} requeued with priority {priority} (retry {retry_count}/{max_retries})")
         
@@ -910,17 +970,104 @@ class RedisService(RedisServiceInterface):
         # Get all idle workers directly from the Redis set
         idle_workers = self.client.smembers("workers:idle")
         
+        # 2025-04-25-18:58 - Enhanced verification of last_failed_worker field
+        job_key = f"{JOB_PREFIX}{job_id}"
+        
+        # Get all job fields to verify the job's current state
+        job_fields = self.client.hgetall(job_key)
+        job_status = None
+        job_retry_count = None
+        
+        if job_fields:
+            # Convert all bytes values to strings
+            job_fields = {k.decode('utf-8') if isinstance(k, bytes) else k: 
+                         v.decode('utf-8') if isinstance(v, bytes) else v 
+                         for k, v in job_fields.items()}
+            
+            # Extract key fields
+            job_status = job_fields.get('status')
+            job_retry_count = job_fields.get('retry_count')
+            
+            # Log the job's current state
+            logger.info(f"""[redis_service.py notify_idle_workers_of_job()]
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ JOB STATE VERIFICATION BEFORE NOTIFICATION                                  ║
+║ Job ID: {job_id}                                                             ║
+║ Job Status: {job_status}                                                     ║
+║ Retry Count: {job_retry_count}                                               ║
+║ All Fields: {job_fields}                                                     ║
+╚══════════════════════════════════════════════════════════════════════════════╝""")
+        
+        # 2025-04-25-23:35 - Removed Redis-based worker filtering
+        # We now use in-memory tracking in ConnectionManager to prevent reassigning failed jobs
+        # This simplifies the Redis service and centralizes the worker status management
+        
+        # Convert all idle workers to strings (from bytes if needed)
+        filtered_workers = set()
+        for worker in idle_workers:
+            # Convert bytes to string if needed
+            worker_id = worker.decode('utf-8') if isinstance(worker, bytes) else worker
+            filtered_workers.add(worker_id)
+        
+        # Get the last_failed_worker field for logging purposes only
+        last_failed_worker = self.client.hget(job_key, "last_failed_worker")
+        if last_failed_worker and isinstance(last_failed_worker, bytes):
+            last_failed_worker = last_failed_worker.decode('utf-8')
+        
         # Log the number of idle workers found
-        logger.info(f"[JOB-NOTIFY] Found {len(idle_workers)} idle workers for job {job_id} (type: {job_type})")
-        if idle_workers:
-            logger.debug(f"[JOB-NOTIFY] Idle workers: {list(idle_workers)}")
+        logger.info(f"""[redis_service.py notify_idle_workers_of_job()]
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ WORKER NOTIFICATION SUMMARY                                                 ║
+║ Job ID: {job_id}                                                             ║
+║ Job Type: {job_type}                                                         ║
+║ Total Idle Workers in Redis: {len(idle_workers)}                              ║
+║ Note: Worker filtering now handled by ConnectionManager                       ║
+╚══════════════════════════════════════════════════════════════════════════════╝""")
+        
+        # 2025-04-25-23:40 - Removed duplicate logging and fixed excluded_count reference
+        # The worker notification summary is now handled by the ConnectionManager
+        
+        # 2025-04-25-23:45 - Removed detailed worker information section
+        # This information is now handled by the ConnectionManager
+        # The Redis service no longer needs to track worker capabilities or exclusions
+        # All worker filtering is now done in memory by the ConnectionManager
+        
+        # 2025-04-25-23:50 - Removed warning about all workers being excluded
+        # This is now handled by the ConnectionManager
         
         # Publish notification to job channel
+        # 2025-04-25-22:51 - Enhanced job notification with more details
+        # This provides workers with more information about the job and makes last_failed_worker more prominent
         notification = {
             "type": "job_available",
             "job_id": job_id,
-            "job_type": job_type
+            "job_type": job_type,
+            "timestamp": time.time(),
+            "retry_count": job_retry_count,
+            "priority": job_fields.get('priority') if job_fields else None,
         }
+        
+        # Explicitly add last_failed_worker to the notification if it exists
+        if last_failed_worker:
+            notification["last_failed_worker"] = last_failed_worker
+            notification["excluded_worker"] = last_failed_worker  # More explicit field name
+            
+            # Add a warning message to the notification
+            notification["warning"] = f"Worker {last_failed_worker} previously failed this job and should not claim it"
+            logger.info(f"""[redis_service.py notify_idle_workers_of_job()]
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ NOTIFICATION INCLUDES LAST_FAILED_WORKER                                     ║
+║ Job ID: {job_id}                                                             ║
+║ Last Failed Worker: {last_failed_worker}                                     ║
+║ Raw notification: {notification}                                             ║
+╚══════════════════════════════════════════════════════════════════════════════╝""")
+        else:
+            logger.info(f"""[redis_service.py notify_idle_workers_of_job()]
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ NO LAST_FAILED_WORKER TO INCLUDE IN NOTIFICATION                            ║
+║ Job ID: {job_id}                                                             ║
+║ Raw notification: {notification}                                             ║
+╚══════════════════════════════════════════════════════════════════════════════╝""")
         
         if job_request_payload:
             # Include the original job request payload in the notification
@@ -935,7 +1082,7 @@ class RedisService(RedisServiceInterface):
         # Log the number of clients that received the message
         logger.info(f"[JOB-NOTIFY] Job notification for job {job_id} was received by {publish_result} subscribers")
         
-        return list(idle_workers)
+        return list(filtered_workers)
     
     def claim_job(self, job_id: str, worker_id: str, claim_timeout: int = 30) -> Optional[Dict[str, Any]]:
         """Atomically claim a job with a timeout"""
@@ -955,20 +1102,72 @@ class RedisService(RedisServiceInterface):
                 # Check if this worker was the last one to fail this job
                 last_failed_worker = pipe.hget(job_key, "last_failed_worker")
                 
-                # If this worker was the last one to fail this job, don't let it claim it again
-                if last_failed_worker == worker_id:
-                    logger.info(f"[redis_service.py claim_job()]: Worker {worker_id} was the last to fail job {job_id}, skipping claim")
-                    pipe.unwatch()
-                    return None
+                # 2025-04-25-18:10 - Fixed comparison by converting bytes to string
+                # Redis returns bytes for hget operations, but worker_id is a string
+                if last_failed_worker:
+                    # Convert bytes to string if needed
+                    if isinstance(last_failed_worker, bytes):
+                        last_failed_worker = last_failed_worker.decode('utf-8')
+                    
+                    # Add detailed logging to help diagnose worker reassignment issues
+                    logger.debug(f"[redis_service.py claim_job()]: Job {job_id} - Comparing last_failed_worker='{last_failed_worker}' with current worker_id='{worker_id}'")
+                    
+                    # If this worker was the last one to fail this job, don't let it claim it again
+                    if last_failed_worker == worker_id:
+                        # 2025-04-25-22:51 - Enhanced logging for claim rejection
+                        logger.info(f"""[redis_service.py claim_job()]
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ WORKER REASSIGNMENT: PREVENTING SAME WORKER FROM CLAIMING FAILED JOB          ║
+║ Job ID: {job_id}                                                             ║
+║ Worker ID: {worker_id}                                                       ║
+║ Last Failed Worker: {last_failed_worker}                                     ║
+║ Reason: This worker previously failed this job and should not claim it again  ║
+║ Action: Job will remain in queue for other workers to claim                   ║
+╚══════════════════════════════════════════════════════════════════════════════╝""")
+                        
+                        # Check if there are other idle workers that could claim this job
+                        idle_workers = self.client.smembers("workers:idle")
+                        other_idle_workers = [w for w in idle_workers if (isinstance(w, bytes) and w.decode('utf-8') != worker_id) or (not isinstance(w, bytes) and w != worker_id)]
+                        
+                        if other_idle_workers:
+                            logger.info(f"""[redis_service.py claim_job()]
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ OTHER IDLE WORKERS AVAILABLE                                                ║
+║ Job ID: {job_id}                                                             ║
+║ Other Idle Workers: {len(other_idle_workers)}                                 ║
+║ These workers may be able to claim this job instead                          ║
+╚══════════════════════════════════════════════════════════════════════════════╝""")
+                        else:
+                            logger.warning(f"""[redis_service.py claim_job()]
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ WARNING: NO OTHER IDLE WORKERS AVAILABLE                                    ║
+║ Job ID: {job_id}                                                             ║
+║ Current Worker (Rejected): {worker_id}                                       ║
+║ Job may remain in queue until other workers become available                 ║
+╚══════════════════════════════════════════════════════════════════════════════╝""")
+                        
+                        pipe.unwatch()
+                        return None
                 
                 # Start transaction
                 pipe.multi()
                 
                 # Update job status to claimed with timeout
                 pipe.hset(job_key, "status", "claimed")
+                # 2025-04-25-19:22 - Changed from "worker" to "worker_id" for consistency
+                # This ensures the worker_id field is properly set for the last_failed_worker logic
+                pipe.hset(job_key, "worker_id", worker_id)
+                # Keep the worker field for backward compatibility
                 pipe.hset(job_key, "worker", worker_id)
                 pipe.hset(job_key, "claimed_at", time.time())
                 pipe.hset(job_key, "claim_timeout", claim_timeout)
+                
+                logger.info(f"""[redis_service.py claim_job()]
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ WORKER ASSIGNMENT: Setting worker_id field in Redis job hash                  ║
+║ Job ID: {job_id}                                                             ║
+║ Worker ID: {worker_id}                                                       ║
+╚══════════════════════════════════════════════════════════════════════════════╝""")
                 
                 # Execute transaction
                 pipe.execute()

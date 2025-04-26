@@ -587,6 +587,10 @@ class MessageHandler(MessageHandlerInterface):
         # Log the failure
         logger.info(f"[message_handler.py handle_fail_job()]: Job {job_id} failed on worker {worker_id} with error: {error}")
 
+        # 2025-04-25-23:25 - Record the failed job in the ConnectionManager
+        # This updates the in-memory tracking to prevent this worker from being notified about this job again
+        self.connection_manager.record_failed_job(worker_id, job_id)
+        
         # Mark the job as failed in Redis
         success = self.redis_service.fail_job(job_id, error)
 
@@ -992,13 +996,27 @@ class MessageHandler(MessageHandlerInterface):
 
                 # Find eligible workers for this job type
                 eligible_workers = []
+                excluded_workers = []
+                
                 for worker_id in idle_workers:
-                    if worker_id not in notified_workers and job_type in worker_job_types.get(worker_id, []):
-                        eligible_workers.append(worker_id)
-                        #logger.info(f"[JOB-MATCH] Worker {worker_id} is eligible for job {job_id} of type {job_type}")
-                    #else:
-                        #if worker_id not in notified_workers:
-                            #logger.info(f"[JOB-MATCH] Worker {worker_id} is NOT eligible for job {job_id} of type {job_type}. Supported types: {worker_job_types.get(worker_id, [])}")
+                    # Skip workers that have already been notified in this cycle
+                    if worker_id in notified_workers:
+                        continue
+                        
+                    # Skip workers that don't support this job type
+                    if job_type not in worker_job_types.get(worker_id, []):
+                        continue
+                        
+                    # 2025-04-25-23:30 - Check if worker has previously failed this job
+                    # This is the new in-memory approach to prevent reassigning failed jobs
+                    if worker_id in self.connection_manager.worker_failed_jobs and job_id in self.connection_manager.worker_failed_jobs[worker_id]:
+                        logger.info(f"[JOB-MATCH] Worker {worker_id} previously failed job {job_id}, excluding from eligibility")
+                        excluded_workers.append(worker_id)
+                        continue
+                        
+                    # Worker is eligible
+                    eligible_workers.append(worker_id)
+                    logger.info(f"[JOB-MATCH] Worker {worker_id} is eligible for job {job_id} of type {job_type}")
 
                 if not eligible_workers:
                     #logger.info(f"[JOB-MATCH] No eligible workers for job {job_id} of type {job_type}")

@@ -33,10 +33,10 @@ services:
       - WORKER_CONNECTORS=simulation,comfyui
       - WORKER_SIMULATION_PROCESSING_TIME=5
       - WORKER_SIMULATION_STEPS=25
-      - WORKER_COMFYUI_HOST=142.170.86.89
+      - WORKER_COMFYUI_HOST=142.170.86.88
       - WORKER_COMFYUI_PORT=25883
       - WORKER_COMFYUI_USERNAME=sd
-      - WORKER_COMFYUI_PASSWORD=UbjpkE6kwM
+      - WORKER_COMFYUI_PASSWORD=UbjpkE6kw
       - PYTHONPATH=/app # Ensure core modules can be imported/
     networks:
       - redis-network
@@ -61,10 +61,10 @@ services:
       - WORKER_CONNECTORS=simulation,comfyui
       - WORKER_SIMULATION_PROCESSING_TIME=2
       - WORKER_SIMULATION_STEPS=45
-      - WORKER_COMFYUI_HOST=142.170.86.89
+      - WORKER_COMFYUI_HOST=142.170.86.88
       - WORKER_COMFYUI_PORT=25883
       - WORKER_COMFYUI_USERNAME=sd
-      - WORKER_COMFYUI_PASSWORD=UbjpkE6kwM
+      - WORKER_COMFYUI_PASSWORD=UbjpkE6kw
       - PYTHONPATH=/app # Ensure core modules can be importe
     networks:
       - redis-network
@@ -90,10 +90,10 @@ services:
       - WORKER_SIMULATION_JOB_TYPE=simulation
       - WORKER_SIMULATION_PROCESSING_TIME=10
       - WORKER_SIMULATION_STEPS=2
-      - WORKER_COMFYUI_HOST=142.170.86.89
+      - WORKER_COMFYUI_HOST=142.170.86.88
       - WORKER_COMFYUI_PORT=25883
       - WORKER_COMFYUI_USERNAME=sd
-      - WORKER_COMFYUI_PASSWORD=UbjpkE6kwM
+      - WORKER_COMFYUI_PASSWORD=UbjpkE6kw
       - PYTHONPATH=/app # Ensure core modules can be importe
     networks:
       - redis-network
@@ -118,12 +118,12 @@ services:
       - WORKER_CONNECTORS=comfyui,a1111
       - WORKER_SIMULATION_PROCESSING_TIME=8
       - WORKER_SIMULATION_STEPS=45
-      - WORKER_COMFYUI_HOST=142.170.86.89
+      - WORKER_COMFYUI_HOST=142.170.86.88
       - WORKER_COMFYUI_PORT=25883
       - WORKER_A1111_HOST=142.170.86.89
       - WORKER_A1111_PORT=25805
       - WORKER_COMFYUI_USERNAME=sd
-      - WORKER_COMFYUI_PASSWORD=UbjpkE6kwM
+      - WORKER_COMFYUI_PASSWORD=UbjpkE6kw
       - PYTHONPATH=/app # Ensure core modules can be importe
     networks:
       - redis-network

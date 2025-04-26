@@ -5,6 +5,93 @@ All notable changes to the EMP Redis project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- 2025-04-25-23:55 - Implemented in-memory worker failure tracking:
+  - Added `worker_failed_jobs` dictionary to ConnectionManager to track which workers have failed which jobs
+  - Modified job notification logic to check in-memory state instead of Redis for worker exclusion
+  - Simplified Redis service by removing Redis-based worker filtering
+  - Added detailed logging for worker exclusion decisions
+  - This improves job reassignment by ensuring failed jobs are never reassigned to workers that previously failed them
+- 2025-04-25-22:51 - Enhanced logging and job notification for worker reassignment:
+  - Added detailed worker capability tracking in job notifications
+  - Added comprehensive logging to identify why workers aren't claiming jobs
+  - Improved job notification messages with more metadata
+  - Added checks for other available workers when a claim is rejected
+  - Added explicit warning messages in notifications to prevent failed workers from claiming jobs
+
+- 2025-04-25-19:22 - Critical fix for worker_id field in claim_job method:
+  - Fixed inconsistency where claim_job was setting "worker" field instead of "worker_id"
+  - Added both fields for backward compatibility
+  - Added detailed logging for worker assignment
+  - This resolves the root cause of the job reassignment issue where last_failed_worker wasn't being set
+- 2025-04-25-19:17 - Additional robustness improvements for job reassignment logic:
+  - Fixed bug in fail_job where retry_count was referenced before assignment
+  - Added defensive handling for worker_id being None when setting last_failed_worker
+  - Added type conversion for Redis values to ensure proper string handling
+  - Added comprehensive boxed logging for all edge cases in the job failure path
+  - Added constants for DEFAULT_MAX_RETRIES and DEFAULT_JOB_PRIORITY
+
+- 2025-04-25-19:03 - Critical fix for job reassignment logic - final solution:
+  - Fixed issue where last_failed_worker field was being lost during job requeuing
+  - Implemented atomic update of job status while preserving last_failed_worker field
+  - Used hmset instead of individual hset calls to ensure field consistency
+  - Resolved issue where the same worker was repeatedly assigned failed jobs
+
+- 2025-04-25-18:58 - Fixed critical issue with job reassignment logic:
+  - Enhanced fail_job method to track and preserve last_failed_worker field during requeuing
+  - Added comprehensive job state verification in notify_idle_workers_of_job
+  - Added detailed logging to track last_failed_worker field throughout job lifecycle
+  - Fixed issue where last_failed_worker field was not being preserved during job requeuing
+
+- 2025-04-25-18:55 - Added connection manager diagnostic logging for job reassignment verification:
+  - Enhanced send_to_worker method to extract and log last_failed_worker field
+  - Added detailed boxed logging showing serialized message content
+  - Added explicit verification of last_failed_worker field presence in outgoing messages
+  - Improved traceability of job reassignment logic across system components
+- 2025-04-25-18:45 - Added comprehensive diagnostic logging for job reassignment logic:
+  - Added eye-catching boxed logs showing the exact structure of job notification messages
+  - Added detailed logging of message attributes, types, and raw content
+  - Implemented multiple message parsing strategies with explicit logging
+  - Added clear visualization of extracted job notification values
+  - Enhanced notification message logging to show when last_failed_worker is included
+- 2025-04-25-18:40 - Fixed worker-side filtering to ensure jobs are never reassigned to the same worker:
+  - Enhanced message parsing in handle_job_notification to reliably extract last_failed_worker field
+  - Added multiple fallback methods to access last_failed_worker from different message formats
+  - Added detailed debug logging of message structure and attributes
+  - Improved notification message creation to explicitly include last_failed_worker only when it exists
+- 2025-04-25-18:35 - Enhanced job reassignment system with worker-side filtering:
+  - Added last_failed_worker to job notification messages
+  - Updated worker to check last_failed_worker and ignore jobs it previously failed
+  - Added eye-catching log entries for job notification filtering
+  - This provides a second layer of protection against job reassignment to failed workers
+- 2025-04-25-18:20 - Fixed job notification system to exclude workers that previously failed a job:
+  - Modified notify_idle_workers_of_job to check the last_failed_worker field
+  - Added worker filtering to prevent notification to workers that previously failed a job
+  - Added eye-catching log entries for worker exclusion decisions
+  - Added warning when all idle workers have been excluded due to previous failures
+- 2025-04-25-18:10 - Fixed job reassignment logic to properly prevent failed jobs from being reassigned to the same worker:
+  - Fixed comparison by converting bytes to string for last_failed_worker
+  - Added detailed debug logging to help diagnose worker reassignment issues
+  - Added eye-catching log entries for worker reassignment decisions
+- 2025-04-25-18:05 - Added eye-catching log entries for connection attempts and results:
+  - Added boxed log entries with clear SUCCESS/FAILED indicators
+  - Added visual indicators (✓✓✓/✗✗✗) to make success and failure states immediately visible
+  - Added detailed connection information in all log entries
+- 2025-04-25-18:00 - Enhanced WebSocketConnector and ComfyUIConnector to immediately fail jobs when connection issues are detected
+- 2025-04-25-17:55 - Optimized connection timeouts for faster failure detection:
+  - Reduced initial connection timeout to 5 seconds in WebSocketConnector
+  - Reduced connection validation timeout to 3 seconds in ComfyUIConnector
+  - Reduced workflow sending timeout to 5 seconds for faster failure detection
+  - Increased message waiting timeout to 60 seconds after successful connection
+- 2025-04-25-17:55 - Improved connection validation to properly detect and report connection failures
+- 2025-04-25-17:45 - Updated WebSocketConnector to always raise exceptions for connection failures instead of returning False
+- 2025-04-25-15:35 - Added improved error handling in ComfyUIConnector to test connection and fail jobs quickly when ComfyUI server is unreachable
+- 2025-04-25-15:20 - Added job reassignment logic to prevent failed jobs from being reassigned to the same worker
+- [2025-04-25 15:35] Improved ComfyUI connector error handling:
+  - Added actual connection testing during initialization
+  - Added timeout for connection attempts
+  - Added pre-job connection validation
+  - Improved error messages for connection failures
+  - Fixed issue with jobs getting stuck when ComfyUI server is unreachable
 - [2025-04-25 15:30] Added smart job reassignment for failed jobs:
   - Failed jobs now alternate between available workers
   - Jobs will not be reassigned to the same worker that just failed them
