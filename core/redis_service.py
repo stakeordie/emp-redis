@@ -363,33 +363,10 @@ class RedisService(RedisServiceInterface):
         
         logger.debug(f"[redis_service.py complete_job()] Job completed: {job_id}")
 
-        # First, send the standard completion event with status "completed" (this is the existing behavior)
+        # 2025-04-28T21:33:30-04:00: Send the standard completion event with status "completed"
+        # The message_handler will detect this and send an additional complete_job message
+        logger.info(f"[redis_service.py complete_job()] Sending status update for job: {job_id}")
         self.publish_job_update(job_id, "completed", result=result, worker_id=worker_id)
-        
-        # 2025-04-28T21:08:30-04:00: Now send an additional message with type "complete_job"
-        try:
-            # Create the additional complete_job message
-            complete_message = {
-                "type": "complete_job",
-                "message": "Job completed by worker",
-                "timestamp": time.time(),
-                "job_id": job_id,
-                "worker_id": worker_id if worker_id else "unknown",
-                "status": "completed"
-            }
-            
-            # Add result if provided
-            if result:
-                complete_message["result"] = result
-                
-            # Publish to the same channels as the standard message
-            message_json = json.dumps(complete_message)
-            self.client.publish(f"job_updates:{job_id}", message_json)
-            self.client.publish("job_updates", message_json)
-            
-            logger.info(f"[redis_service.py complete_job()] Sent additional complete_job message for job: {job_id}")
-        except Exception as e:
-            logger.error(f"[redis_service.py complete_job()] Error sending complete_job message: {str(e)}")
         
         return True
         
