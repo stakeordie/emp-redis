@@ -5,6 +5,11 @@ All notable changes to the EMP Redis project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- 2025-04-28-20:51 - Added explicit "complete_job" message type for clients:
+  - Modified `complete_job` method in RedisService to send an additional message with type "complete_job"
+  - Maintained backward compatibility with existing update_job_progress messages
+  - Added fields: message, timestamp, job_id, worker_id, and result
+  - This allows clients to explicitly detect job completion via message type
 - 2025-04-26-21:30 - Added job cancellation functionality:
   - Added `cancel_job` method to RedisService to permanently cancel jobs
   - Added `CancelJobMessage` class and message type

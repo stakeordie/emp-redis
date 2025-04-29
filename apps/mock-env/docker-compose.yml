@@ -141,10 +141,10 @@ services:
       dockerfile: ./apps/mock-env/Dockerfile.worker
     environment:
       - WORKER_ID=worker1r
-      - WORKER_REDIS_API_HOST=redisservernew-production.up.railway.app
+      - WORKER_REDIS_API_HOST=redisserver-production.up.railway.app
       - WORKER_WEBSOCKET_AUTH_TOKEN=3u8sdj5389fj3kljsf90u
-      - WORKER_COMFYUI_HOST=142.170.86.89
-      - WORKER_COMFYUI_PORT=25883
+      - WORKER_COMFYUI_HOST=90.84.236.62
+      - WORKER_COMFYUI_PORT=63529
       - WORKER_COMFYUI_USERNAME=sd
       - WORKER_COMFYUI_PASSWORD=UbjpkE6kwM
       - WORKER_USE_SSL=FALSE
@@ -169,10 +169,10 @@ services:
       dockerfile: ./apps/mock-env/Dockerfile.worker
     environment:
       - WORKER_ID=worker2r
-      - WORKER_REDIS_API_HOST=redisservernew-production.up.railway.app
+      - WORKER_REDIS_API_HOST=redisserver-production.up.railway.app
       - WORKER_WEBSOCKET_AUTH_TOKEN=3u8sdj5389fj3kljsf90u
-      - WORKER_COMFYUI_HOST=142.170.86.89
-      - WORKER_COMFYUI_PORT=25883
+      - WORKER_COMFYUI_HOST=90.84.236.62
+      - WORKER_COMFYUI_PORT=63529
       - WORKER_COMFYUI_USERNAME=sd
       - WORKER_COMFYUI_PASSWORD=UbjpkE6kwM
       - WORKER_USE_SSL=FALSE
@@ -197,10 +197,10 @@ services:
       dockerfile: ./apps/mock-env/Dockerfile.worker
     environment:
       - WORKER_ID=worker3r
-      - WORKER_REDIS_API_HOST=redisservernew-production.up.railway.app
+      - WORKER_REDIS_API_HOST=redisserver-production.up.railway.app
       - WORKER_WEBSOCKET_AUTH_TOKEN=3u8sdj5389fj3kljsf90u
-      - WORKER_COMFYUI_HOST=142.170.86.89
-      - WORKER_COMFYUI_PORT=25883
+      - WORKER_COMFYUI_HOST=90.84.236.62
+      - WORKER_COMFYUI_PORT=63529
       - WORKER_COMFYUI_USERNAME=sd
       - WORKER_COMFYUI_PASSWORD=UbjpkE6kwM
       - WORKER_USE_SSL=FALSE
@@ -225,10 +225,10 @@ services:
       dockerfile: ./apps/mock-env/Dockerfile.worker
     environment:
       - WORKER_ID=worker4r
-      - WORKER_REDIS_API_HOST=redisservernew-production.up.railway.app
+      - WORKER_REDIS_API_HOST=redisserver-production.up.railway.app
       - WORKER_WEBSOCKET_AUTH_TOKEN=3u8sdj5389fj3kljsf90u
-      - WORKER_COMFYUI_HOST=142.170.86.89
-      - WORKER_COMFYUI_PORT=25883
+      - WORKER_COMFYUI_HOST=90.84.236.62
+      - WORKER_COMFYUI_PORT=63529
       - WORKER_COMFYUI_USERNAME=sd
       - WORKER_COMFYUI_PASSWORD=UbjpkE6kwM
       - WORKER_USE_SSL=FALSE

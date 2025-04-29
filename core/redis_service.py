@@ -363,8 +363,33 @@ class RedisService(RedisServiceInterface):
         
         logger.debug(f"[redis_service.py complete_job()] Job completed: {job_id}")
 
-        # Publish completion event
+        # Publish completion event using update_job_progress for backward compatibility
         self.publish_job_update(job_id, "completed", result=result, worker_id=worker_id)
+        
+        # 2025-04-28T20:51:00-04:00: Added explicit complete_job message for clients
+        try:
+            # Create complete_job message
+            complete_message = {
+                "type": "complete_job",
+                "message": "Job completed by worker",
+                "timestamp": time.time(),
+                "job_id": job_id,
+                "worker_id": worker_id if worker_id else "unknown"
+            }
+            
+            # Add result if provided
+            if result:
+                complete_message["result"] = result
+                
+            # Publish to job-specific channel
+            self.client.publish(f"job_updates:{job_id}", json.dumps(complete_message))
+            
+            # Also publish to global job updates channel
+            self.client.publish("job_updates", json.dumps(complete_message))
+            
+            logger.debug(f"[redis_service.py complete_job()] Published complete_job message for job: {job_id}")
+        except Exception as e:
+            logger.error(f"[redis_service.py complete_job()] Error publishing complete_job message: {str(e)}")
         
         return True
         
