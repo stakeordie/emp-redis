@@ -1204,28 +1204,15 @@ class MessageHandler(MessageHandlerInterface):
                 message_type = data.get("type")
 
                 if job_id:
-                    # Add special handling for complete_job message type
+                    # Log complete_job messages for debugging
                     if message_type == "complete_job":
-                        logger.info(f"[2025-04-28T21:02:00-04:00] Received complete_job message for job {job_id}")
-                        logger.info("#" * 80)
-                        logger.info(f"### FORWARDING COMPLETE_JOB MESSAGE TO CLIENT FOR JOB: {job_id} ###")
-                        logger.info("#" * 80)
-                        
-                        # Get the client_id associated with this job
-                        client_id = self.connection_manager.job_subscriptions.get(job_id)
-                        if client_id:
-                            # Send directly to the client
-                            await self.connection_manager.send_to_client(client_id, data)
-                            logger.info(f"Successfully forwarded complete_job message to client {client_id} for job {job_id}")
-                        else:
-                            logger.warning(f"No client subscribed to job {job_id} for complete_job message")
+                        logger.info(f"[2025-04-28T21:08:45-04:00] Received complete_job message for job {job_id}")
                     
-                    # Forward all job updates (including complete_job) through the normal channel too
-                    # This maintains backward compatibility
+                    # Forward all job updates to the subscribed client
+                    # This handles both regular updates and our new complete_job message type
                     await self.connection_manager.send_job_update(job_id, data)
             except Exception as e:
                 logger.error(f"Error handling Redis job update message: {str(e)}")
-                logger.exception("Complete stack trace:")
 
         # Define job notification message handler
         async def handle_job_notification(message):
