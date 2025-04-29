@@ -5,6 +5,14 @@ All notable changes to the EMP Redis project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- 2025-04-26-21:30 - Added job cancellation functionality:
+  - Added `cancel_job` method to RedisService to permanently cancel jobs
+  - Added `CancelJobMessage` class and message type
+  - Added handler for job cancellation requests in MessageHandler
+  - Jobs can now be manually cancelled with a reason
+  - Cancellation removes jobs from the queue and updates their status
+  - Added detailed logging for job cancellation events
+
 - 2025-04-25-23:55 - Implemented in-memory worker failure tracking:
   - Added `worker_failed_jobs` dictionary to ConnectionManager to track which workers have failed which jobs
   - Modified job notification logic to check in-memory state instead of Redis for worker exclusion

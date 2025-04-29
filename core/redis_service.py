@@ -368,6 +368,69 @@ class RedisService(RedisServiceInterface):
         
         return True
         
+    def cancel_job(self, job_id: str, reason: str = "Manually cancelled") -> bool:
+        """Permanently cancel a job and remove it from the queue.
+        
+        This method:
+        1. Removes the job from the priority queue (if present)
+        2. Updates the job status to "cancelled" in Redis
+        3. Adds a cancellation timestamp and reason
+        4. Notifies any subscribed clients about the cancellation
+        
+        Args:
+            job_id: ID of the job to cancel
+            reason: Reason for cancellation (default: "Manually cancelled")
+            
+        Returns:
+            bool: True if cancellation was successful, False otherwise
+        """
+        # 2025-04-26-21:30 - Added method to permanently cancel jobs
+        import time
+        current_time = time.time()
+        
+        # Get the job data
+        job_key = f"{JOB_PREFIX}{job_id}"
+        
+        # Check if job exists
+        if not self.client.exists(job_key):
+            logger.warning(f"[redis_service.py cancel_job()]: Job {job_id} not found, cannot cancel")
+            return False
+            
+        # Get job details for logging
+        job_type = self.client.hget(job_key, "job_type")
+        worker_id = self.client.hget(job_key, "worker_id")
+        status = self.client.hget(job_key, "status")
+        
+        # Log the cancellation
+        logger.info(f"""[redis_service.py cancel_job()]
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ CANCELLING JOB                                                              ║
+║ Job ID: {job_id}                                                             ║
+║ Job Type: {job_type}                                                         ║
+║ Current Status: {status}                                                     ║
+║ Reason: {reason}                                                             ║
+╚══════════════════════════════════════════════════════════════════════════════╝""")
+        
+        # Remove the job from the priority queue if it's there
+        removed = self.client.zrem(PRIORITY_QUEUE, job_id)
+        if removed:
+            logger.info(f"[redis_service.py cancel_job()]: Removed job {job_id} from priority queue")
+        
+        # Update job with cancellation information
+        update_fields = {
+            "status": "cancelled",
+            "cancelled_at": current_time,
+            "cancellation_reason": reason,
+            "message": f"Job cancelled: {reason}"
+        }
+        
+        self.client.hset(job_key, mapping=update_fields)
+        
+        # Publish cancellation event
+        self.publish_job_update(job_id, "cancelled", reason=reason, worker_id=worker_id)
+        
+        return True
+        
     def fail_job(self, job_id: str, error: str, max_retries: int = 4) -> bool:
         """Mark a job as failed and requeue it for processing if retry limit not exceeded.
         

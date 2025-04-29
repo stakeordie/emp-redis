@@ -83,6 +83,9 @@ class MessageType:
     #WORKER_SEND_JOB_FAILURE_TO_SERVER
     FAIL_JOB = "fail_job"                           # Worker → Server: Notifies that a job has failed
     
+    #CLIENT_CANCEL_JOB_REQUEST_TO_SERVER
+    CANCEL_JOB = "cancel_job"                       # Client → Server: Requests to permanently cancel a job
+    
     #SERVER_SEND_JOB_FAILURE_ACK_TO_WORKER
     JOB_FAILED_ACK = "job_failed_ack"               # Server → Worker: Acknowledges receipt of a job failure message
 

@@ -2192,6 +2192,7 @@ function updateUI() {
             // Create the job row
             // [2025-04-06 20:40] Added client_id column
             // 2025-04-09 13:53: Modified to display full job ID without truncation
+            // 2025-04-26 22:59: Added cancel button to each job row
             row.innerHTML = `
                 <td class="job-id-cell" title="${job.id}">${job.id}</td>
                 <td>${job.client_id || 'N/A'}</td>
@@ -2200,6 +2201,7 @@ function updateUI() {
                 <td>${displayPriority}</td>
                 <td>${job.position !== undefined ? job.position : 'N/A'}</td>
                 <td>${createdAtStr}</td>
+                <td><button class="btn-cancel" onclick="cancelJob('${job.id}')">Cancel</button></td>
             `;
             
             elements.jobsTableBody.appendChild(row);
@@ -2594,23 +2596,75 @@ function estimateCompletionTime(job) {
 // Periodic stats refresh removed as we're using server push instead
 
 /**
+ * 2025-04-26 23:00 - Cancel a job
+ * @param {string} jobId - The ID of the job to cancel
+ */
+function cancelJob(jobId) {
+    // Check if client socket is connected
+    if (!state.clientConnected) {
+        showNotification('Cannot cancel job: Client not connected', 'error');
+        return;
+    }
+    
+    // Find the job in the state
+    const job = state.jobs[jobId];
+    
+    if (!job) {
+        showNotification(`Job ${jobId} not found`, 'error');
+        return;
+    }
+    
+    // Confirm cancellation
+    if (!confirm(`Are you sure you want to cancel job ${jobId}?`)) {
+        return;
+    }
+    
+    // Create a cancel job message
+    const cancelMessage = {
+        type: 'cancel_job',
+        job_id: jobId,
+        reason: 'Manually cancelled from Redis Monitor',
+        timestamp: Date.now() / 1000
+    };
+    
+    // Send the message
+    try {
+        state.clientSocket.send(JSON.stringify(cancelMessage));
+        showNotification(`Cancellation request sent for job ${jobId}`, 'info');
+        
+        // Optimistically update the job status in the UI
+        job.status = 'cancelling';
+        updateUI();
+    } catch (error) {
+        showNotification(`Error cancelling job: ${error.message}`, 'error');
+        console.error('Error cancelling job:', error);
+    }
+}
+
+/**
  * [2025-04-06 19:15] Retry a failed job
  * @param {string} jobId - The ID of the job to retry
  */
 function retryJob(jobId) {
-    if (!jobId) return;
+    // Check if client socket is connected
+    if (!state.clientConnected) {
+        showNotification('Cannot retry job: Client not connected', 'error');
+        return;
+    }
     
-    const job = state.jobs[jobId];
-    if (!job) {
-        console.error(`Job ${jobId} not found`);
+    // Create a new job with the same parameters
+    const failedJob = state.jobs[jobId];
+    
+    if (!failedJob) {
+        showNotification(`Job ${jobId} not found`, 'error');
         return;
     }
     
     // Create a new job with the same data
     const jobData = {
-        job_type: job.job_type || job.type,
-        priority: job.priority || 0,
-        payload: job.payload || {}
+        job_type: failedJob.job_type || failedJob.type,
+        priority: failedJob.priority || 0,
+        payload: failedJob.payload || {}
     };
     
     // Send the job data to the server

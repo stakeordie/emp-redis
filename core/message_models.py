@@ -102,6 +102,13 @@ class FailJobMessage(BaseMessage):
     worker_id: str
     error: Optional[str] = None
     timestamp: float = Field(default_factory=time.time)
+
+class CancelJobMessage(BaseMessage):
+    """Message for requesting cancellation of a job"""
+    type: str = MessageType.CANCEL_JOB
+    job_id: str
+    reason: Optional[str] = "Manually cancelled"
+    timestamp: float = Field(default_factory=time.time)
     
 class JobFailedAckMessage(BaseMessage):
     """Message for acknowledging receipt of a job failure message"""
@@ -982,6 +989,22 @@ class MessageModels(MessageModelsInterface):
             job_id=job_id,
             worker_id=worker_id,
             error=error
+        )
+
+    def create_cancel_job_message(self, job_id: str, reason: Optional[str] = "Manually cancelled") -> CancelJobMessage:
+        """
+        Create a job cancellation message.
+        
+        Args:
+            job_id: ID of the job to cancel
+            reason: Optional reason for cancellation
+            
+        Returns:
+            CancelJobMessage: Job cancellation message model
+        """
+        return CancelJobMessage(
+            job_id=job_id,
+            reason=reason
         )
 
     def create_connector_ws_status_message(self, worker_id: str, connector_type: str, 

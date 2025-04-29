@@ -171,6 +171,14 @@ class MessageHandler(MessageHandlerInterface):
                 message_id = message_data.get('message_id', None)
                 # Pass the original message for context
                 await self.handle_request_stats(client_id, message_id, message_data)
+            case "cancel_job":
+                job_id = message_data.get("job_id")
+                reason = message_data.get("reason", "Manually cancelled")
+                if job_id:
+                    await self.handle_cancel_job(client_id, job_id, reason)
+                else:
+                    error_message = ErrorMessage(error="Missing job_id in cancel_job request")
+                    await self.connection_manager.send_to_client(client_id, error_message)
             case "stay_alive":
                 # Respond with a simple acknowledgment
                 # WebSocket protocol handles connection keepalive automatically
@@ -569,6 +577,49 @@ class MessageHandler(MessageHandlerInterface):
         )
         await self.connection_manager.send_to_worker(worker_id, ack_message)
 
+    async def handle_cancel_job(self, client_id: str, job_id: str, reason: str = "Manually cancelled") -> None:
+        """
+        Handle job cancellation request from a client.
+        
+        This method permanently cancels a job and removes it from the queue.
+
+        Args:
+            client_id: Client identifier
+            job_id: ID of the job to cancel
+            reason: Reason for cancellation
+        """
+        # 2025-04-26-21:30 - Added method to handle job cancellation requests
+        
+        # Log the cancellation request
+        logger.info(f"[message_handler.py handle_cancel_job()]: Client {client_id} requested cancellation of job {job_id} with reason: {reason}")
+        
+        # Cancel the job in Redis
+        success = self.redis_service.cancel_job(job_id, reason)
+        
+        if success:
+            # Create a response message
+            response = ResponseJobStatusMessage(
+                job_id=job_id,
+                status="cancelled",
+                message=f"Job cancelled: {reason}"
+            )
+            
+            # Send response to the client
+            await self.connection_manager.send_to_client(client_id, response)
+            
+            # Also notify any subscribers to this job
+            await self.connection_manager.send_job_update(job_id, response)
+            
+            logger.info(f"[message_handler.py handle_cancel_job()]: Successfully cancelled job {job_id}")
+        else:
+            # Create an error message
+            error_message = ErrorMessage(error=f"Failed to cancel job {job_id}. Job may not exist or is already in a terminal state.")
+            
+            # Send error to the client
+            await self.connection_manager.send_to_client(client_id, error_message)
+            
+            logger.warning(f"[message_handler.py handle_cancel_job()]: Failed to cancel job {job_id}")
+    
     async def handle_fail_job(self, worker_id: str, message: FailJobMessage) -> None:
         """
         Handle job failure message from a worker.
