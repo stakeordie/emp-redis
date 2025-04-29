@@ -700,32 +700,29 @@ class ConnectionManager(ConnectionManagerInterface):
             else:
                 message_text = str(message)
             
-            # Check if this is a status update with status="completed"
-            # First, send the original message
+            # Send the original message
             await websocket.send_text(message_text)
-            logger.debug(f"[connection_manager.py send_to_client()] Sent message of type {message_type} to client {client_id}: {message_text}")
+            logger.debug(f"[connection_manager.py send_to_client()] Sent message of type {type(message).__name__} to client {client_id}: {message_text}")
             
-            # Parse the message text to check for completed status
+            # Check for completed status and send additional complete_job message if needed
             try:
                 parsed_message = json.loads(message_text) if isinstance(message_text, str) else message_text
                 
-                # Check if this is a completed status message
                 if isinstance(parsed_message, dict) and parsed_message.get("status") == "completed" and parsed_message.get("type") == "update_job_progress":
-                    # [2025-04-28T21:43:30-04:00] Send an additional complete_job message
+                    # Send an explicit complete_job message matching the JobCompletedMessage model
                     complete_job_message = {
                         "type": "complete_job",
-                        "message": "Job completed successfully",
-                        "timestamp": time.time(),
                         "job_id": parsed_message.get("job_id"),
-                        "worker_id": parsed_message.get("worker_id", "unknown"),
                         "status": "completed",
-                        "result": parsed_message.get("result", {})
+                        "priority": None,
+                        "position": None,
+                        "result": parsed_message.get("result", {}),
+                        "timestamp": time.time()
                     }
-                    complete_job_text = json.dumps(complete_job_message)
-                    await websocket.send_text(complete_job_text)
-                    logger.info(f"[2025-04-28T21:43:30-04:00] Sent explicit complete_job message to client {client_id} for job {parsed_message.get('job_id')}")
+                    await websocket.send_text(json.dumps(complete_job_message))
+                    logger.info(f"Sent explicit complete_job message for job {parsed_message.get('job_id')}")
             except Exception as e:
-                logger.error(f"Error checking for completed status: {str(e)}")
+                logger.error(f"Error sending complete_job message: {str(e)}")
                 
             return True
             

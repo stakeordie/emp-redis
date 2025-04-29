@@ -361,11 +361,9 @@ class RedisService(RedisServiceInterface):
         if result:
             self.client.hset(job_key, "result", json.dumps(result))
         
-        logger.debug(f"[redis_service.py complete_job()] Job completed: {job_id}")
-
-        # 2025-04-28T21:33:30-04:00: Send the standard completion event with status "completed"
-        # The message_handler will detect this and send an additional complete_job message
-        logger.info(f"[redis_service.py complete_job()] Sending status update for job: {job_id}")
+        logger.debug(f"Job completed: {job_id}")
+        # Send the standard completion event with status "completed"
+        # The connection_manager will detect this and send an additional complete_job message
         self.publish_job_update(job_id, "completed", result=result, worker_id=worker_id)
         
         return True
@@ -599,10 +597,12 @@ class RedisService(RedisServiceInterface):
         job_data: Dict[str, Any] = dict(redis_result)
         
         # Parse job_request_payload and result if present
+        # Added: 2025-04-29T19:05:00-04:00 - Fixed linting issues with exception handling
         if "job_request_payload" in job_data:
             try:
                 job_data["job_request_payload"] = json.loads(job_data["job_request_payload"])
-            except:
+            except json.JSONDecodeError as e:
+                logger.warning(f"Failed to parse job_request_payload for job {job_id}: {str(e)}")
                 job_data["job_request_payload"] = {}
         # For backward compatibility, also check for the old "params" key
         elif "params" in job_data:
@@ -610,13 +610,15 @@ class RedisService(RedisServiceInterface):
                 job_data["job_request_payload"] = json.loads(job_data["params"])
                 # Remove the old key to avoid confusion
                 del job_data["params"]
-            except:
+            except json.JSONDecodeError as e:
+                logger.warning(f"Failed to parse params for job {job_id}: {str(e)}")
                 job_data["job_request_payload"] = {}
-                
+        
         if "result" in job_data:
             try:
                 job_data["result"] = json.loads(job_data["result"])
-            except:
+            except json.JSONDecodeError as e:
+                logger.warning(f"Failed to parse result for job {job_id}: {str(e)}")
                 job_data["result"] = {}
         
         # Add queue position if job is pending
@@ -986,27 +988,29 @@ class RedisService(RedisServiceInterface):
                         stats["jobs"]["active_jobs"].append(job_info)
             
             # Worker stats from ConnectionManager
-            # Get all worker info from ConnectionManager
-            worker_info = self.connection_manager.worker_info
-            stats["workers"]["total"] = len(worker_info)
-            
-            # Worker status counts and detailed worker information
-            for worker_id, info in worker_info.items():
-                # Update worker status counts
-                worker_status = info.get("status", "unknown")
-                current_count = stats["workers"]["status"].get(worker_status, 0)
-                stats["workers"]["status"][worker_status] = current_count + 1
+            # Added: 2025-04-29T19:05:00-04:00 - Fixed null check for connection_manager
+            # Get all worker info from ConnectionManager if it exists
+            if self.connection_manager is not None:
+                worker_info = self.connection_manager.worker_info
+                stats["workers"]["total"] = len(worker_info)
                 
-                # Add detailed worker information
-                worker_detail = {
-                    "id": worker_id,
-                    "status": worker_status,
-                    "connected_at": info.get("registered_at", 0),
-                    "jobs_processed": info.get("jobs_processed", 0),
-                    "last_heartbeat": info.get("last_heartbeat", 0),
-                    "current_job_id": info.get("current_job_id", "")
-                }
-                stats["workers"]["active_workers"].append(worker_detail)
+                # Worker status counts and detailed worker information
+                for worker_id, info in worker_info.items():
+                    # Update worker status counts
+                    worker_status = info.get("status", "unknown")
+                    current_count = stats["workers"]["status"].get(worker_status, 0)
+                    stats["workers"]["status"][worker_status] = current_count + 1
+                    
+                    # Add detailed worker information
+                    worker_detail = {
+                        "id": worker_id,
+                        "status": worker_status,
+                        "connected_at": info.get("registered_at", 0),
+                        "jobs_processed": info.get("jobs_processed", 0),
+                        "last_heartbeat": info.get("last_heartbeat", 0),
+                        "current_job_id": info.get("current_job_id", "")
+                    }
+                    stats["workers"]["active_workers"].append(worker_detail)
             
         except Exception as e:
             # Keep the empty stats structure in case of errors

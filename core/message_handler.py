@@ -1201,40 +1201,11 @@ class MessageHandler(MessageHandlerInterface):
                 # Parse message data
                 data = json.loads(message["data"])
                 job_id = data.get("job_id")
-                message_type = data.get("type")
-                status = data.get("status")
-
+                
                 if job_id:
-                    # Check if this is a status update with status="completed"
-                    if message_type == "update_job_progress" and status == "completed":
-                        logger.info(f"[2025-04-28T21:33:00-04:00] Detected completed status message for job {job_id}")
-                        
-                        # Get the client_id associated with this job
-                        client_id = self.connection_manager.job_subscriptions.get(job_id)
-                        if client_id and client_id in self.connection_manager.client_connections:
-                            # First, forward the original completed status message
-                            await self.connection_manager.send_job_update(job_id, data)
-                            logger.info(f"Forwarded completed status message for job {job_id} to client {client_id}")
-                            
-                            # Then send an additional explicit complete_job message
-                            websocket = self.connection_manager.client_connections[client_id]
-                            complete_job_message = {
-                                "type": "complete_job",
-                                "message": "Job completed successfully",
-                                "timestamp": time.time(),
-                                "job_id": job_id,
-                                "worker_id": data.get("worker_id", "unknown"),
-                                "status": "completed",
-                                "result": data.get("result", {})
-                            }
-                            complete_job_text = json.dumps(complete_job_message)
-                            await websocket.send_text(complete_job_text)
-                            logger.info(f"[message_handler.py handle_job_update()] Sent explicit complete_job message for job {job_id} to client {client_id}")
-                            
-                            # Return early since we've already forwarded the original message
-                            return
-                    
-                    # For all other messages, just forward them normally
+                    # Forward all job updates to the connection manager
+                    # The connection_manager.send_to_client method will handle sending
+                    # the additional complete_job message when appropriate
                     await self.connection_manager.send_job_update(job_id, data)
             except Exception as e:
                 logger.error(f"Error handling Redis job update message: {str(e)}")
