@@ -366,7 +366,7 @@ class RedisService(RedisServiceInterface):
         # Publish completion event using update_job_progress for backward compatibility
         self.publish_job_update(job_id, "completed", result=result, worker_id=worker_id)
         
-        # 2025-04-28T20:51:00-04:00: Added explicit complete_job message for clients
+        # 2025-04-28T20:59:00-04:00: Enhanced complete_job message with improved logging and delivery
         try:
             # Create complete_job message
             complete_message = {
@@ -374,22 +374,46 @@ class RedisService(RedisServiceInterface):
                 "message": "Job completed by worker",
                 "timestamp": time.time(),
                 "job_id": job_id,
-                "worker_id": worker_id if worker_id else "unknown"
+                "worker_id": worker_id if worker_id else "unknown",
+                "status": "completed"  # Add status field for consistency
             }
             
             # Add result if provided
             if result:
                 complete_message["result"] = result
                 
+            # Convert to JSON string
+            message_json = json.dumps(complete_message)
+            
+            # Log the exact message being sent
+            logger.info(f"[redis_service.py complete_job()] Sending complete_job message: {message_json[:1000]}")
+            
             # Publish to job-specific channel
-            self.client.publish(f"job_updates:{job_id}", json.dumps(complete_message))
+            job_channel = f"job_updates:{job_id}"
+            pub_result1 = self.client.publish(job_channel, message_json)
+            logger.info(f"[redis_service.py complete_job()] Published to {job_channel}, result: {pub_result1}")
             
             # Also publish to global job updates channel
-            self.client.publish("job_updates", json.dumps(complete_message))
+            global_channel = "job_updates"
+            pub_result2 = self.client.publish(global_channel, message_json)
+            logger.info(f"[redis_service.py complete_job()] Published to {global_channel}, result: {pub_result2}")
             
-            logger.debug(f"[redis_service.py complete_job()] Published complete_job message for job: {job_id}")
+            # Print an eye-catching log message to confirm message was sent
+            logger.info("#" * 80)
+            logger.info(f"### COMPLETE_JOB MESSAGE SENT FOR JOB: {job_id} ###")
+            logger.info("#" * 80)
+            
+            # If client is connected through websocket, try to send directly
+            if self.connection_manager and job_id:
+                # Get client_id associated with this job
+                client_id = self.client.hget(f"{JOB_PREFIX}{job_id}", "client_id")
+                if client_id:
+                    logger.info(f"[redis_service.py complete_job()] Attempting direct websocket send to client: {client_id}")
+                    # Try to send directly via websocket if client is connected
+                    self.connection_manager.send_message_to_client(client_id, complete_message)
         except Exception as e:
             logger.error(f"[redis_service.py complete_job()] Error publishing complete_job message: {str(e)}")
+            logger.exception("Complete stack trace:")
         
         return True
         
