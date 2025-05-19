@@ -126,6 +126,51 @@ class ConnectionManager(ConnectionManagerInterface):
 ║ Total Failed Jobs: {len(self.worker_failed_jobs.get(worker_id, set()))}      ║
 ╚══════════════════════════════════════════════════════════════════════════════╝""")
     
+    def force_retry_job(self, job_id: str):
+        """
+        Force a job to be retried by clearing its failure history
+        
+        This method removes the job from all workers' failed jobs sets,
+        allowing it to be assigned to any worker regardless of previous failures.
+        
+        Args:
+            job_id: The ID of the job to force retry
+            
+        Returns:
+            bool: True if the job was found in any worker's failed jobs set and cleared,
+                  False otherwise
+        
+        [2025-05-19T18:01:00-04:00] Added to support force retry functionality
+        """
+        found = False
+        cleared_workers = []
+        
+        # Check all workers' failed jobs sets for this job
+        for worker_id, failed_jobs in self.worker_failed_jobs.items():
+            if job_id in failed_jobs:
+                # Remove this job from the worker's failed jobs set
+                failed_jobs.remove(job_id)
+                cleared_workers.append(worker_id)
+                found = True
+        
+        if found:
+            logger.info(f"""[connection_manager.py force_retry_job()]
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ FORCE RETRY JOB                                                              ║
+║ Job ID: {job_id}                                                             ║
+║ Cleared from workers: {', '.join(cleared_workers)}                           ║
+║ Action: Job failure history cleared, allowing reassignment to any worker     ║
+╚══════════════════════════════════════════════════════════════════════════════╝""")
+        else:
+            logger.info(f"""[connection_manager.py force_retry_job()]
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ FORCE RETRY JOB - NO ACTION NEEDED                                           ║
+║ Job ID: {job_id}                                                             ║
+║ Reason: Job not found in any worker's failed jobs list                       ║
+╚══════════════════════════════════════════════════════════════════════════════╝""")
+            
+        return found
+    
     async def disconnect_worker(self, worker_id: str) -> None:
         """
         Disconnect a worker and clean up its resources.
@@ -1318,8 +1363,8 @@ class ConnectionManager(ConnectionManagerInterface):
         excluded_workers = []
         
         for worker_id in idle_workers:
-            # 2025-04-25-23:20 - Check if worker has previously failed this job
-            # This is the new in-memory approach to prevent reassigning failed jobs
+            # Check if worker has previously failed this job
+            # This is the in-memory approach to prevent reassigning failed jobs
             if worker_id in self.worker_failed_jobs and job_id in self.worker_failed_jobs[worker_id]:
                 logger.info(f"""[connection_manager.py notify_idle_workers()]
 ╔══════════════════════════════════════════════════════════════════════════════╗

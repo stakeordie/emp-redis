@@ -86,6 +86,10 @@ class MessageType:
     #CLIENT_CANCEL_JOB_REQUEST_TO_SERVER
     CANCEL_JOB = "cancel_job"                       # Client → Server: Requests to permanently cancel a job
     
+    # [2025-05-19T18:22:00-04:00] Added force retry job message type
+    #CLIENT_FORCE_RETRY_JOB_REQUEST_TO_SERVER
+    FORCE_RETRY_JOB = "force_retry_job"             # Client → Server: Requests to force retry a job by clearing its failure history
+    
     #SERVER_SEND_JOB_FAILURE_ACK_TO_WORKER
     JOB_FAILED_ACK = "job_failed_ack"               # Server → Worker: Acknowledges receipt of a job failure message
 

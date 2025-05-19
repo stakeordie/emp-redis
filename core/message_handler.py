@@ -179,6 +179,14 @@ class MessageHandler(MessageHandlerInterface):
                 else:
                     error_message = ErrorMessage(error="Missing job_id in cancel_job request")
                     await self.connection_manager.send_to_client(client_id, error_message)
+            # [2025-05-19T18:26:00-04:00] Added force_retry_job case
+            case "force_retry_job":
+                job_id = message_data.get("job_id")
+                if job_id:
+                    await self.handle_force_retry_job(client_id, job_id)
+                else:
+                    error_message = ErrorMessage(error="Missing job_id in force_retry_job request")
+                    await self.connection_manager.send_to_client(client_id, error_message)
             case "stay_alive":
                 # Respond with a simple acknowledgment
                 # WebSocket protocol handles connection keepalive automatically
@@ -619,6 +627,78 @@ class MessageHandler(MessageHandlerInterface):
             await self.connection_manager.send_to_client(client_id, error_message)
             
             logger.warning(f"[message_handler.py handle_cancel_job()]: Failed to cancel job {job_id}")
+    
+    # [2025-05-19T18:27:00-04:00] Added method to handle force retry job requests
+    async def handle_force_retry_job(self, client_id: str, job_id: str) -> None:
+        """
+        Handle force retry job request from a client.
+        
+        This method clears a job's failure history, allowing it to be assigned to any worker,
+        even ones that previously failed it.
+        
+        Args:
+            client_id: Client identifier
+            job_id: ID of the job to force retry
+        """
+        # Log the force retry request
+        logger.info(f"[message_handler.py handle_force_retry_job()]: Client {client_id} requested force retry of job {job_id}")
+        
+        # Get the job status from Redis to verify it exists
+        job_data = self.redis_service.get_job_status(job_id)
+        
+        if not job_data:
+            # Job doesn't exist
+            error_message = ErrorMessage(error=f"Failed to force retry job {job_id}. Job does not exist.")
+            await self.connection_manager.send_to_client(client_id, error_message)
+            logger.warning(f"[message_handler.py handle_force_retry_job()]: Failed to force retry job {job_id} - job not found")
+            return
+        
+        # Clear the job's failure history using the connection manager's force_retry_job method
+        success = self.connection_manager.force_retry_job(job_id)
+        
+        if success:
+            # Create a response message
+            response = ResponseJobStatusMessage(
+                job_id=job_id,
+                status=job_data.get("status", "unknown"),
+                message=f"Job failure history cleared. Job can now be assigned to any worker."
+            )
+            
+            # Send response to the client
+            await self.connection_manager.send_to_client(client_id, response)
+            
+            # Also notify any subscribers to this job
+            await self.connection_manager.send_job_update(job_id, response)
+            
+            # If the job is pending, trigger a job notification to workers
+            if job_data.get("status") == "pending":
+                # Get the job details
+                job_type = job_data.get("type")
+                priority = int(job_data.get("priority", 0))
+                
+                # Create a job notification message
+                job_notification = JobAvailableMessage(
+                    job_id=job_id,
+                    job_type=job_type,
+                    priority=priority
+                )
+                
+                # Notify idle workers about the job
+                await self.connection_manager.notify_idle_workers(job_notification)
+            
+            logger.info(f"[message_handler.py handle_force_retry_job()]: Successfully cleared failure history for job {job_id}")
+        else:
+            # No workers had failed this job
+            response = ResponseJobStatusMessage(
+                job_id=job_id,
+                status=job_data.get("status", "unknown"),
+                message=f"Job has no failure history to clear."
+            )
+            
+            # Send response to the client
+            await self.connection_manager.send_to_client(client_id, response)
+            
+            logger.info(f"[message_handler.py handle_force_retry_job()]: No failure history found for job {job_id}")
     
     async def handle_fail_job(self, worker_id: str, message: FailJobMessage) -> None:
         """

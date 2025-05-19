@@ -34,6 +34,65 @@ const server = http.createServer((req, res) => {
   
   // Parse the URL to get the pathname
   let filePath = req.url;
+  let urlParts = filePath.split('?');
+  filePath = urlParts[0];
+  
+  // [2025-05-19T18:02:00-04:00] Handle API routes
+  if (filePath.startsWith('/api/')) {
+    // Set CORS headers to allow requests from any origin
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    
+    // Handle OPTIONS requests for CORS preflight
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+    
+    // Handle force retry API endpoint
+    if (filePath === '/api/force_retry' && req.method === 'POST') {
+      let body = '';
+      req.on('data', chunk => {
+        body += chunk.toString();
+      });
+      
+      req.on('end', () => {
+        try {
+          const data = JSON.parse(body);
+          const jobId = data.job_id;
+          
+          if (!jobId) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'Missing job_id parameter' }));
+            return;
+          }
+          
+          console.log(`[2025-05-19T18:02:00-04:00] Force retry requested for job: ${jobId}`);
+          
+          // In a real implementation, this would call the Redis service to force retry the job
+          // For now, we'll just return a success response
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ 
+            success: true, 
+            message: `Force retry initiated for job ${jobId}` 
+          }));
+        } catch (error) {
+          console.error('Error processing force retry request:', error);
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Invalid request format' }));
+        }
+      });
+      
+      return;
+    }
+    
+    // If we reach here, the API endpoint was not found
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: false, error: 'API endpoint not found' }));
+    return;
+  }
   
   // If the URL is '/', serve the index.html file
   if (filePath === '/') {

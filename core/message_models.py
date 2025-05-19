@@ -110,6 +110,12 @@ class CancelJobMessage(BaseMessage):
     reason: Optional[str] = "Manually cancelled"
     timestamp: float = Field(default_factory=time.time)
     
+class ForceRetryJobMessage(BaseMessage):
+    """[2025-05-19T18:23:00-04:00] Message for requesting force retry of a job by clearing its failure history"""
+    type: str = MessageType.FORCE_RETRY_JOB
+    job_id: str
+    timestamp: float = Field(default_factory=time.time)
+    
 class JobFailedAckMessage(BaseMessage):
     """Message for acknowledging receipt of a job failure message"""
     type: str = MessageType.JOB_FAILED_ACK
@@ -591,6 +597,26 @@ class MessageModels(MessageModelsInterface):
                     ),
                     message_type
                 )
+            case MessageType.CANCEL_JOB:
+                return self._try_parse_message(
+                    lambda: CancelJobMessage(
+                        type=MessageType.CANCEL_JOB,
+                        job_id=data.get("job_id", ""),
+                        reason=data.get("reason", "Manually cancelled"),
+                        timestamp=data.get("timestamp", time.time())
+                    ),
+                    message_type
+                )
+            # [2025-05-19T18:25:00-04:00] Added FORCE_RETRY_JOB message type
+            case MessageType.FORCE_RETRY_JOB:
+                return self._try_parse_message(
+                    lambda: ForceRetryJobMessage(
+                        type=MessageType.FORCE_RETRY_JOB,
+                        job_id=data.get("job_id", ""),
+                        timestamp=data.get("timestamp", time.time())
+                    ),
+                    message_type
+                )
             case _:
                 logger.warning(f"Unknown message type: {message_type}")
                 return None
@@ -1005,6 +1031,20 @@ class MessageModels(MessageModelsInterface):
         return CancelJobMessage(
             job_id=job_id,
             reason=reason
+        )
+        
+    def create_force_retry_job_message(self, job_id: str) -> ForceRetryJobMessage:
+        """
+        [2025-05-19T18:24:00-04:00] Create a force retry job message.
+        
+        Args:
+            job_id: ID of the job to force retry
+            
+        Returns:
+            ForceRetryJobMessage: Force retry job message model
+        """
+        return ForceRetryJobMessage(
+            job_id=job_id
         )
 
     def create_connector_ws_status_message(self, worker_id: str, connector_type: str, 

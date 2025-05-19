@@ -44,11 +44,70 @@ const CONNECTION_URLS = {
     local: "ws://localhost:8001"
 };
 
+// [2025-05-19T17:53:00-04:00] Default payloads for different job types
+const DEFAULT_PAYLOADS = {
+    // Simulation job type (default)
+    "simulation": JSON.stringify({
+        "steps": 20,
+        "seed": Math.floor(Math.random() * 1000000000),
+        "simulation_time": 5
+    }, null, 2),
+    
+    // ComfyUI job type
+    "comfyui": JSON.stringify({
+        "3": {
+            "inputs": {
+                "seed": Math.floor(Math.random() * 1000000000),
+                "steps": 20,
+                "cfg": 8,
+                "sampler_name": "euler",
+                "scheduler": "normal",
+                "denoise": 1,
+                "model": "v1-5-pruned.safetensors",
+                "positive": "a photo of a cat",
+                "negative": "blurry, bad quality",
+                "width": 512,
+                "height": 512
+            }
+        }
+    }, null, 2),
+    
+    // A1111 job type
+    "a1111": JSON.stringify({
+        "prompt": "a photo of a cat",
+        "negative_prompt": "blurry, bad quality",
+        "width": 512,
+        "height": 512,
+        "steps": 20,
+        "cfg_scale": 7,
+        "sampler_name": "Euler a"
+    }, null, 2),
+    
+    // REST API job type
+    "rest": JSON.stringify({
+        "endpoint": "/api/generate",
+        "method": "POST",
+        "headers": {
+            "Content-Type": "application/json"
+        },
+        "body": {
+            "prompt": "Example prompt",
+            "parameters": {
+                "temperature": 0.7
+            }
+        }
+    }, null, 2)
+};
+
 // DOM Elements
 const elements = {
     // Connection controls
     connectionType: document.getElementById('connection-type'),
     websocketUrl: document.getElementById('websocket-url'),
+    // [2025-05-19T17:50:00-04:00] Added job type dropdown reference
+    jobTypeDropdown: document.getElementById('job-type'),
+    // [2025-05-19T17:54:00-04:00] Added job payload textarea reference
+    jobPayload: document.getElementById('job-payload'),
     authToken: document.getElementById('auth-token'),
     // Connection info display elements
     connectionInfo: document.getElementById('connection-info'),
@@ -134,9 +193,19 @@ function init() {
     // 2025-04-09 13:41: Added batch submit button event listener
     document.getElementById('batch-submit-btn')?.addEventListener('click', batchSubmitJobs);
     elements.connectionType.addEventListener('change', updateWebSocketUrl);
+    elements.jobTypeDropdown.addEventListener('change', (event) => {
+        const selectedJobType = event.target.value;
+        updateJobPayload(selectedJobType);
+    });
     
     // Initialize WebSocket URL based on default connection type
     updateWebSocketUrl();
+    
+    // [2025-05-19T17:56:00-04:00] Initialize job payload with default for selected job type
+    if (elements.jobTypeDropdown && elements.jobPayload) {
+        const initialJobType = elements.jobTypeDropdown.value || 'simulation';
+        updateJobPayload(initialJobType);
+    }
     
     // [2025-04-06 19:02] Worker subscription event listeners removed
     
@@ -1753,6 +1822,83 @@ function requestStats() {
 }
 
 /**
+ * [2025-05-19T17:51:00-04:00] Collect all supported job types from connected workers
+ * @returns {string[]} Array of unique job types supported by connected workers
+ */
+function collectSupportedJobTypes() {
+    const jobTypes = new Set();
+    
+    // Default job type
+    jobTypes.add('simulation');
+    
+    // Collect job types from all workers
+    Object.values(state.workers).forEach(worker => {
+        // Check different possible locations for supported job types
+        if (worker.capabilities && Array.isArray(worker.capabilities.supported_job_types)) {
+            worker.capabilities.supported_job_types.forEach(type => jobTypes.add(type));
+        } else if (Array.isArray(worker.supported_job_types)) {
+            worker.supported_job_types.forEach(type => jobTypes.add(type));
+        }
+    });
+    
+    return Array.from(jobTypes).sort();
+}
+
+/**
+ * [2025-05-19T17:51:00-04:00] Update the job type dropdown with options based on connected workers
+ */
+function updateJobTypeDropdown() {
+    const dropdown = elements.jobTypeDropdown;
+    if (!dropdown) return;
+    
+    // Save current selection if any
+    const currentSelection = dropdown.value;
+    
+    // Clear existing options
+    dropdown.innerHTML = '';
+    
+    // Get all supported job types
+    const jobTypes = collectSupportedJobTypes();
+    
+    // Add options to dropdown
+    jobTypes.forEach(type => {
+        const option = document.createElement('option');
+        option.value = type;
+        option.textContent = type;
+        dropdown.appendChild(option);
+    });
+    
+    // Restore previous selection if it exists in the new options
+    if (jobTypes.includes(currentSelection)) {
+        dropdown.value = currentSelection;
+    } else if (jobTypes.length > 0) {
+        // Set to first option if previous selection doesn't exist
+        dropdown.value = jobTypes[0];
+        // Update payload for the new selection
+        updateJobPayload(jobTypes[0]);
+    }
+    
+    console.log(`[2025-05-19T17:51:00-04:00] Updated job type dropdown with ${jobTypes.length} options`);
+}
+
+/**
+ * [2025-05-19T17:54:00-04:00] Update the job payload based on the selected job type
+ * @param {string} jobType - The selected job type
+ */
+function updateJobPayload(jobType) {
+    const payloadTextarea = elements.jobPayload;
+    if (!payloadTextarea) return;
+    
+    // Get the default payload for this job type
+    const defaultPayload = DEFAULT_PAYLOADS[jobType] || DEFAULT_PAYLOADS['simulation'];
+    
+    // Update the payload textarea
+    payloadTextarea.value = defaultPayload;
+    
+    console.log(`[2025-05-19T17:54:00-04:00] Updated job payload for job type: ${jobType}`);
+}
+
+/**
  * Update the UI with current state
  */
 function updateUI() {
@@ -2189,10 +2335,24 @@ function updateUI() {
             // This prevents the display from constantly changing and provides consistent time representation
             const createdAtStr = formatDateTime(job.created_at ? new Date(job.created_at * 1000) : null);
             
+            // Get failure count for this job
+            // [2025-05-19T17:58:00-04:00] Added failure count tracking
+            let failureCount = 0;
+            if (state.worker_failed_jobs) {
+                // Count how many workers have failed this job
+                Object.values(state.worker_failed_jobs).forEach(failedJobs => {
+                    if (failedJobs.includes(job.id)) {
+                        failureCount++;
+                    }
+                });
+            }
+            
             // Create the job row
             // [2025-04-06 20:40] Added client_id column
             // 2025-04-09 13:53: Modified to display full job ID without truncation
             // 2025-04-26 22:59: Added cancel button to each job row
+            // [2025-05-19T17:58:00-04:00] Added failures column
+            // [2025-05-19T18:03:00-04:00] Added force retry button
             row.innerHTML = `
                 <td class="job-id-cell" title="${job.id}">${job.id}</td>
                 <td>${job.client_id || 'N/A'}</td>
@@ -2201,7 +2361,11 @@ function updateUI() {
                 <td>${displayPriority}</td>
                 <td>${job.position !== undefined ? job.position : 'N/A'}</td>
                 <td>${createdAtStr}</td>
-                <td><button class="btn-cancel" onclick="cancelJob('${job.id}')">Cancel</button></td>
+                <td>${failureCount > 0 ? `<span class="failure-count">${failureCount}</span>` : '0'}</td>
+                <td>
+                    <button class="btn-cancel" onclick="cancelJob('${job.id}')">Cancel</button>
+                    ${failureCount > 0 ? `<button class="btn-force-retry" onclick="forceRetryJob('${job.id}')">Force Retry</button>` : ''}
+                </td>
             `;
             
             elements.jobsTableBody.appendChild(row);
@@ -2334,6 +2498,9 @@ function updateUI() {
         elements.finishedJobsContainer.classList.add('hidden');
         elements.noFinishedJobsMessage.classList.remove('hidden');
     }
+    
+    // [2025-05-19T17:55:00-04:00] Update job type dropdown with options from connected workers
+    updateJobTypeDropdown();
 }
 
 /**
@@ -2638,6 +2805,51 @@ function cancelJob(jobId) {
     } catch (error) {
         showNotification(`Error cancelling job: ${error.message}`, 'error');
         console.error('Error cancelling job:', error);
+    }
+}
+
+/**
+ * [2025-05-19T18:06:00-04:00] Force retry a job that has previously failed
+ * This function sends a request to clear the job's failure history
+ * and allow it to be assigned to any worker, even ones that previously failed it
+ */
+function forceRetryJob(jobId) {
+    // Check if client socket is connected
+    if (!state.clientConnected) {
+        showNotification('Cannot force retry job: Client not connected', 'error');
+        return;
+    }
+    
+    // Find the job in the state
+    const job = state.jobs[jobId];
+    
+    if (!job) {
+        showNotification(`Job ${jobId} not found`, 'error');
+        return;
+    }
+    
+    // Confirm force retry
+    if (!confirm(`Are you sure you want to force retry job ${jobId}?\n\nThis will clear the job's failure history and allow it to be assigned to any worker, even ones that previously failed it.`)) {
+        return;
+    }
+    
+    // Create a force retry job message
+    const forceRetryMessage = {
+        type: 'force_retry_job',
+        job_id: jobId,
+        timestamp: Date.now() / 1000
+    };
+    
+    // Send the message
+    try {
+        state.clientSocket.send(JSON.stringify(forceRetryMessage));
+        showNotification(`Force retry request sent for job ${jobId}`, 'info');
+        
+        // Optimistically update the UI
+        updateUI();
+    } catch (error) {
+        showNotification(`Error forcing retry for job: ${error.message}`, 'error');
+        console.error('Error forcing retry for job:', error);
     }
 }
 
