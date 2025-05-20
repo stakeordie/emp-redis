@@ -5,6 +5,12 @@ All notable changes to the EMP Redis project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- [2025-05-20T17:55:00-04:00] Fixed job subscription mechanism to properly deliver complete_job messages:
+  - Changed job subscriptions to support multiple clients per job
+  - Added fallback to send to all connected clients when no subscriptions exist
+  - Implemented proper cleanup of subscriptions when clients disconnect
+  - Added detailed logging for subscription management
+
 - [2025-05-20T17:37:00-04:00] Improved job result data handling in WebSocket messages:
   - Implemented direct worker data approach in message_handler.py
   - Eliminated Redis query timing issues by using data directly from worker
