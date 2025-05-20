@@ -100,13 +100,19 @@ class JobStatusResponse(BaseModel):
     
     @validator('position_description', always=True)
     def set_position_description(cls, v, values):
-        # [2025-05-20T13:58:14-04:00] Added position_description field to match table display
+        # [2025-05-20T15:42:03-04:00] Fixed position description to account for 0-based indexing
         if v is not None:
             return v
         
         position = values.get('position')
         if position is not None and values.get('status') == 'pending':
-            return f"{position} jobs ahead in queue"
+            # Adjust for human-readable format (1-based instead of 0-based)
+            if position == 0:
+                return "Next in queue"
+            elif position == 1:
+                return "1 job ahead in queue"
+            else:
+                return f"{position} jobs ahead in queue"
         return None
 
 @app.get("/")
