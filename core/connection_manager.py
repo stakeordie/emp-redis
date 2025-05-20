@@ -843,10 +843,8 @@ class ConnectionManager(ConnectionManagerInterface):
                         # [2025-05-20T16:40:08-04:00] Include the full job result data from Redis
                         # We need to get the actual job status from Redis to include the base64 image data
                         try:
-                            # Import Redis client directly
+                            # [2025-05-20T16:43:13-04:00] Import Redis client directly without reimporting json
                             import redis
-                            import json
-                            import os
                             
                             # Get Redis connection details from environment
                             redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
