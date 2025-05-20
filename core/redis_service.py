@@ -345,14 +345,19 @@ class RedisService(RedisServiceInterface):
         Returns:
             bool: True if completion was successful, False otherwise
         """
+        # [2025-05-20T18:29:00-04:00] Enhanced logging for job completion
+        logger.info(f"[2025-05-20T18:29:00-04:00] Completing job {job_id} with result: {result is not None}")
+        if result:
+            result_keys = list(result.keys()) if isinstance(result, dict) else "not a dict"
+            logger.info(f"[2025-05-20T18:29:00-04:00] Result keys: {result_keys}")
+        
         # Get the worker_id from the job data
         job_key = f"{JOB_PREFIX}{job_id}"
         worker_id = self.client.hget(job_key, "worker_id")
-        job_key = f"{JOB_PREFIX}{job_id}"
         
         # Check if job exists
         if not self.client.exists(job_key):
-
+            logger.warning(f"[2025-05-20T18:29:00-04:00] Job {job_id} not found in Redis, cannot complete")
             return False
         
         # Update job status
@@ -362,9 +367,25 @@ class RedisService(RedisServiceInterface):
         
         # Add result if provided
         if result:
-            self.client.hset(job_key, "result", json.dumps(result))
+            # [2025-05-20T18:29:00-04:00] Ensure result is properly serialized
+            try:
+                result_json = json.dumps(result)
+                self.client.hset(job_key, "result", result_json)
+                logger.info(f"[2025-05-20T18:29:00-04:00] Stored result in Redis for job {job_id}, size: {len(result_json)} bytes")
+                
+                # Verify the result was stored correctly
+                stored_result = self.client.hget(job_key, "result")
+                if stored_result:
+                    logger.info(f"[2025-05-20T18:29:00-04:00] Verified result stored in Redis for job {job_id}, size: {len(stored_result)} bytes")
+                else:
+                    logger.warning(f"[2025-05-20T18:29:00-04:00] Failed to verify result storage for job {job_id}")
+            except Exception as e:
+                logger.error(f"[2025-05-20T18:29:00-04:00] Error storing result for job {job_id}: {str(e)}")
+        else:
+            logger.warning(f"[2025-05-20T18:29:00-04:00] No result provided for job {job_id}")
         
-        logger.debug(f"Job completed: {job_id}")
+        logger.info(f"[2025-05-20T18:29:00-04:00] Job completed: {job_id}")
+        
         # Send the standard completion event with status "completed"
         # The connection_manager will detect this and send an additional complete_job message
         self.publish_job_update(job_id, "completed", result=result, worker_id=worker_id)

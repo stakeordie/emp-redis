@@ -777,15 +777,38 @@ class ConnectionManager(ConnectionManagerInterface):
                         logger.info(f"[2025-05-20T18:26:00-04:00] Retrieved job data after second try: {job_data is not None}")
                     
                     
-                    # Extract the result data from job_data
+                    # [2025-05-20T18:30:00-04:00] Extract the result data from job_data with enhanced logging
                     result = {}
-                    if job_data and "result" in job_data:
-                        try:
-                            # Result is stored as a JSON string in Redis
-                            result = json.loads(job_data["result"])
-                            logger.info(f"[2025-05-20T18:24:00-04:00] Retrieved full result data from Redis for job {job_id}")
-                        except Exception as e:
-                            logger.error(f"[2025-05-20T18:24:00-04:00] Error parsing result data for job {job_id}: {str(e)}")
+                    if job_data:
+                        logger.info(f"[2025-05-20T18:30:00-04:00] Job data keys: {list(job_data.keys()) if isinstance(job_data, dict) else 'not a dict'}")
+                        
+                        if "result" in job_data:
+                            raw_result = job_data["result"]
+                            logger.info(f"[2025-05-20T18:30:00-04:00] Raw result type: {type(raw_result).__name__}, length: {len(raw_result) if raw_result else 0}")
+                            
+                            try:
+                                # Result is stored as a JSON string in Redis
+                                if isinstance(raw_result, bytes):
+                                    raw_result = raw_result.decode('utf-8')
+                                    
+                                result = json.loads(raw_result)
+                                result_keys = list(result.keys()) if isinstance(result, dict) else "not a dict"
+                                logger.info(f"[2025-05-20T18:30:00-04:00] Parsed result keys: {result_keys}")
+                                logger.info(f"[2025-05-20T18:30:00-04:00] Retrieved full result data from Redis for job {job_id}")
+                            except Exception as e:
+                                logger.error(f"[2025-05-20T18:30:00-04:00] Error parsing result data for job {job_id}: {str(e)}")
+                                logger.error(f"[2025-05-20T18:30:00-04:00] Raw result: {raw_result[:100]}...")
+                        else:
+                            logger.warning(f"[2025-05-20T18:30:00-04:00] No 'result' field in job data for job {job_id}")
+                    else:
+                        logger.warning(f"[2025-05-20T18:30:00-04:00] No job data found for job {job_id}")
+                        
+                    # [2025-05-20T18:30:00-04:00] If result is still empty, try to get it from the original message
+                    if not result and "result" in parsed_message:
+                        original_result = parsed_message.get("result")
+                        if original_result:
+                            logger.info(f"[2025-05-20T18:30:00-04:00] Using result from original message for job {job_id}")
+                            result = original_result
                     
                     # Send an explicit complete_job message with the full result data
                     complete_job_message = {
