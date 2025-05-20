@@ -325,7 +325,9 @@ class RedisService(RedisServiceInterface):
         if message:
             self.client.hset(job_key, "message", message)
         
-
+        # Update last_updated_at timestamp to reset timeout clock
+        current_time = time.time()
+        self.client.hset(job_key, "last_updated_at", current_time)
         
         # Publish progress update event
         self.publish_job_update(job_id, "processing", progress=progress, message=message, worker_id=worker_id)
@@ -1228,7 +1230,9 @@ class RedisService(RedisServiceInterface):
                 pipe.hset(job_key, "worker_id", worker_id)
                 # Keep the worker field for backward compatibility
                 pipe.hset(job_key, "worker", worker_id)
-                pipe.hset(job_key, "claimed_at", time.time())
+                current_time = time.time()
+                pipe.hset(job_key, "claimed_at", current_time)
+                pipe.hset(job_key, "last_updated_at", current_time)  # Initialize last_updated_at to claimed_at
                 pipe.hset(job_key, "claim_timeout", claim_timeout)
                 
                 logger.info(f"""[redis_service.py claim_job()]
@@ -1384,12 +1388,14 @@ class RedisService(RedisServiceInterface):
             
             # Only check claimed jobs
             if job_status == "claimed":
-                claimed_at = float(self.client.hget(job_key, "claimed_at") or 0)
-                claim_age = current_time - claimed_at
+                # Get the last_updated_at timestamp, falling back to claimed_at if not present
+                last_updated_at = float(self.client.hget(job_key, "last_updated_at") or 
+                                      self.client.hget(job_key, "claimed_at") or 0)
+                inactive_time = current_time - last_updated_at
                 claim_timeout = int(self.client.hget(job_key, "claim_timeout") or 30)
                 
-                # Check if claim is stale
-                if claim_age > claim_timeout:
+                # Check if job has been inactive for longer than the timeout
+                if inactive_time > claim_timeout:
                     # Get job priority
                     priority = int(self.client.hget(job_key, "priority") or 0)
                     
