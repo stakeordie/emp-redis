@@ -634,15 +634,12 @@ class ConnectionManager(ConnectionManagerInterface):
             if client_id in self.stats_subscriptions:
                 self.stats_subscriptions.remove(client_id)
                 
-            # [2025-05-20T17:54:00-04:00] Clean up job subscriptions with new list-based structure
+            # [2025-05-20T18:08:00-04:00] Clean up job subscriptions with single client ID per job
             jobs_to_remove = []
-            for job_id, subscribers in self.job_subscriptions.items():
-                if client_id in subscribers:
-                    subscribers.remove(client_id)
-                    logger.info(f"[2025-05-20T17:54:00-04:00] Removed client {client_id} from job {job_id} subscriptions")
-                    # If no subscribers left, mark job for removal
-                    if not subscribers:
-                        jobs_to_remove.append(job_id)
+            for job_id, subscriber_id in self.job_subscriptions.items():
+                if subscriber_id == client_id:
+                    jobs_to_remove.append(job_id)
+                    logger.info(f"[2025-05-20T18:08:00-04:00] Removed client {client_id} from job {job_id} subscription")
             
             for job_id in jobs_to_remove:
                 del self.job_subscriptions[job_id]
@@ -729,15 +726,13 @@ class ConnectionManager(ConnectionManagerInterface):
         if not is_connected:
             return False
         
-        # [2025-05-20T17:52:00-04:00] Modified to store a list of clients per job
-        # This ensures multiple clients can receive updates for the same job
-        if job_id not in self.job_subscriptions:
-            self.job_subscriptions[job_id] = []
-            
-        # Add client to the subscription list if not already there
-        if client_id not in self.job_subscriptions[job_id]:
-            self.job_subscriptions[job_id].append(client_id)
-            logger.info(f"[2025-05-20T17:52:00-04:00] Client {client_id} subscribed to job {job_id}")
+        # [2025-05-20T18:07:00-04:00] Reverted to store a single client ID per job
+        # Record previous subscription if exists
+        prev_client = self.job_subscriptions.get(job_id)
+        
+        # Update subscription mapping
+        self.job_subscriptions[job_id] = client_id
+        logger.info(f"[2025-05-20T18:07:00-04:00] Client {client_id} subscribed to job {job_id}")
         
         return True
     
@@ -747,15 +742,10 @@ class ConnectionManager(ConnectionManagerInterface):
         
     def unsubscribe_from_job(self, client_id: str, job_id: str) -> None:
         """Unsubscribe a client from job updates"""
-        # [2025-05-20T17:53:00-04:00] Added method to handle job unsubscriptions
-        if job_id in self.job_subscriptions and client_id in self.job_subscriptions[job_id]:
-            self.job_subscriptions[job_id].remove(client_id)
-            logger.info(f"[2025-05-20T17:53:00-04:00] Client {client_id} unsubscribed from job {job_id}")
-            
-            # If no more clients are subscribed to this job, remove the job entry
-            if not self.job_subscriptions[job_id]:
-                del self.job_subscriptions[job_id]
-                logger.info(f"[2025-05-20T17:53:00-04:00] Removed empty subscription list for job {job_id}")
+        # [2025-05-20T18:07:00-04:00] Updated to handle single client ID per job
+        if job_id in self.job_subscriptions and self.job_subscriptions[job_id] == client_id:
+            del self.job_subscriptions[job_id]
+            logger.info(f"[2025-05-20T18:07:00-04:00] Client {client_id} unsubscribed from job {job_id}")
     
     def unsubscribe_from_stats(self, client_id: str) -> None:
         """Unsubscribe a client from system stats updates"""
