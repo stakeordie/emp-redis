@@ -841,19 +841,20 @@ class ConnectionManager(ConnectionManagerInterface):
                             "timestamp": time.time()
                         }
                         
-                        # [2025-05-20T15:54:08-04:00] For A1111 WebSocket requests, set a fixed result value
+                        # [2025-05-20T16:01:12-04:00] For A1111 WebSocket requests, set a fixed result value
                         job_type = parsed_message.get("job_type") or full_job_status.get("job_type")
                         
                         # Log the job type for debugging
-                        logger.info(f"[2025-05-20T15:54:08-04:00] Job type for job {job_id}: {job_type}")
+                        logger.info(f"[2025-05-20T16:01:12-04:00] Job type for job {job_id}: {job_type}")
                         
                         # For A1111 jobs, set a fixed result value
                         if job_type == "a1111":
                             # Set a fixed result value to prove we know where it's coming from
                             complete_job_message["result"] = "I know how to change this, I promise"
-                            logger.info(f"[2025-05-20T15:54:08-04:00] Set fixed result value for A1111 job {job_id}")
-                        else:
-                            # For other job types, use the normal logic
+                            logger.info(f"[2025-05-20T16:01:12-04:00] Set fixed result value for A1111 job {job_id}")
+                        
+                        # [2025-05-20T15:35:46-04:00] Ensure we include all necessary output data in the WebSocket message
+                        if full_job_status:
                             # Add all fields from full_job_status except those already in the message
                             for key, value in full_job_status.items():
                                 if key not in complete_job_message:
@@ -906,7 +907,7 @@ class ConnectionManager(ConnectionManagerInterface):
                                         result_data["images"] = connector_details["images"]
                                         logger.info(f"[2025-05-20T15:40:20-04:00] Found images directly in connector_details for job {job_id}")
                             
-                            # [2025-05-20T15:55:30-04:00] Update the result field in the message
+                            # Update the result field in the message
                             complete_job_message["result"] = result_data
                         else:
                             # Fallback to just including the result if full status not available
