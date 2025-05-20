@@ -631,15 +631,15 @@ class RedisService(RedisServiceInterface):
             
             position: int = 0  # Default position if not found or first in queue
             
-            # [2025-05-20T14:15:17-04:00] Fixed position calculation to correctly count jobs ahead
-            # We need to count jobs with higher priority (lower score) that are still pending
+            # [2025-05-20T14:20:37-04:00] Fixed position calculation to consider both priority and creation time
             job_score = self.client.zscore(PRIORITY_QUEUE, job_id)
+            job_created_at = float(job_data.get("created_at", 0))
             
             if job_score is not None:
-                # Get all pending jobs from the priority queue
+                # Get all jobs from the priority queue
                 all_jobs = self.client.zrange(PRIORITY_QUEUE, 0, -1)
                 
-                # Count only pending jobs with higher priority (lower score) than this job
+                # Count pending jobs that should be processed before this one
                 pending_jobs_ahead = 0
                 
                 for other_job_id in all_jobs:
@@ -648,17 +648,38 @@ class RedisService(RedisServiceInterface):
                     if other_job_id_str == job_id:
                         continue
                     
-                    # Get the score (priority) of this job
-                    other_job_score = self.client.zscore(PRIORITY_QUEUE, other_job_id)
-                    
-                    # Only count jobs with higher priority (lower score)
-                    if other_job_score is not None and other_job_score < job_score:
-                        # Get the status of this job
-                        other_job_status = self.client.hget(f"job:{other_job_id_str}", "status")
-                        other_job_status_str = other_job_status.decode('utf-8') if isinstance(other_job_status, bytes) else other_job_status
+                    # Get the status of this job
+                    other_job_status = self.client.hget(f"job:{other_job_id_str}", "status")
+                    if not other_job_status:
+                        continue
                         
-                        # Only count jobs that are still pending
-                        if other_job_status_str == "pending":
+                    other_job_status_str = other_job_status.decode('utf-8') if isinstance(other_job_status, bytes) else other_job_status
+                    
+                    # Only count jobs that are still pending
+                    if other_job_status_str == "pending":
+                        # Get the score (priority) of this job
+                        other_job_score = self.client.zscore(PRIORITY_QUEUE, other_job_id)
+                        if other_job_score is None:
+                            continue
+                        
+                        # Get the creation time of this job
+                        # Use hgetall to get all fields for the job
+                        other_job_data_raw = self.client.hgetall(f"job:{other_job_id_str}")
+                        
+                        # Convert bytes to strings in the job data
+                        other_job_data = {}
+                        for k, v in other_job_data_raw.items():
+                            key = k.decode('utf-8') if isinstance(k, bytes) else k
+                            value = v.decode('utf-8') if isinstance(v, bytes) else v
+                            other_job_data[key] = value
+                            
+                        other_job_created_at = float(other_job_data.get("created_at", 0)) if other_job_data else 0
+                        
+                        # Count jobs with higher priority (lower score)
+                        if other_job_score < job_score:
+                            pending_jobs_ahead += 1
+                        # For jobs with same priority, count those created earlier
+                        elif other_job_score == job_score and other_job_created_at < job_created_at:
                             pending_jobs_ahead += 1
                 
                 position = pending_jobs_ahead
