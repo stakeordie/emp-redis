@@ -839,17 +839,21 @@ class ConnectionManager(ConnectionManagerInterface):
                             "timestamp": time.time()
                         }
                         
-                        # [2025-05-20T16:01:12-04:00] For A1111 WebSocket requests, set a fixed result value
-                        job_type = parsed_message.get("job_type") or full_job_status.get("job_type")
+                        # [2025-05-20T16:11:00-04:00] Set a fixed result value for all completed jobs to debug the issue
+                        # This will help us identify if our code is being executed at all
+                        complete_job_message["result"] = "I know how to change this, I promise"
                         
-                        # Log the job type for debugging
-                        logger.info(f"[2025-05-20T16:01:12-04:00] Job type for job {job_id}: {job_type}")
+                        # Log that we've set the fixed result value
+                        logger.info(f"[2025-05-20T16:11:00-04:00] Set fixed result value for job {job_id}")
                         
-                        # For A1111 jobs, set a fixed result value
-                        if job_type == "a1111":
-                            # Set a fixed result value to prove we know where it's coming from
-                            complete_job_message["result"] = "I know how to change this, I promise"
-                            logger.info(f"[2025-05-20T16:01:12-04:00] Set fixed result value for A1111 job {job_id}")
+                        # Log the message structure for debugging
+                        logger.info(f"[2025-05-20T16:11:00-04:00] Complete job message structure: {json.dumps(complete_job_message, default=str)}")
+                        
+                        # Also log the original message and full job status for comparison
+                        logger.info(f"[2025-05-20T16:11:00-04:00] Original message: {json.dumps(parsed_message, default=str)}")
+                        logger.info(f"[2025-05-20T16:11:00-04:00] Full job status: {json.dumps(full_job_status, default=str)}")
+                        
+                        # Don't proceed with the normal result extraction logic since we're setting a fixed value
                         
                         # [2025-05-20T15:35:46-04:00] Ensure we include all necessary output data in the WebSocket message
                         if full_job_status:
