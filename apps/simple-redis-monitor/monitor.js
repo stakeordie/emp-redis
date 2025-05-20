@@ -749,16 +749,12 @@ function processMessage(data, source) {
         
         // Log received message with source
         addLogEntry(`Received ${source} message: ${message.type}`, 'info');
-        
+        console.log(`Received ${source} message: ${message.type}`)
         try {
+            console.log("the messagetype is: ", message.type)
             // Process the message based on its type
+            // [2025-05-20T11:23:31-04:00] Removed cases for unsupported message types
             switch (message.type) {
-                case 'request_stats':
-                case Messages.TYPE.REQUEST_STATS:
-                    // This is a request_stats message we sent and received back
-                    // Just log it for debugging purposes
-                    console.log(`[2025-05-20T11:14:45-04:00] Received request_stats echo from ${source}:`, message);
-                    break;
                 case Messages.TYPE.RESPONSE_STATS:
                     handleStatsResponse(message, message, source);
                     break;
@@ -1739,6 +1735,16 @@ function handleErrorMessage(message, source = 'unknown') {
     const details = message.details || (message.originalMessage ? message.originalMessage.details : undefined);
     const originalType = message.originalType || (message.originalMessage ? message.originalMessage.original_type : undefined);
     
+    // [2025-05-20T11:23:31-04:00] Special handling for unsupported message types
+    if (error && (error.includes('Unsupported message type: request_stats') || 
+                  error.includes('Unsupported message type: subscribe_stats'))) {
+        // These are expected errors when using the Request Stats button
+        // The server doesn't support these message types, but we can ignore these errors
+        // We've updated the requestStats function to not send these messages
+        console.log(`[2025-05-20T11:23:31-04:00] Ignoring expected error for unsupported message type: ${error}`);
+        return;
+    }
+    
     // Create a more detailed error message
     let errorMessage = `Error: ${error}`;
     if (originalType) {
@@ -1892,41 +1898,33 @@ async function batchSubmitJobs(event) {
 
 /**
  * Request system statistics
- * Sends a request_stats message to the server to get current system statistics
+ * [2025-05-20T11:23:31-04:00] Updated to use automatic stats broadcasts
  */
 function requestStats() {
+    // Check if monitor is connected
     if (!state.monitorConnected) {
-        addLogEntry('Cannot request stats: Monitor connection not active', 'warning');
+        addLogEntry('Cannot request stats: Monitor not connected', 'error');
         return;
     }
     
-    try {
-        // [2025-05-20T11:16:24-04:00] Fixed request_stats message creation
-        // Create a simple request_stats message directly instead of using Messages class
-        const message = {
-            type: 'request_stats',
-            timestamp: Date.now() / 1000,
-            message_id: `stats-request-${Date.now()}`
-        };
+    // Log the request
+    addLogEntry('Waiting for next automatic stats broadcast...', 'info');
+    
+    // We don't need to send any message - the server automatically sends stats_broadcast messages
+    // The handleStatsBroadcast function will process these messages when they arrive
+    
+    // Add a visual indicator that we're waiting for stats
+    const statsButton = document.getElementById('request-stats-btn');
+    if (statsButton) {
+        const originalText = statsButton.textContent;
+        statsButton.textContent = 'Waiting for stats...';
+        statsButton.disabled = true;
         
-        // Log the request
-        addLogEntry('Requesting system statistics...', 'info');
-        
-        // Send message through the monitor connection
-        state.monitorSocket.send(JSON.stringify(message));
-        
-        // Store the request in state for tracking
-        if (!state.pendingRequests) {
-            state.pendingRequests = {};
-        }
-        state.pendingRequests[message.message_id] = {
-            type: message.type,
-            timestamp: message.timestamp,
-            status: 'pending'
-        };
-    } catch (error) {
-        addLogEntry(`Error requesting stats: ${error.message}`, 'error');
-        console.error('Error details:', error);
+        // Re-enable the button after 3 seconds
+        setTimeout(() => {
+            statsButton.textContent = originalText;
+            statsButton.disabled = false;
+        }, 3000);
     }
 }
 
