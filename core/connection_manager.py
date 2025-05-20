@@ -757,10 +757,25 @@ class ConnectionManager(ConnectionManagerInterface):
                     # [2025-05-20T18:24:00-04:00] Get the job ID from the message
                     job_id = parsed_message.get("job_id")
                     
+                    # [2025-05-20T18:26:00-04:00] Add a small delay before getting the job status from Redis
+                    # This helps ensure the job result data is available in Redis
+                    import asyncio
+                    logger.info(f"[2025-05-20T18:26:00-04:00] Adding delay before getting job status for job {job_id}")
+                    await asyncio.sleep(1)  # 500ms delay
+                    
                     # [2025-05-20T18:24:00-04:00] Get the full result data from Redis
                     from core.redis_service import RedisService
                     redis_service = RedisService()
                     job_data = redis_service.get_job_status(job_id)
+                    logger.info(f"[2025-05-20T18:26:00-04:00] Retrieved job data from Redis: {job_data is not None}")
+                    
+                    # [2025-05-20T18:26:00-04:00] If job data is not available, try again after a longer delay
+                    if not job_data or "result" not in job_data:
+                        logger.warning(f"[2025-05-20T18:26:00-04:00] Job data not available on first try, waiting longer for job {job_id}")
+                        await asyncio.sleep(1.0)  # 1 second delay
+                        job_data = redis_service.get_job_status(job_id)
+                        logger.info(f"[2025-05-20T18:26:00-04:00] Retrieved job data after second try: {job_data is not None}")
+                    
                     
                     # Extract the result data from job_data
                     result = {}
