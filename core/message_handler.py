@@ -618,9 +618,21 @@ class MessageHandler(MessageHandlerInterface):
             result=result
         )
         
-        for client_id in self.connection_manager.job_subscriptions.get(job_id, []):
-            await self.connection_manager.send_to_client(client_id, complete_job_base_message)
-            logger.info(f"[2025-05-20T17:33:00-04:00] Sent complete_job message for job {job_id} to client {client_id}")
+        # [2025-05-20T17:51:00-04:00] Log job subscriptions to debug message delivery
+        subscribed_clients = self.connection_manager.job_subscriptions.get(job_id, [])
+        logger.info(f"[2025-05-20T17:51:00-04:00] Job {job_id} has {len(subscribed_clients)} subscribed clients: {subscribed_clients}")
+        
+        # If no clients are subscribed, send to all connected clients as a fallback
+        if not subscribed_clients:
+            logger.warning(f"[2025-05-20T17:51:00-04:00] No clients subscribed to job {job_id}, sending to all connected clients as fallback")
+            for client_id in self.connection_manager.client_connections.keys():
+                logger.info(f"[2025-05-20T17:51:00-04:00] Sending complete_job message to client {client_id} (fallback)")
+                await self.connection_manager.send_to_client(client_id, complete_job_base_message)
+        else:
+            # Send to subscribed clients
+            for client_id in subscribed_clients:
+                await self.connection_manager.send_to_client(client_id, complete_job_base_message)
+                logger.info(f"[2025-05-20T17:51:00-04:00] Sent complete_job message for job {job_id} to subscribed client {client_id}")
         
         # Update job status in Redis (still needed for API endpoints)
         self.redis_service.complete_job(
