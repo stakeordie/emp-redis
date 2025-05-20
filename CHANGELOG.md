@@ -5,6 +5,12 @@ All notable changes to the EMP Redis project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- [2025-05-20T17:19:00-04:00] Removed external dependencies in connection_manager.py:
+  - Replaced external API calls with direct Redis access
+  - Eliminated dependency on requests library
+  - Maintained retry mechanism with increasing delays
+  - Improved deployment reliability by reducing external dependencies
+
 - [2025-05-20T17:13:30-04:00] Fixed logger import in connection_manager.py:
   - Changed direct loguru import to use project's custom logger from utils.logger
   - Resolved deployment error caused by missing loguru dependency
