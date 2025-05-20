@@ -749,25 +749,60 @@ class ConnectionManager(ConnectionManagerInterface):
             await websocket.send_text(message_text)
             logger.debug(f"[connection_manager.py send_to_client()] Sent message of type {type(message).__name__} to client {client_id}: {message_text}")
             
-            # Check for completed status and send additional complete_job message if needed
+            # [2025-05-20T14:52:52-04:00] Only send complete_job message for update_job_progress if not already sent
+            # This fixes the duplicate complete_job messages issue
             try:
                 parsed_message = json.loads(message_text) if isinstance(message_text, str) else message_text
                 
-                if isinstance(parsed_message, dict) and parsed_message.get("status") == "completed" and parsed_message.get("type") == "update_job_progress":
-                    # Send an explicit complete_job message matching the JobCompletedMessage model
-                    complete_job_message = {
-                        "type": "complete_job",
-                        "job_id": parsed_message.get("job_id"),
-                        "status": "completed",
-                        "priority": None,
-                        "position": None,
-                        "result": parsed_message.get("result", {}),
-                        "timestamp": time.time()
-                    }
-                    await websocket.send_text(json.dumps(complete_job_message))
-                    logger.info(f"Sent explicit complete_job message for job {parsed_message.get('job_id')}")
+                # Only process update_job_progress messages with completed status
+                if (isinstance(parsed_message, dict) and 
+                    parsed_message.get("status") == "completed" and 
+                    parsed_message.get("type") == "update_job_progress" and
+                    # Don't send complete_job if the message is already a complete_job or if it's a duplicate progress update
+                    "complete_job" not in message_text):
+                    
+                    # Get the job result from connector_details if available
+                    result = {}
+                    connector_details = parsed_message.get("connector_details", {})
+                    if connector_details and isinstance(connector_details, dict):
+                        # Extract result data from connector_details
+                        if "result" in connector_details:
+                            result = connector_details.get("result", {})
+                        elif "details" in connector_details:
+                            result = connector_details.get("details", {})
+                    
+                    # Get job ID
+                    job_id = parsed_message.get("job_id")
+                    
+                    # Check if we've already sent a complete_job message for this job
+                    # We'll use a simple in-memory cache to track this
+                    if not hasattr(self, "_completed_jobs_cache"):
+                        self._completed_jobs_cache: set[str] = set()
+                        
+                    if job_id not in self._completed_jobs_cache:
+                        # Add to cache to prevent duplicate messages
+                        self._completed_jobs_cache.add(job_id)
+                        
+                        # Send an explicit complete_job message with the result data
+                        complete_job_message = {
+                            "type": "complete_job",
+                            "job_id": job_id,
+                            "status": "completed",
+                            "priority": None,
+                            "position": None,
+                            "result": result,
+                            "timestamp": time.time()
+                        }
+                        await websocket.send_text(json.dumps(complete_job_message))
+                        logger.info(f"[2025-05-20T14:52:52-04:00] Sent complete_job message for job {job_id} with result data")
+                        
+                        # Limit cache size to prevent memory leaks
+                        if len(self._completed_jobs_cache) > 1000:
+                            # Remove oldest entries
+                            self._completed_jobs_cache = set(list(self._completed_jobs_cache)[-500:])
             except Exception as e:
-                logger.error(f"Error sending complete_job message: {str(e)}")
+                logger.error(f"[2025-05-20T14:52:52-04:00] Error sending complete_job message: {str(e)}")
+                logger.exception(e)
                 
             return True
             
