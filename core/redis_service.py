@@ -626,23 +626,44 @@ class RedisService(RedisServiceInterface):
         
         # Add queue position if job is pending
         if job_data.get("status") == "pending":
-            # [2025-05-20T13:41:23-04:00] Fixed position calculation to show relative position
-            # The previous implementation was showing the absolute position (index) in the queue
-            # We want to show how many jobs are ahead of this one (relative position)
+            # [2025-05-20T14:07:04-04:00] Fixed position calculation to only count pending jobs
+            # We need to count only pending jobs that are ahead in the queue, not all jobs
             
             position: int = 0  # Default position if not found or first in queue
             
-            # Get position from priority queue using zrevrank
-            # zrevrank returns the 0-based index of the element in the sorted set
-            rank_result = self.client.zrevrank(PRIORITY_QUEUE, job_id)
+            # Get all jobs in the priority queue with higher scores (ahead of this job)
+            # First, get the score of this job
+            job_score = self.client.zscore(PRIORITY_QUEUE, job_id)
             
-            if rank_result is not None:
-                # The rank is already the number of elements with higher scores
-                # This is exactly what we want - how many jobs are ahead of this one
-                position = int(rank_result)
+            if job_score is not None:
+                # Get all jobs with higher scores (lower priority numbers have higher priority)
+                # We'll use zrangebyscore to get all jobs with scores <= job_score
+                # (Remember: lower score = higher priority)
+                higher_priority_jobs = self.client.zrangebyscore(
+                    PRIORITY_QUEUE,
+                    float('-inf'),  # Start with highest priority (lowest score)
+                    job_score,      # Up to this job's priority
+                )
+                
+                # Count only pending jobs (exclude jobs that are being processed, completed, or failed)
+                pending_jobs_ahead = 0
+                
+                for other_job_id in higher_priority_jobs:
+                    # Skip the current job
+                    if other_job_id == job_id:
+                        continue
+                        
+                    # Get the status of this job
+                    other_job_status = self.client.hget(f"job:{other_job_id.decode('utf-8') if isinstance(other_job_id, bytes) else other_job_id}", "status")
+                    
+                    # Only count jobs that are still pending
+                    if other_job_status and other_job_status.decode('utf-8') if isinstance(other_job_status, bytes) else other_job_status == "pending":
+                        pending_jobs_ahead += 1
+                
+                position = pending_jobs_ahead
                 
                 # Log the position calculation for debugging
-                logger.info(f"[2025-05-20T13:41:23-04:00] Job {job_id} has {position} jobs ahead of it in the queue")
+                logger.info(f"[2025-05-20T14:07:04-04:00] Job {job_id} has {position} pending jobs ahead of it in the queue")
             
             # Add position to job data with explicit type
             job_data["position"] = position
