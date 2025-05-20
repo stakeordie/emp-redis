@@ -32,7 +32,7 @@ class ConnectionManager(ConnectionManagerInterface):
     # Cleanup task interval (in seconds)
     CLEANUP_INTERVAL = 30
     
-    def __init__(self, redis_url: str = None, redis_password: str = None):
+    def __init__(self, redis_url: Optional[str] = None, redis_password: Optional[str] = None):
         """Initialize the connection manager
         
         Args:
@@ -819,11 +819,9 @@ class ConnectionManager(ConnectionManagerInterface):
                                f"  - Original message result: {bool(original_result)}\n" +
                                f"  - Has connector_details: {bool(connector_details)}")
                     
-                    # Check if we've already sent a complete_job message for this job
-                    # We'll use a simple in-memory cache to track this
-                    if not hasattr(self, "_completed_jobs_cache"):
-                        self._completed_jobs_cache: set[str] = set()
-                        
+                    # [2025-05-20T16:02:41-04:00] Using the existing _completed_jobs_cache defined in __init__
+                    # No need to check if it exists or create it again
+                    
                     # [2025-05-20T15:07:31-04:00] Fixed type issue - ensure job_id is a string
                     # job_id is guaranteed to be a string at this point due to our earlier validation
                     if job_id not in self._completed_jobs_cache:
@@ -912,14 +910,27 @@ class ConnectionManager(ConnectionManagerInterface):
                         else:
                             # Fallback to just including the result if full status not available
                             complete_job_message["result"] = result
-                        # [2025-05-20T15:40:20-04:00] Log the result data structure for debugging
+                        # [2025-05-20T16:02:41-04:00] Log the result data structure for debugging with proper type checking
+                        result = complete_job_message.get("result")
+                        
+                        # Initialize with default values
                         result_data_summary = {
-                            "has_result": bool(complete_job_message.get("result")),
-                            "result_keys": list(complete_job_message.get("result", {}).keys()) if isinstance(complete_job_message.get("result"), dict) else [],
-                            "has_output": "output" in complete_job_message.get("result", {}),
-                            "has_images": "images" in complete_job_message.get("result", {}),
-                            "output_type": type(complete_job_message.get("result", {}).get("output")).__name__ if "output" in complete_job_message.get("result", {}) else None
+                            "has_result": bool(result),
+                            "result_keys": [],
+                            "has_output": False,
+                            "has_images": False,
+                            "output_type": None
                         }
+                        
+                        # Only try to access dict methods if result is actually a dict
+                        if isinstance(result, dict):
+                            result_data_summary["result_keys"] = list(result.keys())
+                            result_data_summary["has_output"] = "output" in result
+                            result_data_summary["has_images"] = "images" in result
+                            
+                            # Check for output type
+                            if "output" in result and result["output"] is not None:
+                                result_data_summary["output_type"] = type(result["output"]).__name__
                         logger.info(f"[2025-05-20T15:40:20-04:00] Result data summary for job {job_id}: {result_data_summary}")
                         
                         # Send the message
