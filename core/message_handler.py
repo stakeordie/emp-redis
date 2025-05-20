@@ -610,31 +610,17 @@ class MessageHandler(MessageHandlerInterface):
         message_size = len(json.dumps(complete_job_message)) if result else 0
         logger.info(f"[2025-05-20T17:33:00-04:00] Complete job message size: {message_size} bytes")
         
-        # Forward the complete job message to all subscribed clients
-        # [2025-05-20T17:35:00-04:00] Create a proper BaseMessage object for type safety
+        # [2025-05-20T18:16:00-04:00] Create a proper BaseMessage object for type safety
         complete_job_base_message = self.message_models.create_complete_job_message(
             job_id=job_id,
             worker_id=worker_id,
             result=result
         )
         
-        # [2025-05-20T18:09:00-04:00] Get the client subscribed to this job (single client model)
-        subscribed_client = self.connection_manager.job_subscriptions.get(job_id)
-        logger.info(f"[2025-05-20T18:09:00-04:00] Job {job_id} is subscribed by client: {subscribed_client}")
-        
-        # If no client is subscribed, send to all connected clients as a fallback
-        if not subscribed_client:
-            logger.warning(f"[2025-05-20T18:09:00-04:00] No client subscribed to job {job_id}, sending to all connected clients as fallback")
-            for client_id in self.connection_manager.client_connections.keys():
-                logger.info(f"[2025-05-20T18:09:00-04:00] Sending complete_job message to client {client_id} (fallback)")
-                await self.connection_manager.send_to_client(client_id, complete_job_base_message)
-        else:
-            # Send to the subscribed client
-            if subscribed_client in self.connection_manager.client_connections:
-                await self.connection_manager.send_to_client(subscribed_client, complete_job_base_message)
-                logger.info(f"[2025-05-20T18:09:00-04:00] Sent complete_job message for job {job_id} to subscribed client {subscribed_client}")
-            else:
-                logger.warning(f"[2025-05-20T18:09:00-04:00] Subscribed client {subscribed_client} for job {job_id} is no longer connected")
+        # [2025-05-20T18:16:00-04:00] Use forward_job_progress to send complete_job message
+        # This ensures it's sent to both clients and monitors in the same way as job progress updates
+        logger.info(f"[2025-05-20T18:16:00-04:00] Using forward_job_progress to send complete_job message for job {job_id}")
+        await self.connection_manager.forward_job_progress(complete_job_base_message)
         
         # Update job status in Redis (still needed for API endpoints)
         self.redis_service.complete_job(
