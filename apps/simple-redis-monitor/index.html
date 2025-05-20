@@ -703,7 +703,16 @@
                             }
                           }</textarea>
           </div>
-          <button id="submit-job-btn" class="btn-submit">Submit Job</button>
+          <div class="submit-buttons-container">
+            <button id="submit-job-btn" class="btn-submit">Submit Job</button>
+            <button id="submit-job-rest-btn" class="btn-submit rest-submit">Submit via REST</button>
+          </div>
+          
+          <!-- REST API Response Display -->
+          <div id="rest-response-container" class="rest-response-container" style="display: none;">
+            <h3>REST API Response</h3>
+            <pre id="rest-response" class="rest-response"></pre>
+          </div>
 
           <!-- 2025-04-09 13:41: Added batch submit section for testing race conditions -->
           <div class="batch-submit-section">
@@ -755,6 +764,38 @@
   </div>
 
   <style>
+    /* [2025-05-20T10:41:50-04:00] Added styles for REST API submission */
+    .submit-buttons-container {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+    
+    .rest-submit {
+      background-color: #3498db;
+    }
+    
+    .rest-submit:hover {
+      background-color: #2980b9;
+    }
+    
+    .rest-response-container {
+      margin-top: 15px;
+      padding: 10px;
+      background-color: #f8f9fa;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    
+    .rest-response {
+      margin: 0;
+      white-space: pre-wrap;
+      font-family: monospace;
+      font-size: 12px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    
     /* [2025-04-06 19:05] Added styles for two-column job management layout */
     .job-management-row {
       display: flex;

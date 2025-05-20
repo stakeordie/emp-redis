@@ -20,6 +20,12 @@ const state = {
     clients: {},
     jobs: {},
     
+    // [2025-05-20T10:41:50-04:00] REST API configuration
+    restApi: {
+        url: 'http://localhost:8001/api/jobs',
+        enabled: true
+    },
+    
     // Statistics
     stats: {
         totalWorkers: 0,
@@ -215,24 +221,19 @@ const elements = {
     // [2025-05-19T17:54:00-04:00] Added job payload textarea reference
     jobPayload: document.getElementById('job-payload'),
     authToken: document.getElementById('auth-token'),
-    // Connection info display elements
-    connectionInfo: document.getElementById('connection-info'),
-    monitorIdDisplay: document.getElementById('monitor-id-display'),
-    clientIdDisplay: document.getElementById('client-id-display'),
-    workerIdDisplay: document.getElementById('worker-id-display'),
     connectBtn: document.getElementById('connect-btn'),
     disconnectBtn: document.getElementById('disconnect-btn'),
-    statusIndicator: document.getElementById('status-indicator'),
-    connectionStatusText: document.getElementById('connection-status-text'),
+    clientIdDisplay: document.getElementById('client-id'),
     
-    // [2025-04-06 19:02] Worker simulation controls removed
-    
-    // Job submission
-    jobType: document.getElementById('job-type'),
-    jobPriority: document.getElementById('job-priority'),
-    priorityButtons: document.querySelectorAll('.priority-btn'),
-    jobPayload: document.getElementById('job-payload'),
+    // Job management elements
+    jobTypeSelect: document.getElementById('job-type'),
+    jobPriorityInput: document.getElementById('job-priority'),
+    messageIdInput: document.getElementById('message-id'),
+    jobPayloadTextarea: document.getElementById('job-payload'),
     submitJobBtn: document.getElementById('submit-job-btn'),
+    submitJobRestBtn: document.getElementById('submit-job-rest-btn'),
+    restResponseContainer: document.getElementById('rest-response-container'),
+    restResponse: document.getElementById('rest-response'),
     
     // Stats
     requestStatsBtn: document.getElementById('request-stats-btn'),
@@ -246,7 +247,6 @@ const elements = {
     // [2025-04-06 19:05] Updated worker references for card-based layout
     workersContainer: document.getElementById('workers-container'),
     jobsTableBody: document.getElementById('jobs-table-body'),
-    noWorkersMessage: document.getElementById('no-workers-message'),
     noJobsMessage: document.getElementById('no-jobs-message'),
     jobsTableContainer: document.getElementById('jobs-table-container'),
     // [2025-04-06 19:40] Added finished jobs elements
@@ -295,6 +295,12 @@ function init() {
     elements.submitJobBtn.addEventListener('click', (event) => {
         event.preventDefault();
         submitJob(null);
+    });
+    
+    // [2025-05-20T10:41:50-04:00] Add event listener for REST API submission
+    elements.submitJobRestBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        submitJobViaRest();
     });
     // 2025-04-09 13:41: Added batch submit button event listener
     document.getElementById('batch-submit-btn')?.addEventListener('click', batchSubmitJobs);
@@ -1754,6 +1760,83 @@ function handleErrorMessage(message, source = 'unknown') {
  * @param {string} [customMessageId] - Optional custom message ID to use
  * @returns {Promise<string|null>} - The message ID of the submitted job, or null if submission failed
  */
+/**
+ * [2025-05-20T10:41:50-04:00] Submit a job via REST API
+ */
+async function submitJobViaRest() {
+    try {
+        // Check if REST API is enabled
+        if (!state.restApi.enabled) {
+            showNotification('REST API is not enabled', 'error');
+            return;
+        }
+        
+        // Get job details from form
+        const jobType = elements.jobTypeSelect.value;
+        const priority = parseInt(elements.jobPriorityInput.value, 10);
+        const messageId = elements.messageIdInput.value.trim();
+        
+        // Parse payload JSON
+        let payload;
+        try {
+            payload = JSON.parse(elements.jobPayloadTextarea.value);
+        } catch (error) {
+            showNotification('Invalid JSON payload', 'error');
+            return;
+        }
+        
+        // Prepare request data
+        const requestData = {
+            job_type: jobType,
+            payload: payload,
+            priority: priority
+        };
+        
+        // Add message ID if provided
+        if (messageId) {
+            requestData.job_id = messageId;
+        }
+        
+        // Show loading state
+        elements.submitJobRestBtn.disabled = true;
+        elements.submitJobRestBtn.textContent = 'Submitting...';
+        
+        // Make the REST API request
+        const response = await fetch(state.restApi.url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(requestData)
+        });
+        
+        // Parse response
+        const responseData = await response.json();
+        
+        // Display response
+        elements.restResponseContainer.style.display = 'block';
+        elements.restResponse.textContent = JSON.stringify(responseData, null, 2);
+        
+        // Show notification
+        if (response.ok) {
+            showNotification(`Job submitted via REST API: ${responseData.job_id}`, 'success');
+        } else {
+            showNotification(`REST API Error: ${responseData.detail || 'Unknown error'}`, 'error');
+        }
+    } catch (error) {
+        console.error('Error submitting job via REST:', error);
+        showNotification(`Error: ${error.message}`, 'error');
+        
+        // Display error in response container
+        elements.restResponseContainer.style.display = 'block';
+        elements.restResponse.textContent = `Error: ${error.message}`;
+    } finally {
+        // Reset button state
+        elements.submitJobRestBtn.disabled = false;
+        elements.submitJobRestBtn.textContent = 'Submit via REST';
+    }
+}
+
 async function submitJob(customMessageId = null) {
     // Debug logging
     
