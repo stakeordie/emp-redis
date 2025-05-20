@@ -328,6 +328,7 @@ class RedisService(RedisServiceInterface):
         # Update last_updated_at timestamp to reset timeout clock
         current_time = time.time()
         self.client.hset(job_key, "last_updated_at", current_time)
+        logger.info(f"[redis_service.py update_job_progress()] Updated last_updated_at for job {job_id} to {current_time}")
         
         # Publish progress update event
         self.publish_job_update(job_id, "processing", progress=progress, message=message, worker_id=worker_id)
@@ -1393,6 +1394,11 @@ class RedisService(RedisServiceInterface):
                                       self.client.hget(job_key, "claimed_at") or 0)
                 inactive_time = current_time - last_updated_at
                 claim_timeout = int(self.client.hget(job_key, "claim_timeout") or 30)
+                remaining_time = claim_timeout - inactive_time
+                
+                # Add debug logging for timeout tracking
+                job_id = job_key.replace(f"{JOB_PREFIX}", "")
+                logger.info(f"[redis_service.py check_stale_jobs()] Job {job_id} - last_updated_at: {last_updated_at}, current_time: {current_time}, inactive_time: {inactive_time}s, timeout: {claim_timeout}s, remaining: {remaining_time}s")
                 
                 # Check if job has been inactive for longer than the timeout
                 if inactive_time > claim_timeout:
