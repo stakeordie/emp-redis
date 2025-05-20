@@ -228,6 +228,7 @@ const elements = {
     // Job management elements
     jobTypeSelect: document.getElementById('job-type'),
     jobPriorityInput: document.getElementById('job-priority'),
+    priorityButtons: document.querySelectorAll('.priority-btn'),
     messageIdInput: document.getElementById('message-id'),
     jobPayloadTextarea: document.getElementById('job-payload'),
     submitJobBtn: document.getElementById('submit-job-btn'),
