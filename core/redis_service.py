@@ -1539,9 +1539,9 @@ class RedisService(RedisServiceInterface):
         
     def get_jobs_by_status_type_priority(
         self, 
-        status: str = None, 
-        job_type: str = None, 
-        min_priority: int = None
+        status: Optional[str] = None, 
+        job_type: Optional[str] = None, 
+        min_priority: Optional[int] = None
     ) -> List[Dict[str, Any]]:
         """
         Retrieve jobs filtered by status, type, and minimum priority
