@@ -466,14 +466,18 @@
       border: 1px solid #ddd;
       max-height: 400px;
       overflow-y: auto;
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
     }
     
-    /* [2025-05-20T11:50:11-04:00] Added overflow handling for REST response */
+    /* [2025-05-20T11:52:27-04:00] Enhanced overflow handling for REST response */
     .rest-response {
       font-family: monospace;
       white-space: pre-wrap;
-      word-break: break-word;
+      word-break: break-all;
       overflow-wrap: break-word;
+      width: 100%;
       max-width: 100%;
       max-height: 300px;
       overflow-x: auto;
@@ -483,6 +487,10 @@
       background-color: #f0f0f0;
       border-radius: 3px;
       border: 1px solid #ddd;
+      box-sizing: border-box;
+      /* Force text to wrap and break at any character if needed */
+      text-overflow: ellipsis;
+      display: block;
     }
     
     /* Button styles */
@@ -704,7 +712,7 @@
 
     <div class="card job-submission-column">
       <h2>Submit Job</h2>
-      <div class="job-submission-container">
+      <div class="job-submission-container" style="width: 100%; max-width: 100%; box-sizing: border-box; overflow-x: hidden;">
         <!-- Priority buttons -->
         <div class="priority-buttons">
           <div class="priority-label">Priority:</div>
@@ -862,7 +870,7 @@
           </div>
           
           <!-- [2025-05-20T11:34:47-04:00] Added job status check section -->
-          <div class="job-status-check-container">
+          <div class="job-status-check-container" style="width: 100%; max-width: 100%; box-sizing: border-box; overflow-x: hidden;">
             <h3>Check Job Status</h3>
             <div class="job-status-check-form">
               <input type="text" id="job-status-id" placeholder="Enter job ID" class="job-status-id">
@@ -871,7 +879,7 @@
           </div>
           
           <!-- REST API Response Display -->
-          <div id="rest-response-container" class="rest-response-container" style="display: none;">
+          <div id="rest-response-container" class="rest-response-container" style="display: none; width: 100%; max-width: 100%; box-sizing: border-box;">
             <h3>REST API Response</h3>
             <pre id="rest-response" class="rest-response"></pre>
           </div>
