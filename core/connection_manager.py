@@ -791,13 +791,27 @@ class ConnectionManager(ConnectionManagerInterface):
                             logger.info(f"[REDIS-RETRIEVE] Raw result preview: {preview}")
                             
                             try:
-                                # Result is stored as a JSON string in Redis
-                                if isinstance(raw_result, bytes):
+                                # [2025-05-20T19:13:00-04:00] Handle different result types
+                                # If result is already a dictionary, use it directly
+                                if isinstance(raw_result, dict):
+                                    logger.info(f"[REDIS-RETRIEVE] Result is already a dictionary, no parsing needed")
+                                    result = raw_result
+                                # If result is bytes, decode to string first
+                                elif isinstance(raw_result, bytes):
                                     raw_result = raw_result.decode('utf-8')
                                     logger.info(f"[REDIS-RETRIEVE] Decoded bytes to string, length: {len(raw_result)}")
                                     
-                                logger.info(f"[REDIS-RETRIEVE] About to parse JSON string: {raw_result[:100]}...")
-                                result = json.loads(raw_result)
+                                    # Then parse the string as JSON
+                                    logger.info(f"[REDIS-RETRIEVE] Parsing JSON string: {raw_result[:100] if len(raw_result) > 100 else raw_result}...")
+                                    result = json.loads(raw_result)
+                                # If result is a string, parse it as JSON
+                                elif isinstance(raw_result, str):
+                                    logger.info(f"[REDIS-RETRIEVE] Parsing JSON string: {raw_result[:100] if len(raw_result) > 100 else raw_result}...")
+                                    result = json.loads(raw_result)
+                                # Handle other types
+                                else:
+                                    logger.warning(f"[REDIS-RETRIEVE] Unexpected result type: {type(raw_result).__name__}")
+                                    result = raw_result
                                 
                                 if isinstance(result, dict):
                                     result_keys = list(result.keys())

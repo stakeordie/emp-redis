@@ -619,7 +619,7 @@ class MessageHandler(MessageHandlerInterface):
             result=result  # Pass the full result data from the worker
         )
         
-        # [2025-05-20T19:01:00-04:00] Verify the data was stored correctly by immediately querying Redis
+        # [2025-05-20T19:15:00-04:00] Verify the data was stored correctly by immediately querying Redis
         job_data = self.redis_service.get_job_status(job_id)
         
         # Log the retrieved data for comparison
@@ -635,6 +635,39 @@ class MessageHandler(MessageHandlerInterface):
             # Log a preview of the raw result
             preview = stored_result[:200] + "..." if isinstance(stored_result, (str, bytes)) and len(stored_result) > 200 else stored_result
             logger.info(f"[REDIS-VERIFY] Raw stored result preview: {preview}")
+            
+            # [2025-05-20T19:15:00-04:00] Process the stored result based on its type
+            processed_result = None
+            try:
+                if isinstance(stored_result, dict):
+                    # If it's already a dictionary, use it directly
+                    logger.info(f"[REDIS-VERIFY] Result is already a dictionary, no parsing needed")
+                    processed_result = stored_result
+                elif isinstance(stored_result, bytes):
+                    # If it's bytes, decode to string first
+                    decoded = stored_result.decode('utf-8')
+                    logger.info(f"[REDIS-VERIFY] Decoded bytes to string, length: {len(decoded)}")
+                    # Then parse the string as JSON
+                    processed_result = json.loads(decoded)
+                    logger.info(f"[REDIS-VERIFY] Successfully parsed bytes as JSON")
+                elif isinstance(stored_result, str):
+                    # If it's a string, parse it as JSON
+                    processed_result = json.loads(stored_result)
+                    logger.info(f"[REDIS-VERIFY] Successfully parsed string as JSON")
+                else:
+                    logger.warning(f"[REDIS-VERIFY] Unexpected result type: {type(stored_result).__name__}")
+                    processed_result = stored_result
+                
+                # Log the processed result
+                if isinstance(processed_result, dict):
+                    logger.info(f"[REDIS-VERIFY] Processed result keys: {list(processed_result.keys())}")
+                else:
+                    logger.info(f"[REDIS-VERIFY] Processed result type: {type(processed_result).__name__}")
+            except Exception as e:
+                logger.error(f"[REDIS-VERIFY] Error processing result: {str(e)}")
+                logger.error(f"[REDIS-VERIFY] Failed to process result for job {job_id}")
+                # Continue with the original stored result
+                processed_result = stored_result
         else:
             logger.error(f"[REDIS-VERIFY] Failed to retrieve result from Redis for job {job_id}")
             logger.error(f"[REDIS-VERIFY] Job data: {job_data}")
