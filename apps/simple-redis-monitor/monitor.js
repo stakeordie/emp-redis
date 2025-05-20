@@ -246,6 +246,7 @@ const elements = {
     // Tables and Containers
     // [2025-04-06 19:05] Updated worker references for card-based layout
     workersContainer: document.getElementById('workers-container'),
+    noWorkersMessage: document.getElementById('no-workers-message'),
     jobsTableBody: document.getElementById('jobs-table-body'),
     noJobsMessage: document.getElementById('no-jobs-message'),
     jobsTableContainer: document.getElementById('jobs-table-container'),
