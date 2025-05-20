@@ -1676,6 +1676,14 @@ function handleJobProgress(message, source = 'unknown') {
             // Log before update
             console.log(`[DEBUG] Before update, job status:`, state.jobs[jobId].status);
             
+            // [2025-05-20T11:58:19-04:00] Ignore progress updates for completed jobs
+            // This prevents the A1111 connector's final 10% progress update from reverting completed jobs
+            if (state.jobs[jobId].status === 'completed' || state.jobs[jobId].status === 'failed') {
+                console.log(`[2025-05-20T11:58:19-04:00] Ignoring progress update for ${state.jobs[jobId].status} job ${jobId}`);
+                addLogEntry(`Ignored progress update for ${state.jobs[jobId].status} job ${jobId}`, 'info');
+                return;
+            }
+            
             // [2025-04-06 20:40] Always apply monitor updates since we're only using monitor connection
             console.log(`[DEBUG] Applying monitor update to job ${jobId}`);
             state.jobs[jobId].progress = progress;
