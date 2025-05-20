@@ -1,22 +1,13 @@
 #!/usr/bin/env python3
 # Core WebSocket connection manager for the queue system
-# [2025-05-20T17:12:30-04:00] Fixed imports to use project's custom logger instead of loguru
-import os
-import time
 import json
 import asyncio
-from typing import Dict, List, Set, Any, Optional, Union, Callable, Awaitable, Tuple
+import time
+import os
+from typing import Dict, Set, List, Any, Optional, Callable
 from fastapi import WebSocket, FastAPI, Query
 from fastapi.websockets import WebSocketDisconnect
 from websockets.exceptions import ConnectionClosedError
-from pydantic import BaseModel
-
-# [2025-05-20T17:15:30-04:00] Removed external requests dependency
-
-# Use the project's custom logger instead of importing directly from loguru
-from .utils.logger import logger
-
-from .redis_service import RedisService
 from .core_types.base_messages import MessageType
 from .message_models import (
     BaseMessage, 
@@ -41,13 +32,8 @@ class ConnectionManager(ConnectionManagerInterface):
     # Cleanup task interval (in seconds)
     CLEANUP_INTERVAL = 30
     
-    def __init__(self, redis_url: Optional[str] = None, redis_password: Optional[str] = None):
-        """Initialize the connection manager
-        
-        Args:
-            redis_url: Redis URL to connect to
-            redis_password: Redis password for authentication
-        """
+    def __init__(self):
+        """Initialize connection manager"""
         # Maps client IDs to their WebSocket connections
         self.client_connections: Dict[str, WebSocket] = {}
         
@@ -65,9 +51,6 @@ class ConnectionManager(ConnectionManagerInterface):
         
         # Set of worker IDs subscribed to job notifications
         self.job_notification_subscriptions: Set[str] = set()
-        
-        # [2025-05-20T15:07:31-04:00] Cache to track completed jobs to prevent duplicate messages
-        self._completed_jobs_cache: set[str] = set()
         
         # Get authentication token from environment variable
         self.auth_token = os.environ.get("WEBSOCKET_AUTH_TOKEN", "")
@@ -634,12 +617,11 @@ class ConnectionManager(ConnectionManagerInterface):
             if client_id in self.stats_subscriptions:
                 self.stats_subscriptions.remove(client_id)
                 
-            # [2025-05-20T18:08:00-04:00] Clean up job subscriptions with single client ID per job
+            # Clean up job subscriptions
             jobs_to_remove = []
             for job_id, subscriber_id in self.job_subscriptions.items():
                 if subscriber_id == client_id:
                     jobs_to_remove.append(job_id)
-                    logger.info(f"[2025-05-20T18:08:00-04:00] Removed client {client_id} from job {job_id} subscription")
             
             for job_id in jobs_to_remove:
                 del self.job_subscriptions[job_id]
@@ -726,27 +708,17 @@ class ConnectionManager(ConnectionManagerInterface):
         if not is_connected:
             return False
         
-        # [2025-05-20T18:07:00-04:00] Reverted to store a single client ID per job
         # Record previous subscription if exists
         prev_client = self.job_subscriptions.get(job_id)
         
         # Update subscription mapping
         self.job_subscriptions[job_id] = client_id
-        logger.info(f"[2025-05-20T18:07:00-04:00] Client {client_id} subscribed to job {job_id}")
-        
         return True
     
     def subscribe_to_stats(self, client_id: str) -> None:
         """Subscribe a client to system stats updates"""
         self.stats_subscriptions.add(client_id)
         
-    def unsubscribe_from_job(self, client_id: str, job_id: str) -> None:
-        """Unsubscribe a client from job updates"""
-        # [2025-05-20T18:07:00-04:00] Updated to handle single client ID per job
-        if job_id in self.job_subscriptions and self.job_subscriptions[job_id] == client_id:
-            del self.job_subscriptions[job_id]
-            logger.info(f"[2025-05-20T18:07:00-04:00] Client {client_id} unsubscribed from job {job_id}")
-    
     def unsubscribe_from_stats(self, client_id: str) -> None:
         """Unsubscribe a client from system stats updates"""
         if client_id in self.stats_subscriptions:
@@ -777,26 +749,43 @@ class ConnectionManager(ConnectionManagerInterface):
             await websocket.send_text(message_text)
             logger.debug(f"[connection_manager.py send_to_client()] Sent message of type {type(message).__name__} to client {client_id}: {message_text}")
             
-            # [2025-05-20T17:37:00-04:00] Disable automatic complete_job message generation
-            # We now send complete_job messages directly from handle_complete_job in message_handler.py
-            # This prevents duplicate messages and ensures we use the worker's data directly
+            # Check for completed status and send additional complete_job message if needed
             try:
                 parsed_message = json.loads(message_text) if isinstance(message_text, str) else message_text
                 
-                # Log the message for debugging purposes only
-                if (isinstance(parsed_message, dict) and 
-                    parsed_message.get("status") == "completed" and 
-                    parsed_message.get("type") == "update_job_progress"):
+                if isinstance(parsed_message, dict) and parsed_message.get("status") == "completed" and parsed_message.get("type") == "update_job_progress":
+                    # [2025-05-20T18:24:00-04:00] Get the job ID from the message
+                    job_id = parsed_message.get("job_id")
                     
-                    # Just log that we received a completion message but won't send a duplicate complete_job
-                    logger.info(f"[2025-05-20T17:37:00-04:00] Received job completion update for job {parsed_message.get('job_id')}, but not sending duplicate complete_job message")
+                    # [2025-05-20T18:24:00-04:00] Get the full result data from Redis
+                    from core.redis_service import RedisService
+                    redis_service = RedisService()
+                    job_data = redis_service.get_job_status(job_id)
                     
-                    # Skip the rest of the complete_job generation code
-                    return True
-                
+                    # Extract the result data from job_data
+                    result = {}
+                    if job_data and "result" in job_data:
+                        try:
+                            # Result is stored as a JSON string in Redis
+                            result = json.loads(job_data["result"])
+                            logger.info(f"[2025-05-20T18:24:00-04:00] Retrieved full result data from Redis for job {job_id}")
+                        except Exception as e:
+                            logger.error(f"[2025-05-20T18:24:00-04:00] Error parsing result data for job {job_id}: {str(e)}")
+                    
+                    # Send an explicit complete_job message with the full result data
+                    complete_job_message = {
+                        "type": "complete_job",
+                        "job_id": job_id,
+                        "status": "completed",
+                        "priority": None,
+                        "position": None,
+                        "result": result,  # Use the full result data from Redis
+                        "timestamp": time.time()
+                    }
+                    await websocket.send_text(json.dumps(complete_job_message))
+                    logger.info(f"[2025-05-20T18:24:00-04:00] Sent complete_job message for job {job_id} with full result data")
             except Exception as e:
-                logger.error(f"[2025-05-20T15:07:31-04:00] Error sending complete_job message: {str(e)}")
-                logger.exception(e)
+                logger.error(f"Error sending complete_job message: {str(e)}")
                 
             return True
             

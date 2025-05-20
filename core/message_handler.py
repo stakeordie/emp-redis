@@ -557,7 +557,7 @@ class MessageHandler(MessageHandlerInterface):
             worker_id: Worker identifier
             message: Complete job message
         """
-        # [2025-05-20T17:33:00-04:00] Log the message contents to help with debugging
+        # [2025-05-20T18:23:00-04:00] Log the message contents to help with debugging
         job_id = message.job_id
         result = message.result
         
@@ -565,7 +565,7 @@ class MessageHandler(MessageHandlerInterface):
         if result:
             if isinstance(result, dict):
                 result_keys = list(result.keys())
-                logger.info(f"[2025-05-20T17:33:00-04:00] Result data received directly from worker for job {job_id}, keys: {result_keys}")
+                logger.info(f"[2025-05-20T18:23:00-04:00] Result data received directly from worker for job {job_id}, keys: {result_keys}")
                 
                 # Check for base64 image data
                 base64_found = False
@@ -573,11 +573,11 @@ class MessageHandler(MessageHandlerInterface):
                 # Look for images in different possible locations
                 if "images" in result:
                     image_count = len(result["images"]) if isinstance(result["images"], list) else "not a list"
-                    logger.info(f"[2025-05-20T17:33:00-04:00] Found {image_count} images in result.images")
+                    logger.info(f"[2025-05-20T18:23:00-04:00] Found {image_count} images in result.images")
                     base64_found = True
                 elif "output" in result and isinstance(result["output"], dict) and "images" in result["output"]:
                     image_count = len(result["output"]["images"]) if isinstance(result["output"]["images"], list) else "not a list"
-                    logger.info(f"[2025-05-20T17:33:00-04:00] Found {image_count} images in result.output.images")
+                    logger.info(f"[2025-05-20T18:23:00-04:00] Found {image_count} images in result.output.images")
                     base64_found = True
                 
                 # Look for base64 data directly
@@ -585,47 +585,22 @@ class MessageHandler(MessageHandlerInterface):
                     for key, value in result.items():
                         if isinstance(value, str) and len(value) > 100 and ",base64," in value:
                             base64_found = True
-                            logger.info(f"[2025-05-20T17:33:00-04:00] Found base64 image data in result.{key}")
+                            logger.info(f"[2025-05-20T18:23:00-04:00] Found base64 image data in result.{key}")
                             break
                 
                 if not base64_found:
-                    logger.warning(f"[2025-05-20T17:33:00-04:00] No base64 image data found in result for job {job_id}")
+                    logger.warning(f"[2025-05-20T18:23:00-04:00] No base64 image data found in result for job {job_id}")
             else:
-                logger.warning(f"[2025-05-20T17:33:00-04:00] Result is not a dictionary for job {job_id}, type: {type(result).__name__}")
+                logger.warning(f"[2025-05-20T18:23:00-04:00] Result is not a dictionary for job {job_id}, type: {type(result).__name__}")
         else:
-            logger.warning(f"[2025-05-20T17:33:00-04:00] No result data received from worker for job {job_id}")
+            logger.warning(f"[2025-05-20T18:23:00-04:00] No result data received from worker for job {job_id}")
         
-        # Create a complete job message to send to clients
-        complete_job_message = {
-            "type": "complete_job",
-            "job_id": job_id,
-            "status": "completed",
-            "timestamp": time.time(),
-            "worker_id": worker_id,
-            "result": result  # Include the result data directly from the worker
-        }
-        
-        # Send the complete job message to all clients subscribed to this job
-        logger.info(f"[2025-05-20T17:33:00-04:00] Sending complete_job message with direct worker data for job {job_id}")
-        message_size = len(json.dumps(complete_job_message)) if result else 0
-        logger.info(f"[2025-05-20T17:33:00-04:00] Complete job message size: {message_size} bytes")
-        
-        # [2025-05-20T18:16:00-04:00] Create a proper BaseMessage object for type safety
-        complete_job_base_message = self.message_models.create_complete_job_message(
-            job_id=job_id,
-            worker_id=worker_id,
-            result=result
-        )
-        
-        # [2025-05-20T18:16:00-04:00] Use forward_job_progress to send complete_job message
-        # This ensures it's sent to both clients and monitors in the same way as job progress updates
-        logger.info(f"[2025-05-20T18:16:00-04:00] Using forward_job_progress to send complete_job message for job {job_id}")
-        await self.connection_manager.forward_job_progress(complete_job_base_message)
-        
-        # Update job status in Redis (still needed for API endpoints)
+        # [2025-05-20T18:23:00-04:00] Update job status in Redis with the full result data
+        # This ensures the result is available when the complete_job message is generated
+        logger.info(f"[2025-05-20T18:23:00-04:00] Storing full result data in Redis for job {job_id}")
         self.redis_service.complete_job(
             job_id=job_id,
-            result=result
+            result=result  # Pass the full result data from the worker
         )
 
         # Update worker status to idle and clear job assignment
