@@ -5,6 +5,11 @@ All notable changes to the EMP Redis project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- [2025-05-20T17:13:30-04:00] Fixed logger import in connection_manager.py:
+  - Changed direct loguru import to use project's custom logger from utils.logger
+  - Resolved deployment error caused by missing loguru dependency
+  - Ensured consistent logger usage across the codebase
+
 - [2025-05-20T17:10:00-04:00] Enhanced job data retrieval with retry mechanism:
   - Added retry logic with increasing delays (1s, 2s, 3s) to ensure job data is fully saved to Redis
   - Implemented detailed logging to track job result data retrieval and processing
