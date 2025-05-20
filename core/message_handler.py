@@ -619,41 +619,22 @@ class MessageHandler(MessageHandlerInterface):
             result=result  # Pass the full result data from the worker
         )
         
-        # [2025-05-20T18:46:00-04:00] Verify the data was stored correctly by immediately querying Redis
+        # [2025-05-20T19:01:00-04:00] Verify the data was stored correctly by immediately querying Redis
         job_data = self.redis_service.get_job_status(job_id)
         
         # Log the retrieved data for comparison
         if job_data and "result" in job_data:
-            try:
-                # Result is stored as a JSON string in Redis
-                stored_result = json.loads(job_data["result"])
-                stored_keys = list(stored_result.keys()) if isinstance(stored_result, dict) else "not a dict"
-                stored_size = len(job_data["result"]) if isinstance(job_data["result"], str) else 0
-                logger.info(f"[REDIS-VERIFY] STORED result for job {job_id}, keys: {stored_keys}, size: {stored_size} bytes")
-                
-                # Log the first few values to help with debugging
-                if isinstance(stored_result, dict):
-                    for key, value in list(stored_result.items())[:3]:  # Show up to 3 key-value pairs
-                        value_preview = str(value)[:100] + "..." if isinstance(value, str) and len(value) > 100 else value
-                        logger.info(f"[REDIS-VERIFY] STORED result key: {key}, value: {value_preview}")
-                
-                # Check if the keys match
-                if isinstance(result, dict) and isinstance(stored_result, dict):
-                    original_keys = set(result.keys())
-                    stored_keys_set = set(stored_result.keys())
-                    if original_keys == stored_keys_set:
-                        logger.info(f"[REDIS-VERIFY] Keys match for job {job_id}: {original_keys}")
-                    else:
-                        missing_keys = original_keys - stored_keys_set
-                        extra_keys = stored_keys_set - original_keys
-                        logger.warning(f"[REDIS-VERIFY] Keys mismatch for job {job_id}")
-                        if missing_keys:
-                            logger.warning(f"[REDIS-VERIFY] Missing keys: {missing_keys}")
-                        if extra_keys:
-                            logger.warning(f"[REDIS-VERIFY] Extra keys: {extra_keys}")
-            except Exception as e:
-                logger.error(f"[REDIS-VERIFY] Error parsing stored result for job {job_id}: {str(e)}")
-                logger.error(f"[REDIS-VERIFY] Raw stored result: {job_data.get('result', 'None')[:200]}...")
+            # Log the raw result data without trying to parse it
+            stored_result = job_data["result"]
+            logger.info(f"[REDIS-VERIFY] Raw stored result type: {type(stored_result).__name__}")
+            
+            # Log the size of the stored result
+            stored_size = len(stored_result) if isinstance(stored_result, (str, bytes)) else "unknown"
+            logger.info(f"[REDIS-VERIFY] Raw stored result size: {stored_size} bytes")
+            
+            # Log a preview of the raw result
+            preview = stored_result[:200] + "..." if isinstance(stored_result, (str, bytes)) and len(stored_result) > 200 else stored_result
+            logger.info(f"[REDIS-VERIFY] Raw stored result preview: {preview}")
         else:
             logger.error(f"[REDIS-VERIFY] Failed to retrieve result from Redis for job {job_id}")
             logger.error(f"[REDIS-VERIFY] Job data: {job_data}")
