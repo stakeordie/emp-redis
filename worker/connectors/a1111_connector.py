@@ -160,9 +160,69 @@ class A1111Connector(RESTSyncConnector):
                 **request_payload
             }
             
+            # [2025-05-19T21:30:00-04:00] Implement progress polling for A1111 jobs
+            # This allows us to show progress during long-running image generation and prevent timeouts
+            progress_polling_task = None
+            
+            # [2025-05-19T21:37:00-04:00] Define the progress polling function
+            # Only send updates when progress actually changes
+            async def poll_progress():
+                progress_url = f"{self.base_url}{self.api_prefix}/progress"
+                last_progress = 0
+                last_eta = 0
+                last_update_time = time.time()
+                
+                try:
+                    while True:
+                        # Poll the progress endpoint every 5 seconds
+                        try:
+                            async with self.session.get(progress_url, headers=self._get_headers()) as progress_response:
+                                if progress_response.status == 200:
+                                    progress_data = await progress_response.json()
+                                    progress = progress_data.get('progress', 0)
+                                    # Convert from 0-1 to 0-100 scale
+                                    progress_percent = int(progress * 100)
+                                    eta = progress_data.get('eta_relative', 0)
+                                    
+                                    # Only send update if progress has changed significantly
+                                    # or if ETA has changed significantly
+                                    progress_changed = abs(progress_percent - last_progress) >= 5
+                                    eta_changed = abs(eta - last_eta) >= 5.0
+                                    
+                                    if progress_changed or eta_changed:
+                                        last_progress = progress_percent
+                                        last_eta = eta
+                                        last_update_time = time.time()
+                                        
+                                        # Scale to 10-90 range to leave room for start/end updates
+                                        scaled_progress = 10 + int(progress_percent * 0.8)
+                                        
+                                        await send_progress_update(
+                                            job_id, 
+                                            scaled_progress, 
+                                            "processing", 
+                                            f"Generating image: {progress_percent}% complete, ETA: {eta:.1f}s"
+                                        )
+                                    
+                                    # If generation is complete, stop polling
+                                    if progress_data.get('completed', False):
+                                        break
+                        except Exception as e:
+                            logger.warning(f"[a1111_connector.py poll_progress] Error polling progress: {str(e)}")
+                            # We don't send an update here - if there's a real problem, the main request will time out
+                            # which is the correct behavior
+                        
+                        # Wait before polling again (1 second)
+                        await asyncio.sleep(1.0)
+                except Exception as e:
+                    logger.warning(f"[a1111_connector.py poll_progress] Error in progress polling: {str(e)}")
+            
             # Use asyncio.wait_for to implement a more reliable timeout
             # Updated: 2025-04-17T14:11:00-04:00 - Added asyncio.wait_for for better timeout handling
             try:
+                # Start the progress polling task before sending the main request
+                progress_polling_task = asyncio.create_task(poll_progress())
+                
                 # Send request to A1111 API with the appropriate HTTP method
                 start_time = time.time()
                 
@@ -178,8 +238,8 @@ class A1111Connector(RESTSyncConnector):
                     timeout=self.timeout  # Keep this for backward compatibility
                 )
                 
-                # Execute the request with a timeout
-                async with await asyncio.wait_for(request_coroutine, timeout=self.connection_timeout) as response:
+                # Execute the request with a timeout - we use a longer timeout now since we have polling
+                async with await asyncio.wait_for(request_coroutine, timeout=300.0) as response:
                     elapsed_time = time.time() - start_time
                     
                     # Send progress update
