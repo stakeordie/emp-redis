@@ -93,27 +93,48 @@ class JobStatusResponse(BaseModel):
     claimed_at: Optional[str] = None
     completed_at: Optional[str] = None
     position: Optional[int] = None
+    display_position: Optional[int] = None  # [2025-05-20T15:50:55-04:00] Added for UI display
     progress: Optional[float] = None
     result: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
     position_description: Optional[str] = None
     
+    @validator('display_position', always=True)
+    def set_display_position(cls, v, values):
+        # [2025-05-20T15:50:55-04:00] Ensure position is 1-based for display purposes
+        # This doesn't change the core position logic, just the presentation
+        if v is not None:
+            return v
+            
+        position = values.get('position')
+        if position is not None:
+            # Convert 0-based position to 1-based for display
+            return position + 1
+        return None
+    
     @validator('position_description', always=True)
     def set_position_description(cls, v, values):
-        # [2025-05-20T15:42:03-04:00] Fixed position description to account for 0-based indexing
+        # [2025-05-20T15:50:55-04:00] Updated to use display_position (1-based) for descriptions
         if v is not None:
             return v
         
-        position = values.get('position')
-        if position is not None and values.get('status') == 'pending':
-            # [2025-05-20T15:46:45-04:00] Updated for 1-based position values
-            # Position is now 1-based (minimum 1), so adjust descriptions accordingly
-            if position == 1:
+        # Use display_position (1-based) instead of position (0-based)
+        display_position = values.get('display_position')
+        
+        # If display_position is not set yet, calculate it from position
+        if display_position is None:
+            position = values.get('position')
+            if position is not None:
+                display_position = position + 1
+        
+        if display_position is not None and values.get('status') == 'pending':
+            # Use display_position for descriptions
+            if display_position == 1:
                 return "Next in queue"
-            elif position == 2:
+            elif display_position == 2:
                 return "1 job ahead in queue"
             else:
-                return f"{position-1} jobs ahead in queue"
+                return f"{display_position-1} jobs ahead in queue"
         return None
 
 @app.get("/")
