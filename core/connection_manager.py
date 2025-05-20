@@ -840,45 +840,49 @@ class ConnectionManager(ConnectionManagerInterface):
                             "timestamp": time.time()
                         }
                         
-                        # [2025-05-20T16:40:08-04:00] Include the full job result data from Redis
-                        # We need to get the actual job status from Redis to include the base64 image data
+                        # [2025-05-20T16:48:40-04:00] Get the full job result data from Redis API endpoint
                         try:
-                            # [2025-05-20T16:43:13-04:00] Import Redis client directly without reimporting json
-                            import redis
+                            # Use the Redis API endpoint to get the complete job data
+                            import requests
                             
-                            # Get Redis connection details from environment
-                            redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
-                            redis_client = redis.from_url(redis_url)
+                            # Construct the API URL to get the job data
+                            api_url = os.environ.get("REDIS_API_URL", "https://redisserver-production.up.railway.app")
+                            job_url = f"{api_url}/api/jobs/{job_id}"
                             
-                            # Get the job data directly from Redis
-                            job_key = f"job:{job_id}"
-                            job_data = redis_client.get(job_key)
+                            # Make the API request
+                            response = requests.get(job_url)
                             
-                            if job_data:
+                            if response.status_code == 200:
                                 # Parse the job data
-                                job_status = json.loads(job_data)
-                                logger.info(f"[2025-05-20T16:40:08-04:00] Successfully retrieved job data from Redis for job {job_id}")
+                                job_status = response.json()
+                                logger.info(f"[2025-05-20T16:48:40-04:00] Successfully retrieved job data from API for job {job_id}")
                                 
                                 # Include the full job status in the message
                                 for key, value in job_status.items():
-                                    if key not in complete_job_message:
-                                        complete_job_message[key] = value
+                                    complete_job_message[key] = value
                                 
                                 # Ensure the result field is included
                                 if "result" in job_status and job_status["result"]:
                                     complete_job_message["result"] = job_status["result"]
-                                    logger.info(f"[2025-05-20T16:40:08-04:00] Included result data from Redis for job {job_id}")
+                                    logger.info(f"[2025-05-20T16:48:40-04:00] Included result data with base64 image from API for job {job_id}")
                             else:
-                                logger.warning(f"[2025-05-20T16:40:08-04:00] No job data found in Redis for job {job_id}")
+                                logger.warning(f"[2025-05-20T16:48:40-04:00] Failed to get job data from API for job {job_id}: {response.status_code}")
+                                
+                                # Fallback to connector_details if API request fails
+                                if parsed_message and isinstance(parsed_message, dict) and "connector_details" in parsed_message:
+                                    connector_details = parsed_message.get("connector_details", {})
+                                    if connector_details:
+                                        logger.info(f"[2025-05-20T16:48:40-04:00] Using connector_details as fallback for job {job_id}")
+                                        complete_job_message["connector_details"] = connector_details
                         except Exception as e:
-                            logger.error(f"[2025-05-20T16:40:08-04:00] Error retrieving job data from Redis: {str(e)}")
+                            logger.error(f"[2025-05-20T16:48:40-04:00] Error retrieving job data from API: {str(e)}")
                             logger.exception(e)
                             
-                            # Fallback to connector_details if Redis access fails
+                            # Fallback to connector_details if API request fails
                             if parsed_message and isinstance(parsed_message, dict) and "connector_details" in parsed_message:
                                 connector_details = parsed_message.get("connector_details", {})
                                 if connector_details:
-                                    logger.info(f"[2025-05-20T16:40:08-04:00] Using connector_details as fallback for job {job_id}")
+                                    logger.info(f"[2025-05-20T16:48:40-04:00] Using connector_details as fallback for job {job_id}")
                                     complete_job_message["connector_details"] = connector_details
                         
                         # [2025-05-20T15:35:46-04:00] Ensure we include all necessary output data in the WebSocket message
