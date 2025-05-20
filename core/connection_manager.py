@@ -32,8 +32,13 @@ class ConnectionManager(ConnectionManagerInterface):
     # Cleanup task interval (in seconds)
     CLEANUP_INTERVAL = 30
     
-    def __init__(self):
-        """Initialize connection manager"""
+    def __init__(self, redis_url: str = None, redis_password: str = None):
+        """Initialize the connection manager
+        
+        Args:
+            redis_url: Redis URL to connect to
+            redis_password: Redis password for authentication
+        """
         # Maps client IDs to their WebSocket connections
         self.client_connections: Dict[str, WebSocket] = {}
         
@@ -51,6 +56,9 @@ class ConnectionManager(ConnectionManagerInterface):
         
         # Set of worker IDs subscribed to job notifications
         self.job_notification_subscriptions: Set[str] = set()
+        
+        # [2025-05-20T15:07:31-04:00] Cache to track completed jobs to prevent duplicate messages
+        self._completed_jobs_cache: set[str] = set()
         
         # Get authentication token from environment variable
         self.auth_token = os.environ.get("WEBSOCKET_AUTH_TOKEN", "")
@@ -761,47 +769,82 @@ class ConnectionManager(ConnectionManagerInterface):
                     # Don't send complete_job if the message is already a complete_job or if it's a duplicate progress update
                     "complete_job" not in message_text):
                     
-                    # Get the job result from connector_details if available
-                    result = {}
-                    connector_details = parsed_message.get("connector_details", {})
-                    if connector_details and isinstance(connector_details, dict):
-                        # Extract result data from connector_details
-                        if "result" in connector_details:
-                            result = connector_details.get("result", {})
-                        elif "details" in connector_details:
-                            result = connector_details.get("details", {})
-                    
                     # Get job ID
                     job_id = parsed_message.get("job_id")
+                    # [2025-05-20T15:07:31-04:00] Ensure job_id is a string to fix type issues
+                    if job_id is None:
+                        logger.error(f"[2025-05-20T15:07:31-04:00] Missing job_id in message")
+                        job_id = ""
+                    elif not isinstance(job_id, str):
+                        logger.error(f"[2025-05-20T15:07:31-04:00] Invalid job_id type in message: {type(job_id)}")
+                        job_id = str(job_id)
+                    
+                    # [2025-05-20T15:07:31-04:00] Get the full job status from Redis service
+                    # This ensures we include all job details including images, parameters, etc.
+                    try:
+                        # Import these at the top level in the future to avoid import-in-function lint errors
+                        from core.service_registry import get_service
+                        from core.redis_service import RedisService
+                        
+                        # Get Redis service from the global service registry
+                        redis_service = get_service(RedisService)
+                        if redis_service:
+                            # Get the complete job status with all details
+                            full_job_status = redis_service.get_job_status(job_id)
+                            logger.info(f"[2025-05-20T15:07:31-04:00] Retrieved full job status for job {job_id}")
+                        else:
+                            logger.error(f"[2025-05-20T15:07:31-04:00] Redis service not available for job {job_id}")
+                            full_job_status = {}
+                    except Exception as e:
+                        logger.error(f"[2025-05-20T15:07:31-04:00] Error getting full job status for job {job_id}: {str(e)}")
+                        logger.exception(e)
+                        full_job_status = {}
+                        
+                    # Extract result from full job status if available
+                    result = full_job_status.get("result", {})
                     
                     # Check if we've already sent a complete_job message for this job
                     # We'll use a simple in-memory cache to track this
                     if not hasattr(self, "_completed_jobs_cache"):
                         self._completed_jobs_cache: set[str] = set()
                         
+                    # [2025-05-20T15:07:31-04:00] Fixed type issue - ensure job_id is a string
+                    # job_id is guaranteed to be a string at this point due to our earlier validation
                     if job_id not in self._completed_jobs_cache:
                         # Add to cache to prevent duplicate messages
                         self._completed_jobs_cache.add(job_id)
                         
-                        # Send an explicit complete_job message with the result data
+                        # [2025-05-20T15:07:31-04:00] Send an explicit complete_job message with the full job status
+                        # This includes all job details including images, parameters, etc.
                         complete_job_message = {
                             "type": "complete_job",
                             "job_id": job_id,
                             "status": "completed",
                             "priority": None,
                             "position": None,
-                            "result": result,
                             "timestamp": time.time()
                         }
+                        
+                        # Include all fields from the full job status
+                        if full_job_status:
+                            # Add all fields from full_job_status except those already in the message
+                            for key, value in full_job_status.items():
+                                if key not in complete_job_message:
+                                    complete_job_message[key] = value
+                        else:
+                            # Fallback to just including the result if full status not available
+                            complete_job_message["result"] = result
                         await websocket.send_text(json.dumps(complete_job_message))
-                        logger.info(f"[2025-05-20T14:52:52-04:00] Sent complete_job message for job {job_id} with result data")
+                        logger.info(f"[2025-05-20T15:07:31-04:00] Sent complete_job message for job {job_id} with full job status")
                         
                         # Limit cache size to prevent memory leaks
                         if len(self._completed_jobs_cache) > 1000:
-                            # Remove oldest entries
-                            self._completed_jobs_cache = set(list(self._completed_jobs_cache)[-500:])
+                            # Remove oldest entries (convert to list, slice, and back to set)
+                            # [2025-05-20T15:07:31-04:00] Fixed type issue with _completed_jobs_cache
+                            cache_list: list[str] = list(self._completed_jobs_cache)
+                            self._completed_jobs_cache = set(cache_list[-500:])
             except Exception as e:
-                logger.error(f"[2025-05-20T14:52:52-04:00] Error sending complete_job message: {str(e)}")
+                logger.error(f"[2025-05-20T15:07:31-04:00] Error sending complete_job message: {str(e)}")
                 logger.exception(e)
                 
             return True
