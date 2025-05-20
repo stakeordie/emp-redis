@@ -27,12 +27,19 @@ from core.utils.logger import logger
 
 logger.info("IT WORKS")
 
+# Global reference to message broker for access from endpoints
+global_message_broker = None
+
 # FastAPI startup and shutdown event handling
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global global_message_broker
     
     # Create MessageBroker instance with all required components
     message_broker = MessageBroker()
+    
+    # Store global reference
+    global_message_broker = message_broker
     
     # Initialize WebSocket connections
     message_broker.init_connections(app)
@@ -135,6 +142,19 @@ async def submit_job(job_data: JobSubmitRequest = Body(...)):
         
         # Log job submission
         logger.info(f"[2025-05-20T11:34:47-04:00] REST API job submitted: {job_id}, type: {job_data.job_type}, wait: {job_data.wait}")
+        
+        # [2025-05-20T13:22:38-04:00] Trigger immediate job broadcast to match WebSocket behavior
+        # This ensures REST API jobs are claimed as quickly as WebSocket jobs
+        try:
+            # Directly mimic the WebSocket approach by calling broadcast_pending_jobs_to_idle_workers
+            if global_message_broker and global_message_broker.message_handler:
+                # Create a background task to broadcast pending jobs
+                asyncio.create_task(global_message_broker.message_handler.broadcast_pending_jobs_to_idle_workers())
+                logger.info(f"[2025-05-20T13:22:38-04:00] Triggered immediate job broadcast for REST API job {job_id}")
+            else:
+                logger.warning(f"[2025-05-20T13:22:38-04:00] Could not trigger job broadcast - message broker not initialized")
+        except Exception as e:
+            logger.error(f"[2025-05-20T13:22:38-04:00] Error triggering job broadcast for REST API job {job_id}: {str(e)}")
         
         # If wait=False, return immediately with job ID
         if not job_data.wait:
