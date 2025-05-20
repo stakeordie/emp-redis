@@ -800,8 +800,24 @@ class ConnectionManager(ConnectionManagerInterface):
                         logger.exception(e)
                         full_job_status = {}
                         
-                    # Extract result from full job status if available
+                    # [2025-05-20T15:40:20-04:00] Extract result from both full job status and original message
+                    # This ensures we don't miss any result data
                     result = full_job_status.get("result", {})
+                    
+                    # Also extract result directly from the original message as a fallback
+                    original_result = parsed_message.get("result", {})
+                    if not result and original_result:
+                        result = original_result
+                        logger.info(f"[2025-05-20T15:40:20-04:00] Using result from original message for job {job_id}")
+                    
+                    # Extract connector_details for later use
+                    connector_details = parsed_message.get("connector_details", {})
+                    
+                    # Log the data sources for debugging
+                    logger.info(f"[2025-05-20T15:40:20-04:00] Result data sources for job {job_id}:\n" +
+                               f"  - Full job status result: {bool(full_job_status.get('result'))}\n" +
+                               f"  - Original message result: {bool(original_result)}\n" +
+                               f"  - Has connector_details: {bool(connector_details)}")
                     
                     # Check if we've already sent a complete_job message for this job
                     # We'll use a simple in-memory cache to track this
@@ -832,24 +848,71 @@ class ConnectionManager(ConnectionManagerInterface):
                                 if key not in complete_job_message:
                                     complete_job_message[key] = value
                             
-                            # Ensure the result field is included and has the output data
+                            # [2025-05-20T15:40:20-04:00] Enhanced result data extraction
+                            # Start with the result from full_job_status
                             result_data = full_job_status.get("result", {})
-                            if isinstance(result_data, dict) and "output" not in result_data and "images" not in result_data:
-                                # Try to extract output from connector_details if available
-                                connector_details = parsed_message.get("connector_details", {})
-                                if connector_details and isinstance(connector_details, dict):
-                                    if "result" in connector_details and "output" in connector_details["result"]:
-                                        result_data["output"] = connector_details["result"]["output"]
-                                    elif "details" in connector_details and "output" in connector_details["details"]:
-                                        result_data["output"] = connector_details["details"]["output"]
+                            
+                            # If result_data is empty or missing output/images, try to get it from other sources
+                            if not result_data or (isinstance(result_data, dict) and "output" not in result_data and "images" not in result_data):
+                                # Try the result we extracted earlier
+                                if result and isinstance(result, dict):
+                                    logger.info(f"[2025-05-20T15:40:20-04:00] Using previously extracted result for job {job_id}")
+                                    result_data = result
+                                
+                                # If still no output/images, try connector_details
+                                if (not result_data or (isinstance(result_data, dict) and "output" not in result_data and "images" not in result_data)) and connector_details:
+                                    logger.info(f"[2025-05-20T15:40:20-04:00] Extracting result from connector_details for job {job_id}")
+                                    
+                                    # Initialize result_data if it's not a dict
+                                    if not isinstance(result_data, dict):
+                                        result_data = {}
+                                    
+                                    # Try to extract from connector_details.result
+                                    if "result" in connector_details and isinstance(connector_details["result"], dict):
+                                        if "output" in connector_details["result"]:
+                                            result_data["output"] = connector_details["result"]["output"]
+                                            logger.info(f"[2025-05-20T15:40:20-04:00] Found output in connector_details.result for job {job_id}")
+                                        # Copy all fields from connector_details.result
+                                        for key, value in connector_details["result"].items():
+                                            if key not in result_data:
+                                                result_data[key] = value
+                                    
+                                    # Try to extract from connector_details.details
+                                    elif "details" in connector_details and isinstance(connector_details["details"], dict):
+                                        if "output" in connector_details["details"]:
+                                            result_data["output"] = connector_details["details"]["output"]
+                                            logger.info(f"[2025-05-20T15:40:20-04:00] Found output in connector_details.details for job {job_id}")
+                                        # Copy all fields from connector_details.details
+                                        for key, value in connector_details["details"].items():
+                                            if key not in result_data:
+                                                result_data[key] = value
+                                    
+                                    # Try to extract from connector_details directly
+                                    elif "output" in connector_details:
+                                        result_data["output"] = connector_details["output"]
+                                        logger.info(f"[2025-05-20T15:40:20-04:00] Found output directly in connector_details for job {job_id}")
+                                    elif "images" in connector_details:
+                                        result_data["images"] = connector_details["images"]
+                                        logger.info(f"[2025-05-20T15:40:20-04:00] Found images directly in connector_details for job {job_id}")
                             
                             # Update the result field in the message
                             complete_job_message["result"] = result_data
                         else:
                             # Fallback to just including the result if full status not available
                             complete_job_message["result"] = result
+                        # [2025-05-20T15:40:20-04:00] Log the result data structure for debugging
+                        result_data_summary = {
+                            "has_result": bool(complete_job_message.get("result")),
+                            "result_keys": list(complete_job_message.get("result", {}).keys()) if isinstance(complete_job_message.get("result"), dict) else [],
+                            "has_output": "output" in complete_job_message.get("result", {}),
+                            "has_images": "images" in complete_job_message.get("result", {}),
+                            "output_type": type(complete_job_message.get("result", {}).get("output")).__name__ if "output" in complete_job_message.get("result", {}) else None
+                        }
+                        logger.info(f"[2025-05-20T15:40:20-04:00] Result data summary for job {job_id}: {result_data_summary}")
+                        
+                        # Send the message
                         await websocket.send_text(json.dumps(complete_job_message))
-                        logger.info(f"[2025-05-20T15:35:46-04:00] Sent complete_job message for job {job_id} with full job status including output data")
+                        logger.info(f"[2025-05-20T15:40:20-04:00] Sent complete_job message for job {job_id} with full job status including output data")
                         
                         # Limit cache size to prevent memory leaks
                         if len(self._completed_jobs_cache) > 1000:
