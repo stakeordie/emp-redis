@@ -20,6 +20,12 @@ const state = {
     clients: {},
     jobs: {},
     
+    // [2025-05-20T11:26:44-04:00] Added REST API configuration
+    restApi: {
+        url: 'http://localhost:8001/api/jobs',
+        enabled: true
+    },
+    
     // Statistics
     stats: {
         totalWorkers: 0,
@@ -233,6 +239,10 @@ const elements = {
     priorityButtons: document.querySelectorAll('.priority-btn'),
     jobPayload: document.getElementById('job-payload'),
     submitJobBtn: document.getElementById('submit-job-btn'),
+    // [2025-05-20T11:26:44-04:00] Added REST API elements
+    submitJobRestBtn: document.getElementById('submit-job-rest-btn'),
+    restResponseContainer: document.getElementById('rest-response-container'),
+    restResponse: document.getElementById('rest-response'),
     
     // Stats
     requestStatsBtn: document.getElementById('request-stats-btn'),
@@ -295,6 +305,11 @@ function init() {
     elements.submitJobBtn.addEventListener('click', (event) => {
         event.preventDefault();
         submitJob(null);
+    });
+    // [2025-05-20T11:26:44-04:00] Add event listener for REST API submission
+    elements.submitJobRestBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        submitJobViaRest();
     });
     // 2025-04-09 13:41: Added batch submit button event listener
     document.getElementById('batch-submit-btn')?.addEventListener('click', batchSubmitJobs);
@@ -1754,6 +1769,91 @@ function handleErrorMessage(message, source = 'unknown') {
     // Log the error with appropriate details
     addLogEntry(errorMessage, 'error');
     console.error('Error message:', error, details);
+}
+
+/**
+ * [2025-05-20T11:26:44-04:00] Submit a job via REST API
+ * This function sends a job submission request to the Redis hub's REST API endpoint
+ */
+async function submitJobViaRest() {
+    try {
+        // Check if REST API is enabled
+        if (!state.restApi.enabled) {
+            showNotification('REST API is not enabled', 'error');
+            return;
+        }
+        
+        // Get job details from form
+        const jobType = elements.jobType.value;
+        const priority = parseInt(elements.jobPriority.value, 10) || 0;
+        
+        // [2025-05-20T11:28:30-04:00] Get custom job ID if provided
+        // We'll use the same input field as the WebSocket submission
+        const customJobIdField = document.getElementById('message-id');
+        const messageId = customJobIdField && customJobIdField.value ? customJobIdField.value.trim() : null;
+        
+        // Parse payload JSON
+        let payload;
+        try {
+            payload = JSON.parse(elements.jobPayload.value);
+        } catch (error) {
+            showNotification('Invalid JSON payload', 'error');
+            return;
+        }
+        
+        // Prepare request data
+        const requestData = {
+            job_type: jobType,
+            payload: payload,
+            priority: priority
+        };
+        
+        // Add message ID if provided
+        if (messageId) {
+            requestData.job_id = messageId;
+        }
+        
+        // Show loading state
+        elements.submitJobRestBtn.disabled = true;
+        elements.submitJobRestBtn.textContent = 'Submitting...';
+        
+        // Make the REST API request
+        const response = await fetch(state.restApi.url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(requestData)
+        });
+        
+        // Parse response
+        const responseData = await response.json();
+        
+        // Display response
+        elements.restResponseContainer.style.display = 'block';
+        elements.restResponse.textContent = JSON.stringify(responseData, null, 2);
+        
+        // Show notification
+        if (response.ok) {
+            showNotification(`Job submitted via REST API: ${responseData.job_id}`, 'success');
+            addLogEntry(`Job submitted via REST API: ${responseData.job_id}`, 'success');
+        } else {
+            showNotification(`REST API Error: ${responseData.detail || 'Unknown error'}`, 'error');
+            addLogEntry(`REST API Error: ${responseData.detail || 'Unknown error'}`, 'error');
+        }
+    } catch (error) {
+        console.error('Error submitting job via REST:', error);
+        showNotification(`Error: ${error.message}`, 'error');
+        addLogEntry(`Error submitting job via REST: ${error.message}`, 'error');
+        
+        // Display error in response container
+        elements.restResponseContainer.style.display = 'block';
+        elements.restResponse.textContent = `Error: ${error.message}`;
+    } finally {
+        // Reset button state
+        elements.submitJobRestBtn.disabled = false;
+        elements.submitJobRestBtn.textContent = 'Submit Job: REST';
+    }
 }
 
 /**

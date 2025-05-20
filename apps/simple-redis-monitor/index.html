@@ -360,6 +360,49 @@
       gap: 15px;
     }
 
+    .job-submission-container {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    
+    /* [2025-05-20T11:26:44-04:00] Added styles for submit buttons container */
+    .submit-buttons-container {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    
+    /* REST API response container styles */
+    .rest-response-container {
+      margin-top: 10px;
+      padding: 10px;
+      background-color: #f5f5f5;
+      border-radius: 4px;
+      border: 1px solid #ddd;
+    }
+    
+    .rest-response {
+      font-family: monospace;
+      white-space: pre-wrap;
+      max-height: 200px;
+      overflow-y: auto;
+      margin: 0;
+      padding: 10px;
+      background-color: #fff;
+      border-radius: 3px;
+      border: 1px solid #eee;
+    }
+    
+    /* Button styles */
+    .rest-submit {
+      background-color: #4a90e2;
+    }
+    
+    .rest-submit:hover {
+      background-color: #3a80d2;
+    }
+
     .priority-buttons {
       display: flex;
       flex-direction: column;
@@ -703,7 +746,17 @@
                             }
                           }</textarea>
           </div>
-          <button id="submit-job-btn" class="btn-submit">Submit Job</button>
+          <!-- [2025-05-20T11:26:44-04:00] Updated job submission buttons to include both WebSocket and REST options -->
+          <div class="submit-buttons-container">
+            <button id="submit-job-btn" class="btn-submit">Submit Job: WebSocket</button>
+            <button id="submit-job-rest-btn" class="btn-submit rest-submit">Submit Job: REST</button>
+          </div>
+          
+          <!-- REST API Response Display -->
+          <div id="rest-response-container" class="rest-response-container" style="display: none;">
+            <h3>REST API Response</h3>
+            <pre id="rest-response" class="rest-response"></pre>
+          </div>
 
           <!-- 2025-04-09 13:41: Added batch submit section for testing race conditions -->
           <div class="batch-submit-section">
