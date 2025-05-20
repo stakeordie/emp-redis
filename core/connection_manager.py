@@ -782,18 +782,19 @@ class ConnectionManager(ConnectionManagerInterface):
                     # [2025-05-20T15:07:31-04:00] Get the full job status from Redis service
                     # This ensures we include all job details including images, parameters, etc.
                     try:
-                        # Import these at the top level in the future to avoid import-in-function lint errors
-                        from core.service_registry import get_service
-                        from core.redis_service import RedisService
+                        # [2025-05-20T16:31:41-04:00] Fixed import path for service_registry
+                        # Import using relative imports to avoid module not found errors
+                        from service_registry import get_service
+                        from redis_service import RedisService
                         
                         # Get Redis service from the global service registry
                         redis_service = get_service(RedisService)
                         if redis_service:
                             # Get the complete job status with all details
                             full_job_status = redis_service.get_job_status(job_id)
-                            logger.info(f"[2025-05-20T15:07:31-04:00] Retrieved full job status for job {job_id}")
+                            logger.info(f"[2025-05-20T16:31:41-04:00] Retrieved full job status for job {job_id}")
                         else:
-                            logger.error(f"[2025-05-20T15:07:31-04:00] Redis service not available for job {job_id}")
+                            logger.error(f"[2025-05-20T16:31:41-04:00] Redis service not available for job {job_id}")
                             full_job_status = {}
                     except Exception as e:
                         logger.error(f"[2025-05-20T15:07:31-04:00] Error getting full job status for job {job_id}: {str(e)}")
