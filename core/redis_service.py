@@ -631,34 +631,35 @@ class RedisService(RedisServiceInterface):
             
             position: int = 0  # Default position if not found or first in queue
             
-            # Get all jobs in the priority queue with higher scores (ahead of this job)
-            # First, get the score of this job
+            # [2025-05-20T14:15:17-04:00] Fixed position calculation to correctly count jobs ahead
+            # We need to count jobs with higher priority (lower score) that are still pending
             job_score = self.client.zscore(PRIORITY_QUEUE, job_id)
             
             if job_score is not None:
-                # Get all jobs with higher scores (lower priority numbers have higher priority)
-                # We'll use zrangebyscore to get all jobs with scores <= job_score
-                # (Remember: lower score = higher priority)
-                higher_priority_jobs = self.client.zrangebyscore(
-                    PRIORITY_QUEUE,
-                    float('-inf'),  # Start with highest priority (lowest score)
-                    job_score,      # Up to this job's priority
-                )
+                # Get all pending jobs from the priority queue
+                all_jobs = self.client.zrange(PRIORITY_QUEUE, 0, -1)
                 
-                # Count only pending jobs (exclude jobs that are being processed, completed, or failed)
+                # Count only pending jobs with higher priority (lower score) than this job
                 pending_jobs_ahead = 0
                 
-                for other_job_id in higher_priority_jobs:
+                for other_job_id in all_jobs:
                     # Skip the current job
-                    if other_job_id == job_id:
+                    other_job_id_str = other_job_id.decode('utf-8') if isinstance(other_job_id, bytes) else other_job_id
+                    if other_job_id_str == job_id:
                         continue
-                        
-                    # Get the status of this job
-                    other_job_status = self.client.hget(f"job:{other_job_id.decode('utf-8') if isinstance(other_job_id, bytes) else other_job_id}", "status")
                     
-                    # Only count jobs that are still pending
-                    if other_job_status and other_job_status.decode('utf-8') if isinstance(other_job_status, bytes) else other_job_status == "pending":
-                        pending_jobs_ahead += 1
+                    # Get the score (priority) of this job
+                    other_job_score = self.client.zscore(PRIORITY_QUEUE, other_job_id)
+                    
+                    # Only count jobs with higher priority (lower score)
+                    if other_job_score is not None and other_job_score < job_score:
+                        # Get the status of this job
+                        other_job_status = self.client.hget(f"job:{other_job_id_str}", "status")
+                        other_job_status_str = other_job_status.decode('utf-8') if isinstance(other_job_status, bytes) else other_job_status
+                        
+                        # Only count jobs that are still pending
+                        if other_job_status_str == "pending":
+                            pending_jobs_ahead += 1
                 
                 position = pending_jobs_ahead
                 
