@@ -171,8 +171,8 @@ const DEFAULT_PAYLOADS = {
         "payload": {
             "prompt": "a photo of a cat",
             "negative_prompt": "blurry, bad quality",
-            "width": 512,
-            "height": 512,
+            "width": 1024,
+            "height": 1024,
             "steps": 20,
             "cfg_scale": 7,
             "sampler_name": "Euler a",
@@ -181,7 +181,7 @@ const DEFAULT_PAYLOADS = {
             "batch_size": 1,
             "n_iter": 1,
             "override_settings": {
-                "sd_model_checkpoint": "sd_xl_base_1.0.safetensors"
+                "sd_model_checkpoint": "sd_xl_base_1.0_0.9vae.safetensors"
             },
             "override_settings_restore_afterwards": true,
             "send_images": true,
