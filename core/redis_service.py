@@ -636,8 +636,9 @@ class RedisService(RedisServiceInterface):
             job_created_at = float(job_data.get("created_at", 0))
             
             if job_score is not None:
-                # Get all jobs from the priority queue
-                all_jobs = self.client.zrange(PRIORITY_QUEUE, 0, -1)
+                # [2025-05-20T14:54:57-04:00] Get all jobs from the priority queue in correct order
+                # Use zrevrange to get jobs in order of highest priority (lowest score) first
+                all_jobs = self.client.zrevrange(PRIORITY_QUEUE, 0, -1)
                 
                 # Count pending jobs that should be processed before this one
                 pending_jobs_ahead = 0
@@ -685,7 +686,7 @@ class RedisService(RedisServiceInterface):
                 position = pending_jobs_ahead
                 
                 # Log the position calculation for debugging
-                logger.info(f"[2025-05-20T14:07:04-04:00] Job {job_id} has {position} pending jobs ahead of it in the queue")
+                logger.info(f"[2025-05-20T14:54:57-04:00] Job {job_id} has {position} pending jobs ahead of it in the queue")
             
             # Add position to job data with explicit type
             job_data["position"] = position
