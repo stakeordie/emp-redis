@@ -626,15 +626,23 @@ class RedisService(RedisServiceInterface):
         
         # Add queue position if job is pending
         if job_data.get("status") == "pending":
-            position: int = -1  # Default position if not found
+            # [2025-05-20T13:41:23-04:00] Fixed position calculation to show relative position
+            # The previous implementation was showing the absolute position (index) in the queue
+            # We want to show how many jobs are ahead of this one (relative position)
+            
+            position: int = 0  # Default position if not found or first in queue
             
             # Get position from priority queue using zrevrank
-            # zrevrank can return None if the element is not in the sorted set
-
+            # zrevrank returns the 0-based index of the element in the sorted set
             rank_result = self.client.zrevrank(PRIORITY_QUEUE, job_id)
             
             if rank_result is not None:
+                # The rank is already the number of elements with higher scores
+                # This is exactly what we want - how many jobs are ahead of this one
                 position = int(rank_result)
+                
+                # Log the position calculation for debugging
+                logger.info(f"[2025-05-20T13:41:23-04:00] Job {job_id} has {position} jobs ahead of it in the queue")
             
             # Add position to job data with explicit type
             job_data["position"] = position

@@ -11,7 +11,7 @@ import logging
 from typing import Dict, Any, Optional, List, Union
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 from contextlib import asynccontextmanager
 
 import sys
@@ -96,6 +96,18 @@ class JobStatusResponse(BaseModel):
     progress: Optional[float] = None
     result: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
+    position_description: Optional[str] = None
+    
+    @validator('position_description', always=True)
+    def set_position_description(cls, v, values):
+        # [2025-05-20T13:58:14-04:00] Added position_description field to match table display
+        if v is not None:
+            return v
+        
+        position = values.get('position')
+        if position is not None and values.get('status') == 'pending':
+            return f"{position} jobs ahead in queue"
+        return None
 
 @app.get("/")
 def read_root():

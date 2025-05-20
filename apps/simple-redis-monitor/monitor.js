@@ -1901,6 +1901,29 @@ async function checkJobStatus(jobId) {
 }
 
 /**
+ * [2025-05-20T13:51:20-04:00] Display REST API response
+ * This function updates the REST response container with the given content
+ * The fixed layout structure prevents any layout shifts
+ */
+function displayRestResponse(content, isError = false) {
+    // Update the response content
+    elements.restResponse.textContent = content;
+    
+    // Apply styling based on whether it's an error
+    if (isError) {
+        elements.restResponse.classList.add('error-response');
+    } else {
+        elements.restResponse.classList.remove('error-response');
+    }
+    
+    // Add a subtle highlight effect to draw attention without moving the layout
+    elements.restResponseContainer.classList.add('highlight-container');
+    setTimeout(() => {
+        elements.restResponseContainer.classList.remove('highlight-container');
+    }, 1500);
+}
+
+/**
  * [2025-05-20T11:40:07-04:00] Check job status from the UI
  * This function is called when the user clicks the "Check Status" button
  */
@@ -1908,6 +1931,7 @@ async function checkJobStatusFromUI() {
     try {
         // Get job ID from input field
         const jobId = elements.jobStatusId.value.trim();
+
         
         // Validate job ID
         if (!jobId) {
@@ -1922,9 +1946,23 @@ async function checkJobStatusFromUI() {
         // Check job status
         const jobStatus = await checkJobStatus(jobId);
         
+        // [2025-05-20T13:41:23-04:00] Format the job status response for better readability
+        // Make a copy of the job status to modify for display
+        const displayJobStatus = {...jobStatus};
+        
+        // Format the position to be more user-friendly
+        if (displayJobStatus.status === 'pending' && displayJobStatus.position !== undefined) {
+            // Add a human-readable position description
+            if (displayJobStatus.position === 0) {
+                displayJobStatus.position_description = 'Next in queue';
+            } else {
+                displayJobStatus.position_description = `${displayJobStatus.position} job${displayJobStatus.position !== 1 ? 's' : ''} ahead in queue`;
+            }
+        }
+        
         // Display response
-        elements.restResponseContainer.style.display = 'block';
-        elements.restResponse.textContent = JSON.stringify(jobStatus, null, 2);
+        // [2025-05-20T13:51:20-04:00] Display the job status response without causing layout shifts
+        displayRestResponse(JSON.stringify(displayJobStatus, null, 2));
         
         // Show notification based on job status
         if (jobStatus.status === 'completed') {
@@ -1949,7 +1987,11 @@ async function checkJobStatusFromUI() {
         addLogEntry(`Error checking job status: ${error.message}`, 'error');
         
         // Display error in response container
-        elements.restResponseContainer.style.display = 'block';
+        // [2025-05-20T13:46:40-04:00] Show REST response container with smooth transition
+        elements.restResponseContainer.style.opacity = '1';
+        elements.restResponseContainer.style.height = '150px';
+        elements.restResponseContainer.style.overflow = 'auto';
+        elements.restResponseContainer.style.padding = '10px';
         elements.restResponse.textContent = `Error: ${error.message}`;
     } finally {
         // Reset button state
@@ -2021,7 +2063,11 @@ async function submitJobViaRest() {
         const responseData = await response.json();
         
         // Display response
-        elements.restResponseContainer.style.display = 'block';
+        // [2025-05-20T13:46:40-04:00] Show REST response container with smooth transition
+        elements.restResponseContainer.style.opacity = '1';
+        elements.restResponseContainer.style.height = '150px';
+        elements.restResponseContainer.style.overflow = 'auto';
+        elements.restResponseContainer.style.padding = '10px';
         elements.restResponse.textContent = JSON.stringify(responseData, null, 2);
         
         // Show notification
@@ -2059,10 +2105,14 @@ async function submitJobViaRest() {
                         elements.jobStatusId.classList.remove('highlight-field');
                     }, 3000);
                     
-                    // Scroll to the job status section to make it visible to the user
-                    const jobStatusSection = document.querySelector('.job-status-check-container');
-                    if (jobStatusSection) {
-                        jobStatusSection.scrollIntoView({ behavior: 'smooth' });
+                    // [2025-05-20T13:46:40-04:00] Removed auto-scrolling to prevent UI from moving down
+                    // Instead, just highlight the check status button to draw attention
+                    const checkStatusBtn = elements.checkJobStatusBtn;
+                    if (checkStatusBtn) {
+                        checkStatusBtn.classList.add('highlight-button');
+                        setTimeout(() => {
+                            checkStatusBtn.classList.remove('highlight-button');
+                        }, 3000);
                     }
                     
                     // Also highlight the check status button to encourage clicking it
@@ -2087,7 +2137,11 @@ async function submitJobViaRest() {
         addLogEntry(`Error submitting job via REST: ${error.message}`, 'error');
         
         // Display error in response container
-        elements.restResponseContainer.style.display = 'block';
+        // [2025-05-20T13:46:40-04:00] Show REST response container with smooth transition
+        elements.restResponseContainer.style.opacity = '1';
+        elements.restResponseContainer.style.height = '150px';
+        elements.restResponseContainer.style.overflow = 'auto';
+        elements.restResponseContainer.style.padding = '10px';
         elements.restResponse.textContent = `Error: ${error.message}`;
     } finally {
         // Reset button state
@@ -2806,7 +2860,13 @@ function updateUI() {
                 <td>${job.job_type || job.type || ''}</td>
                 <td><span class="status ${statusClass}">${displayStatus}</span></td>
                 <td>${displayPriority}</td>
-                <td>${job.position !== undefined ? job.position : 'N/A'}</td>
+                <td>
+                    ${job.position !== undefined ? 
+                        (job.position === 0 ? 
+                            '<span class="position-next">Next in queue</span>' : 
+                            `<span class="position-waiting">${job.position} job${job.position !== 1 ? 's' : ''} ahead</span>`
+                        ) : 'N/A'}
+                </td>
                 <td>${createdAtStr}</td>
                 <td>${failureCount > 0 ? `<span class="failure-count">${failureCount}</span>` : '0'}</td>
                 <td>
