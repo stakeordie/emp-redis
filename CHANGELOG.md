@@ -5,6 +5,13 @@ All notable changes to the EMP Redis project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- [2025-05-20T17:10:00-04:00] Enhanced job data retrieval with retry mechanism:
+  - Added retry logic with increasing delays (1s, 2s, 3s) to ensure job data is fully saved to Redis
+  - Implemented detailed logging to track job result data retrieval and processing
+  - Added base64 image detection to verify output data is properly included in messages
+  - Fixed type errors in connection_manager.py for better reliability
+  - Improved error handling for API requests to Redis server
+  - This ensures WebSocket messages include complete job data with base64 images
 - 2025-04-28-21:33 - Improved job completion messaging system:
   - Simplified `complete_job` method in RedisService to only send standard status updates
   - Enhanced `handle_job_update` in MessageHandler to detect completed status and send an additional explicit message
