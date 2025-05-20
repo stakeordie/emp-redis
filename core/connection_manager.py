@@ -825,17 +825,31 @@ class ConnectionManager(ConnectionManagerInterface):
                             "timestamp": time.time()
                         }
                         
-                        # Include all fields from the full job status
+                        # [2025-05-20T15:35:46-04:00] Ensure we include all necessary output data in the WebSocket message
                         if full_job_status:
                             # Add all fields from full_job_status except those already in the message
                             for key, value in full_job_status.items():
                                 if key not in complete_job_message:
                                     complete_job_message[key] = value
+                            
+                            # Ensure the result field is included and has the output data
+                            result_data = full_job_status.get("result", {})
+                            if isinstance(result_data, dict) and "output" not in result_data and "images" not in result_data:
+                                # Try to extract output from connector_details if available
+                                connector_details = parsed_message.get("connector_details", {})
+                                if connector_details and isinstance(connector_details, dict):
+                                    if "result" in connector_details and "output" in connector_details["result"]:
+                                        result_data["output"] = connector_details["result"]["output"]
+                                    elif "details" in connector_details and "output" in connector_details["details"]:
+                                        result_data["output"] = connector_details["details"]["output"]
+                            
+                            # Update the result field in the message
+                            complete_job_message["result"] = result_data
                         else:
                             # Fallback to just including the result if full status not available
                             complete_job_message["result"] = result
                         await websocket.send_text(json.dumps(complete_job_message))
-                        logger.info(f"[2025-05-20T15:07:31-04:00] Sent complete_job message for job {job_id} with full job status")
+                        logger.info(f"[2025-05-20T15:35:46-04:00] Sent complete_job message for job {job_id} with full job status including output data")
                         
                         # Limit cache size to prevent memory leaks
                         if len(self._completed_jobs_cache) > 1000:
