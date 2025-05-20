@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Core WebSocket connection manager for the queue system
-# [2025-05-20T17:03:45-04:00] Fixed imports and added retry mechanism for job data
+# [2025-05-20T17:12:30-04:00] Fixed imports to use project's custom logger instead of loguru
 import os
 import time
 import json
@@ -10,10 +10,12 @@ from fastapi import WebSocket, FastAPI, Query
 from fastapi.websockets import WebSocketDisconnect
 from websockets.exceptions import ConnectionClosedError
 from pydantic import BaseModel
-from loguru import logger
 
 # [2025-05-20T17:03:30-04:00] Type-ignore for requests to fix mypy error
 import requests  # type: ignore
+
+# Use the project's custom logger instead of importing directly from loguru
+from .utils.logger import logger
 
 from .redis_service import RedisService
 from .core_types.base_messages import MessageType
