@@ -840,21 +840,48 @@ class ConnectionManager(ConnectionManagerInterface):
                             "timestamp": time.time()
                         }
                         
-                        # [2025-05-20T16:11:00-04:00] Set a fixed result value for all completed jobs to debug the issue
-                        # This will help us identify if our code is being executed at all
-                        complete_job_message["result"] = "I know how to change this, I promise"
-                        
-                        # Log that we've set the fixed result value
-                        logger.info(f"[2025-05-20T16:11:00-04:00] Set fixed result value for job {job_id}")
-                        
-                        # Log the message structure for debugging
-                        logger.info(f"[2025-05-20T16:11:00-04:00] Complete job message structure: {json.dumps(complete_job_message, default=str)}")
-                        
-                        # Also log the original message and full job status for comparison
-                        logger.info(f"[2025-05-20T16:11:00-04:00] Original message: {json.dumps(parsed_message, default=str)}")
-                        logger.info(f"[2025-05-20T16:11:00-04:00] Full job status: {json.dumps(full_job_status, default=str)}")
-                        
-                        # Don't proceed with the normal result extraction logic since we're setting a fixed value
+                        # [2025-05-20T16:40:08-04:00] Include the full job result data from Redis
+                        # We need to get the actual job status from Redis to include the base64 image data
+                        try:
+                            # Import Redis client directly
+                            import redis
+                            import json
+                            import os
+                            
+                            # Get Redis connection details from environment
+                            redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+                            redis_client = redis.from_url(redis_url)
+                            
+                            # Get the job data directly from Redis
+                            job_key = f"job:{job_id}"
+                            job_data = redis_client.get(job_key)
+                            
+                            if job_data:
+                                # Parse the job data
+                                job_status = json.loads(job_data)
+                                logger.info(f"[2025-05-20T16:40:08-04:00] Successfully retrieved job data from Redis for job {job_id}")
+                                
+                                # Include the full job status in the message
+                                for key, value in job_status.items():
+                                    if key not in complete_job_message:
+                                        complete_job_message[key] = value
+                                
+                                # Ensure the result field is included
+                                if "result" in job_status and job_status["result"]:
+                                    complete_job_message["result"] = job_status["result"]
+                                    logger.info(f"[2025-05-20T16:40:08-04:00] Included result data from Redis for job {job_id}")
+                            else:
+                                logger.warning(f"[2025-05-20T16:40:08-04:00] No job data found in Redis for job {job_id}")
+                        except Exception as e:
+                            logger.error(f"[2025-05-20T16:40:08-04:00] Error retrieving job data from Redis: {str(e)}")
+                            logger.exception(e)
+                            
+                            # Fallback to connector_details if Redis access fails
+                            if parsed_message and isinstance(parsed_message, dict) and "connector_details" in parsed_message:
+                                connector_details = parsed_message.get("connector_details", {})
+                                if connector_details:
+                                    logger.info(f"[2025-05-20T16:40:08-04:00] Using connector_details as fallback for job {job_id}")
+                                    complete_job_message["connector_details"] = connector_details
                         
                         # [2025-05-20T15:35:46-04:00] Ensure we include all necessary output data in the WebSocket message
                         if full_job_status:
