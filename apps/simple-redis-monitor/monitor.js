@@ -753,6 +753,12 @@ function processMessage(data, source) {
         try {
             // Process the message based on its type
             switch (message.type) {
+                case 'request_stats':
+                case Messages.TYPE.REQUEST_STATS:
+                    // This is a request_stats message we sent and received back
+                    // Just log it for debugging purposes
+                    console.log(`[2025-05-20T11:14:45-04:00] Received request_stats echo from ${source}:`, message);
+                    break;
                 case Messages.TYPE.RESPONSE_STATS:
                     handleStatsResponse(message, message, source);
                     break;
@@ -790,11 +796,6 @@ function processMessage(data, source) {
                     break;
                 case Messages.TYPE.ACK:
                     handleAckMessage(message, message, source);
-                    break;
-                case Messages.TYPE.REQUEST_STATS:
-                    // This is a request_stats message we sent and received back
-                    // Just log it for debugging purposes
-                    console.log(`Received request_stats echo from ${source}:`, message);
                     break;
                 case 'subscribe_job_notifications':
                     // Worker is trying to subscribe to job notifications
@@ -1900,11 +1901,13 @@ function requestStats() {
     }
     
     try {
-        // Create request stats message using Messages class
-        const message = Messages.createRequestStatsMessage();
-        
-        // Add a message ID for tracking
-        message.message_id = `stats-request-${Date.now()}`;
+        // [2025-05-20T11:16:24-04:00] Fixed request_stats message creation
+        // Create a simple request_stats message directly instead of using Messages class
+        const message = {
+            type: 'request_stats',
+            timestamp: Date.now() / 1000,
+            message_id: `stats-request-${Date.now()}`
+        };
         
         // Log the request
         addLogEntry('Requesting system statistics...', 'info');
