@@ -5,6 +5,13 @@ All notable changes to the EMP Redis project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- [2025-05-20T17:37:00-04:00] Improved job result data handling in WebSocket messages:
+  - Implemented direct worker data approach in message_handler.py
+  - Eliminated Redis query timing issues by using data directly from worker
+  - Disabled duplicate complete_job messages in connection_manager.py
+  - Ensured base64 image data is properly included in WebSocket messages
+  - Added detailed logging for job result data processing
+
 - [2025-05-20T17:19:00-04:00] Removed external dependencies in connection_manager.py:
   - Replaced external API calls with direct Redis access
   - Eliminated dependency on requests library

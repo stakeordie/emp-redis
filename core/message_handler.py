@@ -557,10 +557,75 @@ class MessageHandler(MessageHandlerInterface):
             worker_id: Worker identifier
             message: Complete job message
         """
-        # Update job status in Redis
+        # [2025-05-20T17:33:00-04:00] Log the message contents to help with debugging
+        job_id = message.job_id
+        result = message.result
+        
+        # Log the result data if available
+        if result:
+            if isinstance(result, dict):
+                result_keys = list(result.keys())
+                logger.info(f"[2025-05-20T17:33:00-04:00] Result data received directly from worker for job {job_id}, keys: {result_keys}")
+                
+                # Check for base64 image data
+                base64_found = False
+                
+                # Look for images in different possible locations
+                if "images" in result:
+                    image_count = len(result["images"]) if isinstance(result["images"], list) else "not a list"
+                    logger.info(f"[2025-05-20T17:33:00-04:00] Found {image_count} images in result.images")
+                    base64_found = True
+                elif "output" in result and isinstance(result["output"], dict) and "images" in result["output"]:
+                    image_count = len(result["output"]["images"]) if isinstance(result["output"]["images"], list) else "not a list"
+                    logger.info(f"[2025-05-20T17:33:00-04:00] Found {image_count} images in result.output.images")
+                    base64_found = True
+                
+                # Look for base64 data directly
+                if not base64_found:
+                    for key, value in result.items():
+                        if isinstance(value, str) and len(value) > 100 and ",base64," in value:
+                            base64_found = True
+                            logger.info(f"[2025-05-20T17:33:00-04:00] Found base64 image data in result.{key}")
+                            break
+                
+                if not base64_found:
+                    logger.warning(f"[2025-05-20T17:33:00-04:00] No base64 image data found in result for job {job_id}")
+            else:
+                logger.warning(f"[2025-05-20T17:33:00-04:00] Result is not a dictionary for job {job_id}, type: {type(result).__name__}")
+        else:
+            logger.warning(f"[2025-05-20T17:33:00-04:00] No result data received from worker for job {job_id}")
+        
+        # Create a complete job message to send to clients
+        complete_job_message = {
+            "type": "complete_job",
+            "job_id": job_id,
+            "status": "completed",
+            "timestamp": time.time(),
+            "worker_id": worker_id,
+            "result": result  # Include the result data directly from the worker
+        }
+        
+        # Send the complete job message to all clients subscribed to this job
+        logger.info(f"[2025-05-20T17:33:00-04:00] Sending complete_job message with direct worker data for job {job_id}")
+        message_size = len(json.dumps(complete_job_message)) if result else 0
+        logger.info(f"[2025-05-20T17:33:00-04:00] Complete job message size: {message_size} bytes")
+        
+        # Forward the complete job message to all subscribed clients
+        # [2025-05-20T17:35:00-04:00] Create a proper BaseMessage object for type safety
+        complete_job_base_message = self.message_models.create_complete_job_message(
+            job_id=job_id,
+            worker_id=worker_id,
+            result=result
+        )
+        
+        for client_id in self.connection_manager.job_subscriptions.get(job_id, []):
+            await self.connection_manager.send_to_client(client_id, complete_job_base_message)
+            logger.info(f"[2025-05-20T17:33:00-04:00] Sent complete_job message for job {job_id} to client {client_id}")
+        
+        # Update job status in Redis (still needed for API endpoints)
         self.redis_service.complete_job(
-            job_id=message.job_id,
-            result=message.result
+            job_id=job_id,
+            result=result
         )
 
         # Update worker status to idle and clear job assignment
@@ -580,7 +645,7 @@ class MessageHandler(MessageHandlerInterface):
         # This prevents the worker from receiving its own message back
         # and ensures it knows the server has processed the completion
         ack_message = self.message_models.create_job_completed_ack_message(
-            job_id=message.job_id,
+            job_id=job_id,
             worker_id=worker_id
         )
         await self.connection_manager.send_to_worker(worker_id, ack_message)

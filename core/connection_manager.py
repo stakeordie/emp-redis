@@ -766,17 +766,22 @@ class ConnectionManager(ConnectionManagerInterface):
             await websocket.send_text(message_text)
             logger.debug(f"[connection_manager.py send_to_client()] Sent message of type {type(message).__name__} to client {client_id}: {message_text}")
             
-            # [2025-05-20T14:52:52-04:00] Only send complete_job message for update_job_progress if not already sent
-            # This fixes the duplicate complete_job messages issue
+            # [2025-05-20T17:37:00-04:00] Disable automatic complete_job message generation
+            # We now send complete_job messages directly from handle_complete_job in message_handler.py
+            # This prevents duplicate messages and ensures we use the worker's data directly
             try:
                 parsed_message = json.loads(message_text) if isinstance(message_text, str) else message_text
                 
-                # Only process update_job_progress messages with completed status
+                # Log the message for debugging purposes only
                 if (isinstance(parsed_message, dict) and 
                     parsed_message.get("status") == "completed" and 
-                    parsed_message.get("type") == "update_job_progress" and
-                    # Don't send complete_job if the message is already a complete_job or if it's a duplicate progress update
-                    "complete_job" not in message_text):
+                    parsed_message.get("type") == "update_job_progress"):
+                    
+                    # Just log that we received a completion message but won't send a duplicate complete_job
+                    logger.info(f"[2025-05-20T17:37:00-04:00] Received job completion update for job {parsed_message.get('job_id')}, but not sending duplicate complete_job message")
+                    
+                    # Skip the rest of the complete_job generation code
+                    return True
                     
                     # Get job ID
                     job_id = parsed_message.get("job_id")
@@ -848,150 +853,6 @@ class ConnectionManager(ConnectionManagerInterface):
                             "position": None,
                             "timestamp": time.time()
                         }
-                        
-                        # [2025-05-20T17:16:00-04:00] Add a retry mechanism with direct Redis access instead of API calls
-                        try:
-                            # Use direct Redis access to get the job data instead of an external API
-                            # This removes the dependency on the requests library
-                            
-                            # Define retry parameters
-                            max_retries = 3
-                            retry_delays = [1, 2, 3]  # Increasing delays in seconds
-                            job_status = None
-                            
-                            # Create a Redis service instance for direct access
-                            redis_service = RedisService()
-                            
-                            # Try to fetch the job data with retries
-                            success = False
-                            
-                            for retry_attempt in range(max_retries):
-                                # Wait with increasing delay before each attempt
-                                delay = retry_delays[retry_attempt]
-                                logger.info(f"[2025-05-20T17:16:00-04:00] Waiting {delay}s before fetching job data (attempt {retry_attempt+1}/{max_retries}) for job {job_id}")
-                                await asyncio.sleep(delay)
-                                
-                                # Get job data directly from Redis
-                                logger.info(f"[2025-05-20T17:16:00-04:00] Fetching job data directly from Redis (attempt {retry_attempt+1}/{max_retries})")
-                                job_status = redis_service.get_job_status(job_id)
-                                
-                                # Check if we got valid job data
-                                if job_status is not None:
-                                    # Check if the result field exists and has content
-                                    logger.info(f"[2025-05-20T17:16:00-04:00] Successfully retrieved job data from Redis for job {job_id}")
-                                    
-                                    # [2025-05-20T17:05:30-04:00] Log the job status keys to help debug retry conditions
-                                    logger.info(f"[2025-05-20T17:05:30-04:00] Job status keys on attempt {retry_attempt+1}: {list(job_status.keys())}")
-                                    
-                                    # Log whether result field exists and its type
-                                    if "result" in job_status:
-                                        result_type = type(job_status["result"]).__name__
-                                        result_value = job_status["result"]
-                                        
-                                        # For dict results, log the keys
-                                        if isinstance(result_value, dict):
-                                            result_keys = list(result_value.keys())
-                                            logger.info(f"[2025-05-20T17:07:00-04:00] Result field found on attempt {retry_attempt+1}, type: {result_type}, keys: {result_keys}")
-                                        # For list results, log the length
-                                        elif isinstance(result_value, list):
-                                            # [2025-05-20T17:07:00-04:00] Fixed type error - ensure we're using a list
-                                            logger.info(f"[2025-05-20T17:07:00-04:00] Result field found on attempt {retry_attempt+1}, type: {result_type}, length: {len(result_value)}")
-                                        # For other types, log a summary
-                                        else:
-                                            # [2025-05-20T17:07:00-04:00] Fixed type error - ensure we're using a string
-                                            logger.info(f"[2025-05-20T17:07:00-04:00] Result field found on attempt {retry_attempt+1}, type: {result_type}, value: {str(result_value)[:100]}...")
-                                        
-                                        # Check if result has content
-                                        if job_status["result"]:
-                                            logger.info(f"[2025-05-20T17:05:30-04:00] Successfully found non-empty result data on attempt {retry_attempt+1}")
-                                            success = True
-                                            break
-                                        else:
-                                            logger.warning(f"[2025-05-20T17:05:30-04:00] Result field is empty on attempt {retry_attempt+1}, will retry")
-                                    else:
-                                        # Log all fields that were returned to help debug
-                                        logger.warning(f"[2025-05-20T17:05:30-04:00] No result field found on attempt {retry_attempt+1}, available fields: {list(job_status.keys())}")
-                                        
-                                        # Log the status field which might indicate why result is missing
-                                        if "status" in job_status:
-                                            logger.warning(f"[2025-05-20T17:05:30-04:00] Job status: {job_status['status']}")
-                                else:
-                                    logger.warning(f"[2025-05-20T17:17:00-04:00] Failed to get job data on attempt {retry_attempt+1}: job_status is None")
-                            
-                            # Process the final job data
-                            if success and job_status is not None:
-                                # Job data is already retrieved from Redis
-                                logger.info(f"[2025-05-20T17:17:00-04:00] Successfully retrieved job data from Redis for job {job_id}")
-                                
-                                # Log the job status keys to help debug
-                                logger.info(f"[2025-05-20T17:17:30-04:00] Job status keys from Redis: {list(job_status.keys())}")
-                                
-                                # Include the full job status in the message
-                                for key, value in job_status.items():
-                                    complete_job_message[key] = value
-                                
-                                # Ensure the result field is included
-                                if "result" in job_status:
-                                    logger.info(f"[2025-05-20T17:00:15-04:00] Result field found in job status")
-                                    if job_status["result"]:
-                                        # Log the result structure
-                                        # [2025-05-20T17:07:00-04:00] Fixed type error - ensure result_keys is always a list
-                                        if isinstance(job_status["result"], dict):
-                                            result_keys = list(job_status["result"].keys())
-                                            logger.info(f"[2025-05-20T17:07:00-04:00] Result keys: {result_keys}")
-                                        else:
-                                            logger.info(f"[2025-05-20T17:07:00-04:00] Result is not a dict, type: {type(job_status['result']).__name__}")
-                                        
-                                        # Check for base64 image data
-                                        if isinstance(job_status["result"], dict):
-                                            # Look for images in different possible locations
-                                            if "images" in job_status["result"]:
-                                                image_count = len(job_status["result"]["images"]) if isinstance(job_status["result"]["images"], list) else "not a list"
-                                                logger.info(f"[2025-05-20T17:08:30-04:00] Found {image_count} images in result.images")
-                                            elif "output" in job_status["result"] and isinstance(job_status["result"]["output"], dict) and "images" in job_status["result"]["output"]:
-                                                image_count = len(job_status["result"]["output"]["images"]) if isinstance(job_status["result"]["output"]["images"], list) else "not a list"
-                                                logger.info(f"[2025-05-20T17:08:30-04:00] Found {image_count} images in result.output.images")
-                                            
-                                            # Look for base64 data directly
-                                            base64_found = False
-                                            if isinstance(job_status["result"], dict):
-                                                # Check if any value contains base64 data
-                                                for key, value in job_status["result"].items():
-                                                    if isinstance(value, str) and len(value) > 100 and ",base64," in value:
-                                                        base64_found = True
-                                                        logger.info(f"[2025-05-20T17:08:30-04:00] Found base64 data in result.{key}")
-                                                        break
-                                            
-                                            # Log if no base64 data was found
-                                            if not base64_found:
-                                                logger.warning(f"[2025-05-20T17:08:30-04:00] No base64 data found in result")
-                                        
-                                        complete_job_message["result"] = job_status["result"]
-                                        logger.info(f"[2025-05-20T17:19:00-04:00] Included result data with base64 image from Redis for job {job_id}")
-                                    else:
-                                        logger.warning(f"[2025-05-20T17:18:00-04:00] Result field is empty in job status")
-                                else:
-                                    logger.warning(f"[2025-05-20T17:18:00-04:00] No result field found in job status from Redis")
-                            else:
-                                # Log the failure
-                                logger.warning(f"[2025-05-20T17:16:00-04:00] Failed to get job data from Redis for job {job_id}")
-                                
-                                # Fallback to connector_details if Redis access fails
-                                if parsed_message and isinstance(parsed_message, dict) and "connector_details" in parsed_message:
-                                    connector_details = parsed_message.get("connector_details", {})
-                                    if connector_details:
-                                        logger.info(f"[2025-05-20T16:48:40-04:00] Using connector_details as fallback for job {job_id}")
-                                        complete_job_message["connector_details"] = connector_details
-                        except Exception as e:
-                            logger.error(f"[2025-05-20T17:18:00-04:00] Error retrieving job data from Redis: {str(e)}")
-                            logger.exception(e)
-                            
-                            # Fallback to connector_details if Redis access fails
-                            if parsed_message and isinstance(parsed_message, dict) and "connector_details" in parsed_message:
-                                connector_details = parsed_message.get("connector_details", {})
-                                if connector_details:
-                                    logger.info(f"[2025-05-20T16:48:40-04:00] Using connector_details as fallback for job {job_id}")
-                                    complete_job_message["connector_details"] = connector_details
                         
                         # [2025-05-20T15:35:46-04:00] Ensure we include all necessary output data in the WebSocket message
                         if full_job_status:
