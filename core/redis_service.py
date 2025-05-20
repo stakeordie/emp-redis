@@ -636,13 +636,13 @@ class RedisService(RedisServiceInterface):
             job_created_at = float(job_data.get("created_at", 0))
             
             if job_score is not None:
-                # [2025-05-20T15:03:59-04:00] Added detailed logging for position calculation
-                logger.info(f"[2025-05-20T15:03:59-04:00] Calculating position for job {job_id} with score {job_score} and created_at {job_created_at}")
+                # [2025-05-20T15:15:50-04:00] Added detailed logging for position calculation
+                logger.info(f"[2025-05-20T15:15:50-04:00] Calculating position for job {job_id} with score {job_score} and created_at {job_created_at}")
                 
                 # Get all jobs from the priority queue in correct order
                 # Use zrevrange to get jobs in order of highest priority (lowest score) first
                 all_jobs = self.client.zrevrange(PRIORITY_QUEUE, 0, -1)
-                logger.info(f"[2025-05-20T15:03:59-04:00] Total jobs in queue: {len(all_jobs)}")
+                logger.info(f"[2025-05-20T15:15:50-04:00] Total jobs in queue: {len(all_jobs)}")
                 
                 # Count pending jobs that should be processed before this one
                 pending_jobs_ahead = 0
@@ -695,29 +695,29 @@ class RedisService(RedisServiceInterface):
                         # Count jobs with higher priority (lower score)
                         if other_job_score < job_score:
                             pending_jobs_ahead += 1
-                            logger.info(f"[2025-05-20T15:03:59-04:00] Job {other_job_id_str} has higher priority (score {other_job_score} < {job_score}), count: {pending_jobs_ahead}")
+                            logger.info(f"[2025-05-20T15:15:50-04:00] Job {other_job_id_str} has higher priority (score {other_job_score} < {job_score}), count: {pending_jobs_ahead}")
                         # For jobs with same priority, count those created earlier
                         elif other_job_score == job_score and other_job_created_at < job_created_at:
                             pending_jobs_ahead += 1
-                            logger.info(f"[2025-05-20T15:03:59-04:00] Job {other_job_id_str} has same priority but was created earlier ({other_job_created_at} < {job_created_at}), count: {pending_jobs_ahead}")
+                            logger.info(f"[2025-05-20T15:15:50-04:00] Job {other_job_id_str} has same priority but was created earlier ({other_job_created_at} < {job_created_at}), count: {pending_jobs_ahead}")
                 
                 position = pending_jobs_ahead
                 
                 # Log the position calculation for debugging
-                logger.info(f"[2025-05-20T15:03:59-04:00] Job {job_id} has {position} pending jobs ahead of it in the queue")
+                logger.info(f"[2025-05-20T15:15:50-04:00] Job {job_id} has {position} pending jobs ahead of it in the queue")
                 
                 # Log detailed job information for debugging
-                import json
-                logger.info(f"[2025-05-20T15:03:59-04:00] All jobs in queue (sorted by priority): {json.dumps(job_details, indent=2)}")
+                # [2025-05-20T15:15:50-04:00] Removed inline import that was causing errors
+                logger.info(f"[2025-05-20T15:15:50-04:00] All jobs in queue (sorted by priority): {json.dumps(job_details, indent=2)}")
                 
                 # Log the queue order for easier debugging
                 queue_order = []
                 for job_detail in job_details:
                     if job_detail['status'] == 'pending':
                         queue_order.append(job_detail['job_id'])
-                logger.info(f"[2025-05-20T15:03:59-04:00] Queue processing order (pending jobs only): {queue_order}")
-                logger.info(f"[2025-05-20T15:03:59-04:00] Current job {job_id} position in queue: {position}")
-                logger.info(f"[2025-05-20T15:03:59-04:00] ---- End of position calculation ----")
+                logger.info(f"[2025-05-20T15:15:50-04:00] Queue processing order (pending jobs only): {queue_order}")
+                logger.info(f"[2025-05-20T15:15:50-04:00] Current job {job_id} position in queue: {position}")
+                logger.info(f"[2025-05-20T15:15:50-04:00] ---- End of position calculation ----")
             
             # Add position to job data with explicit type
             job_data["position"] = position
