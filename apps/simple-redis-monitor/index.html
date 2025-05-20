@@ -498,6 +498,26 @@
       background-color: #4a90e2;
     }
     
+    /* [2025-05-20T13:27:02-04:00] Added highlight effects for auto-filled fields */
+    @keyframes highlight-pulse {
+      0% { box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.7); }
+      70% { box-shadow: 0 0 0 10px rgba(76, 175, 80, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(76, 175, 80, 0); }
+    }
+    
+    .highlight-field {
+      animation: highlight-pulse 1s ease-in-out 3;
+      border-color: #4CAF50 !important;
+      background-color: rgba(76, 175, 80, 0.1) !important;
+    }
+    
+    .highlight-button {
+      animation: highlight-pulse 1s ease-in-out 3;
+      background-color: #45a049 !important;
+      transform: scale(1.05);
+      transition: transform 0.3s;
+    }
+    
     .rest-submit:hover {
       background-color: #3a80d2;
     }

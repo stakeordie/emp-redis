@@ -2043,8 +2043,39 @@ async function submitJobViaRest() {
                 }
             } else {
                 // For asynchronous requests, we just get a job ID
-                showNotification(`Job submitted via REST API: ${responseData.job_id}`, 'success');
-                addLogEntry(`Job submitted via REST API: ${responseData.job_id}`, 'success');
+                const jobId = responseData.job_id;
+                
+                // [2025-05-20T13:27:02-04:00] Auto-fill the job status ID field
+                if (elements.jobStatusId && jobId) {
+                    elements.jobStatusId.value = jobId;
+                    console.log(`[2025-05-20T13:27:02-04:00] Auto-filled job status ID field with: ${jobId}`);
+                    addLogEntry(`Auto-filled job status ID field with: ${jobId}`, 'info');
+                    
+                    // Add visual highlight effect to the job status ID field
+                    elements.jobStatusId.classList.add('highlight-field');
+                    
+                    // Remove highlight after 3 seconds
+                    setTimeout(() => {
+                        elements.jobStatusId.classList.remove('highlight-field');
+                    }, 3000);
+                    
+                    // Scroll to the job status section to make it visible to the user
+                    const jobStatusSection = document.querySelector('.job-status-check-container');
+                    if (jobStatusSection) {
+                        jobStatusSection.scrollIntoView({ behavior: 'smooth' });
+                    }
+                    
+                    // Also highlight the check status button to encourage clicking it
+                    if (elements.checkJobStatusBtn) {
+                        elements.checkJobStatusBtn.classList.add('highlight-button');
+                        setTimeout(() => {
+                            elements.checkJobStatusBtn.classList.remove('highlight-button');
+                        }, 3000);
+                    }
+                }
+                
+                showNotification(`Job submitted via REST API: ${jobId}`, 'success');
+                addLogEntry(`Job submitted via REST API: ${jobId}`, 'success');
             }
         } else {
             showNotification(`REST API Error: ${responseData.detail || 'Unknown error'}`, 'error');
