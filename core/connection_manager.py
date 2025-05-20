@@ -11,8 +11,7 @@ from fastapi.websockets import WebSocketDisconnect
 from websockets.exceptions import ConnectionClosedError
 from pydantic import BaseModel
 
-# [2025-05-20T17:03:30-04:00] Type-ignore for requests to fix mypy error
-import requests  # type: ignore
+# [2025-05-20T17:15:30-04:00] Removed external requests dependency
 
 # Use the project's custom logger instead of importing directly from loguru
 from .utils.logger import logger
@@ -850,37 +849,36 @@ class ConnectionManager(ConnectionManagerInterface):
                             "timestamp": time.time()
                         }
                         
-                        # [2025-05-20T17:08:30-04:00] Add a retry mechanism with increasing delays to ensure job data is fully saved
+                        # [2025-05-20T17:16:00-04:00] Add a retry mechanism with direct Redis access instead of API calls
                         try:
-                            # Use the Redis API endpoint to get the complete job data
-                            # requests is already imported at the top of the file
+                            # Use direct Redis access to get the job data instead of an external API
+                            # This removes the dependency on the requests library
                             
                             # Define retry parameters
                             max_retries = 3
                             retry_delays = [1, 2, 3]  # Increasing delays in seconds
                             job_status = None
                             
-                            # Construct the API URL to get the job data
-                            api_url = os.environ.get("REDIS_API_URL", "https://redisserver-production.up.railway.app")
-                            job_url = f"{api_url}/api/jobs/{job_id}"
+                            # Create a Redis service instance for direct access
+                            redis_service = RedisService()
                             
                             # Try to fetch the job data with retries
                             success = False
-                            response = None
                             
                             for retry_attempt in range(max_retries):
                                 # Wait with increasing delay before each attempt
                                 delay = retry_delays[retry_attempt]
-                                logger.info(f"[2025-05-20T17:05:10-04:00] Waiting {delay}s before fetching job data (attempt {retry_attempt+1}/{max_retries}) for job {job_id}")
+                                logger.info(f"[2025-05-20T17:16:00-04:00] Waiting {delay}s before fetching job data (attempt {retry_attempt+1}/{max_retries}) for job {job_id}")
                                 await asyncio.sleep(delay)
                                 
-                                # Make the API request
-                                logger.info(f"[2025-05-20T17:05:10-04:00] Fetching job data from {job_url} (attempt {retry_attempt+1}/{max_retries})")
-                                response = requests.get(job_url)
+                                # Get job data directly from Redis
+                                logger.info(f"[2025-05-20T17:16:00-04:00] Fetching job data directly from Redis (attempt {retry_attempt+1}/{max_retries})")
+                                job_status = redis_service.get_job_status(job_id)
                                 
-                                if response.status_code == 200:
+                                # Check if we got valid job data
+                                if job_status is not None:
                                     # Check if the result field exists and has content
-                                    job_status = response.json()
+                                    logger.info(f"[2025-05-20T17:16:00-04:00] Successfully retrieved job data from Redis for job {job_id}")
                                     
                                     # [2025-05-20T17:05:30-04:00] Log the job status keys to help debug retry conditions
                                     logger.info(f"[2025-05-20T17:05:30-04:00] Job status keys on attempt {retry_attempt+1}: {list(job_status.keys())}")
@@ -918,17 +916,15 @@ class ConnectionManager(ConnectionManagerInterface):
                                         if "status" in job_status:
                                             logger.warning(f"[2025-05-20T17:05:30-04:00] Job status: {job_status['status']}")
                                 else:
-                                    logger.warning(f"[2025-05-20T17:05:30-04:00] Failed to get job data on attempt {retry_attempt+1}: {response.status_code}")
+                                    logger.warning(f"[2025-05-20T17:17:00-04:00] Failed to get job data on attempt {retry_attempt+1}: job_status is None")
                             
-                            # Process the final response
-                            # [2025-05-20T17:08:00-04:00] Fixed type error - ensure response is not None before accessing status_code
-                            if success and response is not None and response.status_code == 200:
-                                # Parse the job data
-                                job_status = response.json()
-                                logger.info(f"[2025-05-20T17:00:15-04:00] Successfully retrieved job data from API for job {job_id}")
+                            # Process the final job data
+                            if success and job_status is not None:
+                                # Job data is already retrieved from Redis
+                                logger.info(f"[2025-05-20T17:17:00-04:00] Successfully retrieved job data from Redis for job {job_id}")
                                 
                                 # Log the job status keys to help debug
-                                logger.info(f"[2025-05-20T17:00:15-04:00] Job status keys from API: {list(job_status.keys())}")
+                                logger.info(f"[2025-05-20T17:17:30-04:00] Job status keys from Redis: {list(job_status.keys())}")
                                 
                                 # Include the full job status in the message
                                 for key, value in job_status.items():
@@ -971,29 +967,26 @@ class ConnectionManager(ConnectionManagerInterface):
                                                 logger.warning(f"[2025-05-20T17:08:30-04:00] No base64 data found in result")
                                         
                                         complete_job_message["result"] = job_status["result"]
-                                        logger.info(f"[2025-05-20T17:08:30-04:00] Included result data with base64 image from API for job {job_id}")
+                                        logger.info(f"[2025-05-20T17:19:00-04:00] Included result data with base64 image from Redis for job {job_id}")
                                     else:
-                                        logger.warning(f"[2025-05-20T17:00:15-04:00] Result field is empty in job status")
+                                        logger.warning(f"[2025-05-20T17:18:00-04:00] Result field is empty in job status")
                                 else:
-                                    logger.warning(f"[2025-05-20T17:00:15-04:00] No result field found in job status from API")
+                                    logger.warning(f"[2025-05-20T17:18:00-04:00] No result field found in job status from Redis")
                             else:
-                                # [2025-05-20T17:09:00-04:00] Fixed type error - ensure response is not None before accessing status_code
-                                if response is not None:
-                                    logger.warning(f"[2025-05-20T17:09:00-04:00] Failed to get job data from API for job {job_id}: {response.status_code}")
-                                else:
-                                    logger.warning(f"[2025-05-20T17:09:00-04:00] Failed to get job data from API for job {job_id}: response is None")
+                                # Log the failure
+                                logger.warning(f"[2025-05-20T17:16:00-04:00] Failed to get job data from Redis for job {job_id}")
                                 
-                                # Fallback to connector_details if API request fails
+                                # Fallback to connector_details if Redis access fails
                                 if parsed_message and isinstance(parsed_message, dict) and "connector_details" in parsed_message:
                                     connector_details = parsed_message.get("connector_details", {})
                                     if connector_details:
                                         logger.info(f"[2025-05-20T16:48:40-04:00] Using connector_details as fallback for job {job_id}")
                                         complete_job_message["connector_details"] = connector_details
                         except Exception as e:
-                            logger.error(f"[2025-05-20T16:48:40-04:00] Error retrieving job data from API: {str(e)}")
+                            logger.error(f"[2025-05-20T17:18:00-04:00] Error retrieving job data from Redis: {str(e)}")
                             logger.exception(e)
                             
-                            # Fallback to connector_details if API request fails
+                            # Fallback to connector_details if Redis access fails
                             if parsed_message and isinstance(parsed_message, dict) and "connector_details" in parsed_message:
                                 connector_details = parsed_message.get("connector_details", {})
                                 if connector_details:
