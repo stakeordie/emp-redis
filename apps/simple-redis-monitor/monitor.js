@@ -56,31 +56,137 @@ const DEFAULT_PAYLOADS = {
     // ComfyUI job type
     "comfyui": JSON.stringify({
         "3": {
-            "inputs": {
-                "seed": Math.floor(Math.random() * 1000000000),
-                "steps": 20,
-                "cfg": 8,
-                "sampler_name": "euler",
-                "scheduler": "normal",
-                "denoise": 1,
-                "model": "v1-5-pruned.safetensors",
-                "positive": "a photo of a cat",
-                "negative": "blurry, bad quality",
-                "width": 512,
-                "height": 512
-            }
+          "inputs": {
+            "seed": 1057618124930620,
+            "steps": 20,
+            "cfg": 8,
+            "sampler_name": "euler",
+            "scheduler": "normal",
+            "denoise": 1,
+            "model": [
+              "4",
+              0
+            ],
+            "positive": [
+              "6",
+              0
+            ],
+            "negative": [
+              "7",
+              0
+            ],
+            "latent_image": [
+              "5",
+              0
+            ]
+          },
+          "class_type": "KSampler",
+          "_meta": {
+            "title": "KSampler"
+          }
+        },
+        "4": {
+          "inputs": {
+            "ckpt_name": "sd_xl_base_1.0_0.9vae.safetensors"
+          },
+          "class_type": "CheckpointLoaderSimple",
+          "_meta": {
+            "title": "Load Checkpoint"
+          }
+        },
+        "5": {
+          "inputs": {
+            "width": 1024,
+            "height": 1024,
+            "batch_size": 1
+          },
+          "class_type": "EmptyLatentImage",
+          "_meta": {
+            "title": "Empty Latent Image"
+          }
+        },
+        "6": {
+          "inputs": {
+            "text": "dog and sdeal",
+            "clip": [
+              "4",
+              1
+            ]
+          },
+          "class_type": "CLIPTextEncode",
+          "_meta": {
+            "title": "CLIP Text Encode (Prompt)"
+          }
+        },
+        "7": {
+          "inputs": {
+            "text": "text, watermark",
+            "clip": [
+              "4",
+              1
+            ]
+          },
+          "class_type": "CLIPTextEncode",
+          "_meta": {
+            "title": "CLIP Text Encode (Prompt)"
+          }
+        },
+        "8": {
+          "inputs": {
+            "samples": [
+              "3",
+              0
+            ],
+            "vae": [
+              "4",
+              2
+            ]
+          },
+          "class_type": "VAEDecode",
+          "_meta": {
+            "title": "VAE Decode"
+          }
+        },
+        "9": {
+          "inputs": {
+            "filename_prefix": "ComfyUI",
+            "images": [
+              "8",
+              0
+            ]
+          },
+          "class_type": "SaveImage",
+          "_meta": {
+            "title": "Save Image"
+          }
         }
-    }, null, 2),
+      }, null, 2),
     
     // A1111 job type
+    // [2025-05-19T20:45:00-04:00] Updated a1111 payload format to match connector expectations
+    // [2025-05-19T20:48:00-04:00] Updated a1111 payload to include model selection
     "a1111": JSON.stringify({
-        "prompt": "a photo of a cat",
-        "negative_prompt": "blurry, bad quality",
-        "width": 512,
-        "height": 512,
-        "steps": 20,
-        "cfg_scale": 7,
-        "sampler_name": "Euler a"
+        "endpoint": "txt2img",
+        "method": "POST",
+        "payload": {
+            "prompt": "a photo of a cat",
+            "negative_prompt": "blurry, bad quality",
+            "width": 512,
+            "height": 512,
+            "steps": 20,
+            "cfg_scale": 7,
+            "sampler_name": "Euler a",
+            "sampler_index": "Euler a",
+            "seed": -1,
+            "batch_size": 1,
+            "n_iter": 1,
+            "override_settings": {
+                "sd_model_checkpoint": "sd_xl_base_1.0.safetensors"
+            },
+            "override_settings_restore_afterwards": true,
+            "send_images": true,
+            "save_images": false
+        }
     }, null, 2),
     
     // REST API job type
