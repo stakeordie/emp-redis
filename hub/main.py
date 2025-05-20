@@ -106,11 +106,9 @@ class JobStatusResponse(BaseModel):
         
         position = values.get('position')
         if position is not None and values.get('status') == 'pending':
-            # [2025-05-20T15:42:57-04:00] Adjusted position description per user requirements
-            # Position 1 = next, position 2 = one ahead, etc.
-            if position == 0:
-                return "Next in queue"
-            elif position == 1:
+            # [2025-05-20T15:46:45-04:00] Updated for 1-based position values
+            # Position is now 1-based (minimum 1), so adjust descriptions accordingly
+            if position == 1:
                 return "Next in queue"
             elif position == 2:
                 return "1 job ahead in queue"

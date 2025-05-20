@@ -705,10 +705,12 @@ class RedisService(RedisServiceInterface):
                             pending_jobs_ahead += 1
                             logger.info(f"[2025-05-20T15:34:23-04:00] Job {other_job_id_str} has same priority but was created earlier ({other_job_created_at} < {job_created_at}), count: {pending_jobs_ahead}")
                 
-                position = pending_jobs_ahead
+                # [2025-05-20T15:46:45-04:00] Adjusted position to be 1-based instead of 0-based
+                # Position should never be 0, minimum should be 1
+                position = pending_jobs_ahead + 1
                 
                 # Log the position calculation for debugging
-                logger.info(f"[2025-05-20T15:34:23-04:00] Job {job_id} has {position} pending jobs ahead of it in the queue")
+                logger.info(f"[2025-05-20T15:46:45-04:00] Job {job_id} has {pending_jobs_ahead} pending jobs ahead of it in the queue (position: {position})")
                 
                 # Log detailed job information for debugging
                 # [2025-05-20T15:34:23-04:00] Removed inline import that was causing errors
@@ -719,9 +721,9 @@ class RedisService(RedisServiceInterface):
                 for job_detail in job_details:
                     if job_detail['status'] == 'pending':
                         queue_order.append(job_detail['job_id'])
-                logger.info(f"[2025-05-20T15:34:23-04:00] Queue processing order (pending jobs only): {queue_order}")
-                logger.info(f"[2025-05-20T15:34:23-04:00] Current job {job_id} position in queue: {position}")
-                logger.info(f"[2025-05-20T15:34:23-04:00] ---- End of position calculation ----")
+                logger.info(f"[2025-05-20T15:46:45-04:00] Queue processing order (pending jobs only): {queue_order}")
+                logger.info(f"[2025-05-20T15:46:45-04:00] Current job {job_id} position in queue: {position} (1-based indexing)")
+                logger.info(f"[2025-05-20T15:46:45-04:00] ---- End of position calculation ----")
             
             # Add position to job data with explicit type
             job_data["position"] = position
