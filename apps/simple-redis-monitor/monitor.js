@@ -21,9 +21,12 @@ const state = {
     jobs: {},
     
     // [2025-05-20T11:26:44-04:00] Added REST API configuration
+    // [2025-05-20T11:34:47-04:00] Updated with synchronous option
     restApi: {
         url: 'http://localhost:8001/api/jobs',
-        enabled: true
+        enabled: true,
+        synchronous: false,  // Whether to wait for job completion
+        timeout: 300        // Maximum time to wait (seconds) for synchronous requests
     },
     
     // Statistics
@@ -243,6 +246,14 @@ const elements = {
     submitJobRestBtn: document.getElementById('submit-job-rest-btn'),
     restResponseContainer: document.getElementById('rest-response-container'),
     restResponse: document.getElementById('rest-response'),
+    // [2025-05-20T11:30:59-04:00] Added REST API URL display element
+    restApiUrl: document.getElementById('rest-api-url'),
+    // [2025-05-20T11:34:47-04:00] Added synchronous option elements
+    restSyncCheckbox: document.getElementById('rest-sync-checkbox'),
+    restTimeout: document.getElementById('rest-timeout'),
+    // [2025-05-20T11:40:07-04:00] Added job status check elements
+    jobStatusId: document.getElementById('job-status-id'),
+    checkJobStatusBtn: document.getElementById('check-job-status-btn'),
     
     // Stats
     requestStatsBtn: document.getElementById('request-stats-btn'),
@@ -270,15 +281,50 @@ const elements = {
 
 /**
  * Update WebSocket URL based on connection type
+ * [2025-05-20T11:30:59-04:00] Also updates the REST API URL to match the WebSocket base URL
  */
 function updateWebSocketUrl() {
     const connectionType = elements.connectionType.value;
     elements.websocketUrl.value = CONNECTION_URLS[connectionType];
     
+    // [2025-05-20T11:30:59-04:00] Update REST API URL to match the WebSocket base URL
+    updateRestApiUrl(CONNECTION_URLS[connectionType]);
+    
     // If we're already connected, show a warning about changing connection
     if (state.monitorConnected) {
-        addLogEntry('warning', 'Connection change detected. Disconnect and reconnect to apply changes.');
+        addLogEntry('Connection change detected. Disconnect and reconnect to apply changes.', 'warning');
     }
+}
+
+/**
+ * [2025-05-20T11:30:59-04:00] Update REST API URL based on WebSocket URL
+ * @param {string} websocketUrl - The WebSocket URL to derive the REST API URL from
+ */
+function updateRestApiUrl(websocketUrl) {
+    // Extract the base URL from the WebSocket URL
+    let baseUrl = websocketUrl;
+    
+    // Remove any protocol prefix
+    baseUrl = baseUrl.replace(/^(wss?:\/\/)/, '');
+    
+    // Remove any path after the domain
+    baseUrl = baseUrl.split('/')[0];
+    
+    // Set the REST API URL
+    if (baseUrl === 'localhost:8001') {
+        // For local development
+        state.restApi.url = 'http://localhost:8001/api/jobs';
+    } else {
+        // For production (Railway)
+        state.restApi.url = `https://${baseUrl}/api/jobs`;
+    }
+    
+    // Update the REST API URL display in the UI
+    if (elements.restApiUrl) {
+        elements.restApiUrl.textContent = state.restApi.url;
+    }
+    
+    console.log(`[2025-05-20T11:30:59-04:00] REST API URL updated to: ${state.restApi.url}`);
 }
 
 /**
@@ -311,6 +357,43 @@ function init() {
         event.preventDefault();
         submitJobViaRest();
     });
+    
+    // [2025-05-20T11:34:47-04:00] Add event listeners for synchronous option
+    if (elements.restSyncCheckbox) {
+        elements.restSyncCheckbox.addEventListener('change', (event) => {
+            state.restApi.synchronous = event.target.checked;
+            console.log(`[2025-05-20T11:34:47-04:00] REST API synchronous mode: ${state.restApi.synchronous}`);
+            
+            // Update button text based on synchronous mode
+            if (state.restApi.synchronous) {
+                elements.submitJobRestBtn.textContent = 'Submit Job: REST (Sync)';
+            } else {
+                elements.submitJobRestBtn.textContent = 'Submit Job: REST';
+            }
+        });
+    }
+    
+    // [2025-05-20T11:34:47-04:00] Add event listener for timeout input
+    if (elements.restTimeout) {
+        elements.restTimeout.addEventListener('change', (event) => {
+            const timeout = parseInt(event.target.value, 10);
+            if (!isNaN(timeout) && timeout > 0) {
+                state.restApi.timeout = timeout;
+                console.log(`[2025-05-20T11:34:47-04:00] REST API timeout: ${state.restApi.timeout} seconds`);
+            } else {
+                // Reset to default if invalid
+                event.target.value = state.restApi.timeout;
+            }
+        });
+    }
+    
+    // [2025-05-20T11:40:07-04:00] Add event listener for check job status button
+    if (elements.checkJobStatusBtn) {
+        elements.checkJobStatusBtn.addEventListener('click', async (event) => {
+            event.preventDefault();
+            await checkJobStatusFromUI();
+        });
+    }
     // 2025-04-09 13:41: Added batch submit button event listener
     document.getElementById('batch-submit-btn')?.addEventListener('click', batchSubmitJobs);
     elements.connectionType.addEventListener('change', updateWebSocketUrl);
@@ -472,6 +555,10 @@ function connectMonitorSocket(baseUrl, monitorId, authToken) {
         state.monitorSocket.addEventListener('open', (event) => {
             state.monitorConnected = true;
             addLogEntry(`Monitor connection established as '${monitorId}'`, 'success');
+            
+            // [2025-05-20T11:30:59-04:00] Update REST API URL based on the connected WebSocket URL
+            updateRestApiUrl(monitorUrl);
+            
             updateConnectionUI();
             
             // Request initial stats
@@ -1772,7 +1859,100 @@ function handleErrorMessage(message, source = 'unknown') {
 }
 
 /**
+ * [2025-05-20T11:34:47-04:00] Check the status of a job via REST API
+ * @param {string} jobId - The ID of the job to check
+ * @returns {Promise<Object>} - The job status data
+ */
+async function checkJobStatus(jobId) {
+    try {
+        // Check if REST API is enabled
+        if (!state.restApi.enabled) {
+            throw new Error('REST API is not enabled');
+        }
+        
+        // Make the REST API request to check job status
+        const response = await fetch(`${state.restApi.url}/${jobId}`, {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json'
+            }
+        });
+        
+        // Check if request was successful
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || `HTTP error ${response.status}`);
+        }
+        
+        // Parse and return response
+        return await response.json();
+    } catch (error) {
+        console.error(`[2025-05-20T11:34:47-04:00] Error checking job status for ${jobId}:`, error);
+        throw error;
+    }
+}
+
+/**
+ * [2025-05-20T11:40:07-04:00] Check job status from the UI
+ * This function is called when the user clicks the "Check Status" button
+ */
+async function checkJobStatusFromUI() {
+    try {
+        // Get job ID from input field
+        const jobId = elements.jobStatusId.value.trim();
+        
+        // Validate job ID
+        if (!jobId) {
+            showNotification('Please enter a job ID', 'error');
+            return;
+        }
+        
+        // Show loading state
+        elements.checkJobStatusBtn.disabled = true;
+        elements.checkJobStatusBtn.textContent = 'Checking...';
+        
+        // Check job status
+        const jobStatus = await checkJobStatus(jobId);
+        
+        // Display response
+        elements.restResponseContainer.style.display = 'block';
+        elements.restResponse.textContent = JSON.stringify(jobStatus, null, 2);
+        
+        // Show notification based on job status
+        if (jobStatus.status === 'completed') {
+            showNotification(`Job ${jobId} completed successfully`, 'success');
+            addLogEntry(`Job ${jobId} status: completed`, 'success');
+        } else if (jobStatus.status === 'failed') {
+            showNotification(`Job ${jobId} failed: ${jobStatus.error || 'Unknown error'}`, 'error');
+            addLogEntry(`Job ${jobId} status: failed - ${jobStatus.error || 'Unknown error'}`, 'error');
+        } else {
+            showNotification(`Job ${jobId} status: ${jobStatus.status}`, 'info');
+            addLogEntry(`Job ${jobId} status: ${jobStatus.status}`, 'info');
+            
+            // If job is in progress, show progress information
+            if (jobStatus.status === 'in_progress' && jobStatus.progress !== null) {
+                const progressPercent = Math.round(jobStatus.progress * 100);
+                showNotification(`Job ${jobId} progress: ${progressPercent}%`, 'info');
+            }
+        }
+    } catch (error) {
+        console.error('[2025-05-20T11:40:07-04:00] Error checking job status:', error);
+        showNotification(`Error checking job status: ${error.message}`, 'error');
+        addLogEntry(`Error checking job status: ${error.message}`, 'error');
+        
+        // Display error in response container
+        elements.restResponseContainer.style.display = 'block';
+        elements.restResponse.textContent = `Error: ${error.message}`;
+    } finally {
+        // Reset button state
+        elements.checkJobStatusBtn.disabled = false;
+        elements.checkJobStatusBtn.textContent = 'Check Status';
+    }
+}
+
+/**
  * [2025-05-20T11:26:44-04:00] Submit a job via REST API
+ * [2025-05-20T11:34:47-04:00] Updated to support synchronous requests
  * This function sends a job submission request to the Redis hub's REST API endpoint
  */
 async function submitJobViaRest() {
@@ -1805,7 +1985,10 @@ async function submitJobViaRest() {
         const requestData = {
             job_type: jobType,
             payload: payload,
-            priority: priority
+            priority: priority,
+            // [2025-05-20T11:34:47-04:00] Added synchronous request support
+            wait: state.restApi.synchronous,
+            timeout: state.restApi.timeout
         };
         
         // Add message ID if provided
@@ -1815,7 +1998,7 @@ async function submitJobViaRest() {
         
         // Show loading state
         elements.submitJobRestBtn.disabled = true;
-        elements.submitJobRestBtn.textContent = 'Submitting...';
+        elements.submitJobRestBtn.textContent = state.restApi.synchronous ? 'Processing...' : 'Submitting...';
         
         // Make the REST API request
         const response = await fetch(state.restApi.url, {
@@ -1835,14 +2018,32 @@ async function submitJobViaRest() {
         
         // Show notification
         if (response.ok) {
-            showNotification(`Job submitted via REST API: ${responseData.job_id}`, 'success');
-            addLogEntry(`Job submitted via REST API: ${responseData.job_id}`, 'success');
+            if (state.restApi.synchronous) {
+                // For synchronous requests, we get back the full job status
+                const status = responseData.status;
+                const jobId = responseData.job_id;
+                
+                if (status === 'completed') {
+                    showNotification(`Job completed successfully: ${jobId}`, 'success');
+                    addLogEntry(`Job completed via synchronous REST API: ${jobId}`, 'success');
+                } else if (status === 'failed') {
+                    showNotification(`Job failed: ${jobId}`, 'error');
+                    addLogEntry(`Job failed via synchronous REST API: ${jobId} - ${responseData.error || 'Unknown error'}`, 'error');
+                } else {
+                    showNotification(`Job ${status}: ${jobId}`, 'info');
+                    addLogEntry(`Job ${status} via synchronous REST API: ${jobId}`, 'info');
+                }
+            } else {
+                // For asynchronous requests, we just get a job ID
+                showNotification(`Job submitted via REST API: ${responseData.job_id}`, 'success');
+                addLogEntry(`Job submitted via REST API: ${responseData.job_id}`, 'success');
+            }
         } else {
             showNotification(`REST API Error: ${responseData.detail || 'Unknown error'}`, 'error');
             addLogEntry(`REST API Error: ${responseData.detail || 'Unknown error'}`, 'error');
         }
     } catch (error) {
-        console.error('Error submitting job via REST:', error);
+        console.error('[2025-05-20T11:34:47-04:00] Error submitting job via REST:', error);
         showNotification(`Error: ${error.message}`, 'error');
         addLogEntry(`Error submitting job via REST: ${error.message}`, 'error');
         

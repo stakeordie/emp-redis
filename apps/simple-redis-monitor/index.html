@@ -373,6 +373,90 @@
       margin-bottom: 10px;
     }
     
+    /* [2025-05-20T11:30:59-04:00] REST API URL display styles */
+    .rest-api-url-container {
+      margin: 5px 0;
+      font-size: 0.85rem;
+      color: #666;
+    }
+    
+    .rest-api-label {
+      font-weight: bold;
+      margin-right: 5px;
+    }
+    
+    .rest-api-url {
+      font-family: monospace;
+      color: #4a90e2;
+    }
+    
+    /* [2025-05-20T11:34:47-04:00] REST API synchronous option styles */
+    .rest-api-options {
+      margin: 10px 0;
+      padding: 5px;
+      background-color: #f8f8f8;
+      border-radius: 4px;
+      border: 1px solid #ddd;
+    }
+    
+    .rest-sync-label {
+      display: flex;
+      align-items: center;
+      margin-bottom: 5px;
+      cursor: pointer;
+    }
+    
+    .rest-sync-checkbox {
+      margin-right: 5px;
+    }
+    
+    .rest-timeout-container {
+      display: flex;
+      align-items: center;
+      margin-top: 5px;
+    }
+    
+    .rest-timeout {
+      width: 60px;
+      margin-left: 5px;
+      padding: 2px 5px;
+    }
+    
+    /* [2025-05-20T11:34:47-04:00] Job status check styles */
+    .job-status-check-container {
+      margin: 15px 0;
+      padding: 10px;
+      background-color: #f0f7ff;
+      border-radius: 4px;
+      border: 1px solid #c0d9f0;
+    }
+    
+    .job-status-check-form {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    
+    .job-status-id {
+      flex: 1;
+      padding: 5px 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    
+    .btn-check-status {
+      padding: 5px 10px;
+      background-color: #5cb85c;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    
+    .btn-check-status:hover {
+      background-color: #4cae4c;
+    }
+    
     /* REST API response container styles */
     .rest-response-container {
       margin-top: 10px;
@@ -750,6 +834,33 @@
           <div class="submit-buttons-container">
             <button id="submit-job-btn" class="btn-submit">Submit Job: WebSocket</button>
             <button id="submit-job-rest-btn" class="btn-submit rest-submit">Submit Job: REST</button>
+          </div>
+          
+          <!-- [2025-05-20T11:30:59-04:00] Added REST API URL display -->
+          <div class="rest-api-url-container">
+            <span class="rest-api-label">REST API URL:</span>
+            <span id="rest-api-url" class="rest-api-url">http://localhost:8001/api/jobs</span>
+          </div>
+          
+          <!-- [2025-05-20T11:34:47-04:00] Added synchronous option for REST API requests -->
+          <div class="rest-api-options">
+            <label class="rest-sync-label">
+              <input type="checkbox" id="rest-sync-checkbox" class="rest-sync-checkbox">
+              <span>Synchronous (wait for job completion)</span>
+            </label>
+            <div class="rest-timeout-container">
+              <label for="rest-timeout">Timeout (seconds):</label>
+              <input type="number" id="rest-timeout" class="rest-timeout" value="300" min="1" max="3600">
+            </div>
+          </div>
+          
+          <!-- [2025-05-20T11:34:47-04:00] Added job status check section -->
+          <div class="job-status-check-container">
+            <h3>Check Job Status</h3>
+            <div class="job-status-check-form">
+              <input type="text" id="job-status-id" placeholder="Enter job ID" class="job-status-id">
+              <button id="check-job-status-btn" class="btn-check-status">Check Status</button>
+            </div>
           </div>
           
           <!-- REST API Response Display -->
