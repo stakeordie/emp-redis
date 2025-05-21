@@ -1625,30 +1625,37 @@ class ConnectionManager(ConnectionManagerInterface):
                     del self.job_subscriptions[job_id]
                 else:
                     # Forward the completion message directly to the client
-                    logger.info(f"[2025-05-20T23:50:00-04:00] Sending complete_job message to client {client_id} for job {job_id}")
-                    # [2025-05-20T23:50:00-04:00] Ensure complete_message is a valid message object
-                    if not isinstance(complete_message, dict):
-                        logger.error(f"[2025-05-20T23:50:00-04:00] Invalid complete_message type: {type(complete_message).__name__}")
-                        return False
+                    logger.info(f"[2025-05-21T00:01:00-04:00] Sending complete_job message to client {client_id} for job {job_id}")
                     
                     try:
-                        # [2025-05-20T23:50:00-04:00] Convert the dictionary to a CompleteJobMessage object
-                        # Extract required fields from the dictionary
-                        worker_id = complete_message.get("worker_id", "")
-                        result = complete_message.get("result", None)
-                        
-                        # Create a CompleteJobMessage object
+                        # [2025-05-21T00:01:00-04:00] Handle both dictionary and CompleteJobMessage objects
                         from .message_models import CompleteJobMessage
-                        complete_job_message = CompleteJobMessage(
-                            job_id=job_id,
-                            worker_id=worker_id,
-                            result=result
-                        )
                         
-                        logger.info(f"[2025-05-20T23:50:00-04:00] Created CompleteJobMessage object for job {job_id}")
+                        if isinstance(complete_message, CompleteJobMessage):
+                            # Already a CompleteJobMessage object, use it directly
+                            logger.info(f"[2025-05-21T00:01:00-04:00] Using existing CompleteJobMessage object for job {job_id}")
+                            complete_job_message = complete_message
+                        elif isinstance(complete_message, dict):
+                            # Convert dictionary to CompleteJobMessage object
+                            worker_id = complete_message.get("worker_id", "")
+                            result = complete_message.get("result", None)
+                            
+                            # Create a CompleteJobMessage object
+                            complete_job_message = CompleteJobMessage(
+                                job_id=job_id,
+                                worker_id=worker_id,
+                                result=result
+                            )
+                            logger.info(f"[2025-05-21T00:01:00-04:00] Created CompleteJobMessage object from dictionary for job {job_id}")
+                        else:
+                            # Invalid type
+                            logger.error(f"[2025-05-21T00:01:00-04:00] Invalid complete_message type: {type(complete_message).__name__}")
+                            return False
+                        
+                        # Send the message to the client
                         client_success = await self.send_to_client(client_id, complete_job_message)
                     except Exception as e:
-                        logger.error(f"[2025-05-20T23:50:00-04:00] Error creating CompleteJobMessage: {str(e)}")
+                        logger.error(f"[2025-05-21T00:03:00-04:00] Error processing complete_job message: {str(e)}")
                         logger.exception("Complete stack trace:")
                         return False
                     
@@ -1660,8 +1667,26 @@ class ConnectionManager(ConnectionManagerInterface):
             # Forward to all monitors regardless of client subscription status
             monitor_success = False
             if self.monitor_connections:
+                # [2025-05-21T00:02:00-04:00] Create a monitor message with proper handling for different types
+                if isinstance(complete_message, dict):
+                    # If it's a dictionary, create a copy
+                    monitor_message = complete_message.copy()
+                elif hasattr(complete_message, 'model_dump'):
+                    # If it's a Pydantic v2 model, use model_dump
+                    monitor_message = complete_message.model_dump()
+                elif hasattr(complete_message, 'dict'):
+                    # If it's a Pydantic v1 model, use dict
+                    monitor_message = complete_message.dict()
+                else:
+                    # Fallback for other types
+                    monitor_message = {
+                        "job_id": job_id,
+                        "type": "complete_job",
+                        "worker_id": getattr(complete_message, 'worker_id', ""),
+                        "result": getattr(complete_message, 'result', None)
+                    }
+                
                 # Add client_id to the message for monitors
-                monitor_message = complete_message.copy() if isinstance(complete_message, dict) else {"job_id": job_id, "type": "complete_job"}
                 monitor_message["client_id"] = client_id
                 
                 # Send to all monitors

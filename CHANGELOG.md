@@ -5,6 +5,13 @@ All notable changes to the EMP Redis project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- [2025-05-21T00:04:00-04:00] Enhanced message type handling in job completion flow:
+  - Updated forward_job_completion to handle both dictionaries and CompleteJobMessage objects
+  - Added support for Pydantic model serialization in monitor messages
+  - Improved type detection and conversion for different message formats
+  - Added robust fallback mechanisms for unexpected message types
+  - Fixed issue with complete_job messages not being sent
+
 - [2025-05-20T23:52:00-04:00] Fixed bytes/string handling in result logging:
   - Improved handling of binary data in log messages
   - Added proper decoding of bytes to strings with error handling
