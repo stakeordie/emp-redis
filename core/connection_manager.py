@@ -1625,13 +1625,32 @@ class ConnectionManager(ConnectionManagerInterface):
                     del self.job_subscriptions[job_id]
                 else:
                     # Forward the completion message directly to the client
-                    logger.info(f"[2025-05-20T23:48:00-04:00] Sending complete_job message to client {client_id} for job {job_id}")
-                    # [2025-05-20T23:48:00-04:00] Ensure complete_message is a valid message object
+                    logger.info(f"[2025-05-20T23:50:00-04:00] Sending complete_job message to client {client_id} for job {job_id}")
+                    # [2025-05-20T23:50:00-04:00] Ensure complete_message is a valid message object
                     if not isinstance(complete_message, dict):
-                        logger.error(f"[2025-05-20T23:48:00-04:00] Invalid complete_message type: {type(complete_message).__name__}")
+                        logger.error(f"[2025-05-20T23:50:00-04:00] Invalid complete_message type: {type(complete_message).__name__}")
                         return False
+                    
+                    try:
+                        # [2025-05-20T23:50:00-04:00] Convert the dictionary to a CompleteJobMessage object
+                        # Extract required fields from the dictionary
+                        worker_id = complete_message.get("worker_id", "")
+                        result = complete_message.get("result", None)
                         
-                    client_success = await self.send_to_client(client_id, complete_message)
+                        # Create a CompleteJobMessage object
+                        from .message_models import CompleteJobMessage
+                        complete_job_message = CompleteJobMessage(
+                            job_id=job_id,
+                            worker_id=worker_id,
+                            result=result
+                        )
+                        
+                        logger.info(f"[2025-05-20T23:50:00-04:00] Created CompleteJobMessage object for job {job_id}")
+                        client_success = await self.send_to_client(client_id, complete_job_message)
+                    except Exception as e:
+                        logger.error(f"[2025-05-20T23:50:00-04:00] Error creating CompleteJobMessage: {str(e)}")
+                        logger.exception("Complete stack trace:")
+                        return False
                     
                     if not client_success:
                         logger.warning(f"[2025-05-20T23:48:00-04:00] Failed to forward completion message for job {job_id} to client {client_id}")

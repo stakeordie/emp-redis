@@ -639,13 +639,13 @@ class MessageHandler(MessageHandlerInterface):
         # Since we've removed the Redis publication, we need to send this message directly
         if storage_success:
             try:
-                # Create a complete job message to send to clients
-                complete_message = {
-                    "type": "complete_job",
-                    "timestamp": time.time(),
-                    "job_id": job_id,
-                    "result": result
-                }
+                # [2025-05-20T23:51:00-04:00] Create a proper CompleteJobMessage object
+                # This ensures type compatibility with the send_to_client method
+                complete_message = CompleteJobMessage(
+                    job_id=job_id,
+                    worker_id=worker_id,  # We have the worker_id from the function parameters
+                    result=result
+                )
                 
                 # Send the complete job message to all clients subscribed to this job
                 logger.info(f"[2025-05-20T23:25:00-04:00] Sending complete_job message directly for job {job_id}")
@@ -673,8 +673,28 @@ class MessageHandler(MessageHandlerInterface):
             stored_size = len(stored_result) if isinstance(stored_result, (str, bytes)) else "unknown"
             logger.info(f"[REDIS-VERIFY] Raw stored result size: {stored_size} bytes")
             
-            # Log a preview of the raw result
-            preview = stored_result[:200] + "..." if isinstance(stored_result, (str, bytes)) and len(stored_result) > 200 else stored_result
+            # [2025-05-20T23:52:00-04:00] Log a preview of the raw result with proper type handling
+            if isinstance(stored_result, bytes):
+                # Handle bytes by decoding or using a safe representation
+                try:
+                    # Try to decode as UTF-8 first
+                    if len(stored_result) > 200:
+                        preview = stored_result[:200].decode('utf-8', errors='replace') + "..."
+                    else:
+                        preview = stored_result.decode('utf-8', errors='replace')
+                except Exception:
+                    # Fallback to a safe representation
+                    preview = f"<binary data, {len(stored_result)} bytes>"
+            elif isinstance(stored_result, str):
+                # Handle strings
+                if len(stored_result) > 200:
+                    preview = stored_result[:200] + "..."
+                else:
+                    preview = stored_result
+            else:
+                # Handle other types
+                preview = repr(stored_result)
+                
             logger.info(f"[REDIS-VERIFY] Raw stored result preview: {preview}")
             
             # [2025-05-20T19:15:00-04:00] Process the stored result based on its type

@@ -5,6 +5,20 @@ All notable changes to the EMP Redis project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- [2025-05-20T23:52:00-04:00] Fixed bytes/string handling in result logging:
+  - Improved handling of binary data in log messages
+  - Added proper decoding of bytes to strings with error handling
+  - Fixed string concatenation issues with bytes objects
+  - Enhanced result preview generation with type-specific handling
+  - Added fallback representation for binary data
+
+- [2025-05-20T23:51:00-04:00] Fixed type compatibility in message handling:
+  - Replaced dictionaries with proper CompleteJobMessage objects
+  - Updated message_handler.py to create proper message objects
+  - Modified connection_manager.py to convert dictionaries to message objects
+  - Added robust error handling for message creation
+  - Fixed mypy type errors with send_to_client method
+
 - [2025-05-20T23:49:00-04:00] Fixed type checking issues in connection handling:
   - Added proper type checking for message attributes in send_to_client
   - Enhanced forward_job_completion with robust type validation
