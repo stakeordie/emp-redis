@@ -756,17 +756,32 @@ class ConnectionManager(ConnectionManagerInterface):
                 
                 # Log information about the message being sent
                 if isinstance(parsed_message, dict):
-                    message_type = parsed_message.get("type")
-                    job_id = parsed_message.get("job_id")
-                    status = parsed_message.get("status")
+                    # [2025-05-20T23:47:00-04:00] Add proper type checking with default values
+                    # This ensures we don't pass None values to methods expecting strings
+                    message_type = parsed_message.get("type", "")  # Default to empty string if not present
+                    job_id = parsed_message.get("job_id", "")      # Default to empty string if not present
+                    status = parsed_message.get("status", "")      # Default to empty string if not present
                     
-                    if message_type == "complete_job":
-                        # This is a complete_job message sent directly from message_handler.py
-                        logger.info(f"[2025-05-20T19:23:00-04:00] Forwarding complete_job message for job {job_id}")
-                    elif message_type == "update_job_progress" and status == "completed":
-                        # This is a job completion update - we'll just forward it as is
-                        # The complete_job message will be sent separately by message_handler.py
-                        logger.info(f"[2025-05-20T19:23:00-04:00] Forwarding job completion update for job {job_id}")
+                    # Additional type safety check
+                    if not isinstance(message_type, str):
+                        message_type = str(message_type) if message_type is not None else ""
+                    if not isinstance(job_id, str):
+                        job_id = str(job_id) if job_id is not None else ""
+                    if not isinstance(status, str):
+                        status = str(status) if status is not None else ""
+                    
+                    # Only log if we have a valid job_id
+                    if job_id:
+                        if message_type == "complete_job":
+                            # This is a complete_job message sent directly from message_handler.py
+                            logger.info(f"[2025-05-20T23:47:00-04:00] Forwarding complete_job message for job {job_id}")
+                        elif message_type == "update_job_progress" and status == "completed":
+                            # This is a job completion update - we'll just forward it as is
+                            # The complete_job message will be sent separately by message_handler.py
+                            logger.info(f"[2025-05-20T23:47:00-04:00] Forwarding job completion update for job {job_id}")
+                    else:
+                        logger.debug(f"[2025-05-20T23:47:00-04:00] Message has no job_id: {message_type}")
+                        
                         
                 # We no longer need to query Redis or send additional messages here
                 # The message_handler.py now handles this in the correct sequence
@@ -1588,7 +1603,12 @@ class ConnectionManager(ConnectionManagerInterface):
             bool: True if the message was successfully forwarded, False otherwise
         """
         try:
-            logger.info(f"[2025-05-20T23:30:00-04:00] Forwarding job completion message for job {job_id}")
+            # [2025-05-20T23:48:00-04:00] Add type safety check for job_id
+            if not job_id or not isinstance(job_id, str):
+                logger.error(f"[2025-05-20T23:48:00-04:00] Invalid job_id: {job_id}")
+                return False
+                
+            logger.info(f"[2025-05-20T23:48:00-04:00] Forwarding job completion message for job {job_id}")
             
             client_id = None
             client_success = False
@@ -1600,24 +1620,29 @@ class ConnectionManager(ConnectionManagerInterface):
                 
                 # Check if the client is still connected
                 if client_id not in self.client_connections:
-                    logger.warning(f"[2025-05-20T23:30:00-04:00] Client {client_id} subscribed to job {job_id} is no longer connected")
+                    logger.warning(f"[2025-05-20T23:48:00-04:00] Client {client_id} subscribed to job {job_id} is no longer connected")
                     # Remove the subscription
                     del self.job_subscriptions[job_id]
                 else:
                     # Forward the completion message directly to the client
-                    logger.info(f"[2025-05-20T23:30:00-04:00] Sending complete_job message to client {client_id} for job {job_id}")
+                    logger.info(f"[2025-05-20T23:48:00-04:00] Sending complete_job message to client {client_id} for job {job_id}")
+                    # [2025-05-20T23:48:00-04:00] Ensure complete_message is a valid message object
+                    if not isinstance(complete_message, dict):
+                        logger.error(f"[2025-05-20T23:48:00-04:00] Invalid complete_message type: {type(complete_message).__name__}")
+                        return False
+                        
                     client_success = await self.send_to_client(client_id, complete_message)
                     
                     if not client_success:
-                        logger.warning(f"[2025-05-20T23:30:00-04:00] Failed to forward completion message for job {job_id} to client {client_id}")
+                        logger.warning(f"[2025-05-20T23:48:00-04:00] Failed to forward completion message for job {job_id} to client {client_id}")
             else:
-                logger.debug(f"[2025-05-20T23:30:00-04:00] No clients subscribed to job {job_id}")
+                logger.debug(f"[2025-05-20T23:48:00-04:00] No clients subscribed to job {job_id}")
             
             # Forward to all monitors regardless of client subscription status
             monitor_success = False
             if self.monitor_connections:
                 # Add client_id to the message for monitors
-                monitor_message = complete_message.copy()
+                monitor_message = complete_message.copy() if isinstance(complete_message, dict) else {"job_id": job_id, "type": "complete_job"}
                 monitor_message["client_id"] = client_id
                 
                 # Send to all monitors
@@ -1627,17 +1652,17 @@ class ConnectionManager(ConnectionManagerInterface):
                         await websocket.send_text(json.dumps(monitor_message))
                         monitor_count += 1
                     except Exception as e:
-                        logger.warning(f"[2025-05-20T23:30:00-04:00] Failed to send completion message to monitor {monitor_id}: {str(e)}")
+                        logger.warning(f"[2025-05-20T23:48:00-04:00] Failed to send completion message to monitor {monitor_id}: {str(e)}")
                 
                 monitor_success = monitor_count > 0
                 if monitor_success:
-                    logger.info(f"[2025-05-20T23:30:00-04:00] Forwarded completion message for job {job_id} to {monitor_count} monitors")
+                    logger.info(f"[2025-05-20T23:48:00-04:00] Forwarded completion message for job {job_id} to {monitor_count} monitors")
             
             # Return true if either client or monitor forwarding was successful
             return client_success or monitor_success
             
         except Exception as e:
-            logger.error(f"[2025-05-20T23:30:00-04:00] Error forwarding job completion message: {str(e)}")
+            logger.error(f"[2025-05-20T23:48:00-04:00] Error forwarding job completion message: {str(e)}")
             logger.exception("Complete stack trace:")
             return False
     
