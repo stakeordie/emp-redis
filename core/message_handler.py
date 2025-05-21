@@ -635,11 +635,29 @@ class MessageHandler(MessageHandlerInterface):
         else:
             logger.error(f"[2025-05-20T21:18:00-04:00] Failed to store result for job {job_id} in Redis")
         
-        # [2025-05-20T21:19:00-04:00] We no longer need to send the complete_job message directly
-        # The job update will be published to Redis after the result is stored
-        # The connection_manager will detect this and send the complete_job message
-        logger.info(f"[2025-05-20T21:19:00-04:00] Job completion processing finished for job {job_id}")
-        # The Redis service will publish the job update, which will trigger the connection_manager
+        # [2025-05-20T23:25:00-04:00] Send the complete_job message directly after storing the result
+        # Since we've removed the Redis publication, we need to send this message directly
+        if storage_success:
+            try:
+                # Create a complete job message to send to clients
+                complete_message = {
+                    "type": "complete_job",
+                    "timestamp": time.time(),
+                    "job_id": job_id,
+                    "result": result
+                }
+                
+                # Send the complete job message to all clients subscribed to this job
+                logger.info(f"[2025-05-20T23:25:00-04:00] Sending complete_job message directly for job {job_id}")
+                await self.connection_manager.forward_job_completion(job_id, complete_message)
+                logger.info(f"[2025-05-20T23:25:00-04:00] Successfully sent complete_job message for job {job_id}")
+            except Exception as e:
+                logger.error(f"[2025-05-20T23:25:00-04:00] Error sending complete_job message: {str(e)}")
+                logger.exception("Complete stack trace:")
+        else:
+            logger.error(f"[2025-05-20T23:25:00-04:00] Not sending complete_job message due to storage failure for job {job_id}")
+            
+        logger.info(f"[2025-05-20T23:25:00-04:00] Job completion processing finished for job {job_id}")
 
         
         # [2025-05-20T19:15:00-04:00] Verify the data was stored correctly by immediately querying Redis

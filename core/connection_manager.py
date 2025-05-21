@@ -1576,6 +1576,71 @@ class ConnectionManager(ConnectionManagerInterface):
             logger.error(f"[connection_manager.py forward_job_progress 5] Error forwarding job progress update: {str(e)}")
             return False
             
+    async def forward_job_completion(self, job_id: str, complete_message: Dict[str, Any]) -> bool:
+        """
+        Forward job completion message to the subscribed client and all monitors
+        
+        Args:
+            job_id: The ID of the completed job
+            complete_message: The job completion message to forward
+            
+        Returns:
+            bool: True if the message was successfully forwarded, False otherwise
+        """
+        try:
+            logger.info(f"[2025-05-20T23:30:00-04:00] Forwarding job completion message for job {job_id}")
+            
+            client_id = None
+            client_success = False
+            
+            # Check if any client is subscribed to this job
+            if job_id in self.job_subscriptions:
+                # Get the client ID subscribed to this job
+                client_id = self.job_subscriptions[job_id]
+                
+                # Check if the client is still connected
+                if client_id not in self.client_connections:
+                    logger.warning(f"[2025-05-20T23:30:00-04:00] Client {client_id} subscribed to job {job_id} is no longer connected")
+                    # Remove the subscription
+                    del self.job_subscriptions[job_id]
+                else:
+                    # Forward the completion message directly to the client
+                    logger.info(f"[2025-05-20T23:30:00-04:00] Sending complete_job message to client {client_id} for job {job_id}")
+                    client_success = await self.send_to_client(client_id, complete_message)
+                    
+                    if not client_success:
+                        logger.warning(f"[2025-05-20T23:30:00-04:00] Failed to forward completion message for job {job_id} to client {client_id}")
+            else:
+                logger.debug(f"[2025-05-20T23:30:00-04:00] No clients subscribed to job {job_id}")
+            
+            # Forward to all monitors regardless of client subscription status
+            monitor_success = False
+            if self.monitor_connections:
+                # Add client_id to the message for monitors
+                monitor_message = complete_message.copy()
+                monitor_message["client_id"] = client_id
+                
+                # Send to all monitors
+                monitor_count = 0
+                for monitor_id, websocket in list(self.monitor_connections.items()):
+                    try:
+                        await websocket.send_text(json.dumps(monitor_message))
+                        monitor_count += 1
+                    except Exception as e:
+                        logger.warning(f"[2025-05-20T23:30:00-04:00] Failed to send completion message to monitor {monitor_id}: {str(e)}")
+                
+                monitor_success = monitor_count > 0
+                if monitor_success:
+                    logger.info(f"[2025-05-20T23:30:00-04:00] Forwarded completion message for job {job_id} to {monitor_count} monitors")
+            
+            # Return true if either client or monitor forwarding was successful
+            return client_success or monitor_success
+            
+        except Exception as e:
+            logger.error(f"[2025-05-20T23:30:00-04:00] Error forwarding job completion message: {str(e)}")
+            logger.exception("Complete stack trace:")
+            return False
+    
     async def forward_connector_ws_status(self, status_message: BaseMessage) -> bool:
         """Forward connector WebSocket status message to all monitors
         
