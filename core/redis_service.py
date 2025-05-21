@@ -384,13 +384,18 @@ class RedisService(RedisServiceInterface):
         else:
             logger.warning(f"[2025-05-20T18:29:00-04:00] No result provided for job {job_id}")
         
-        logger.info(f"[2025-05-20T18:29:00-04:00] Job completed: {job_id}")
+        logger.info(f"[2025-05-20T21:17:00-04:00] Job completed: {job_id}")
         
-        # Send the standard completion event with status "completed"
+        # [2025-05-20T21:17:00-04:00] Return the stored result data first
+        # This ensures the result is fully stored before the job update is published
+        stored_result = True
+        
+        # [2025-05-20T21:17:00-04:00] Send the standard completion event with status "completed"
         # The connection_manager will detect this and send an additional complete_job message
-        self.publish_job_update(job_id, "completed", result=result, worker_id=worker_id)
+        if stored_result:
+            self.publish_job_update(job_id, "completed", result=result, worker_id=worker_id)
         
-        return True
+        return stored_result
         
     def cancel_job(self, job_id: str, reason: str = "Manually cancelled") -> bool:
         """Permanently cancel a job and remove it from the queue.

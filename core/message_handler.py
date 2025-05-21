@@ -613,11 +613,25 @@ class MessageHandler(MessageHandlerInterface):
         else:
             logger.warning(f"[REDIS-VERIFY] ORIGINAL result for job {job_id} is None or empty")
         
-        # Store the result in Redis
-        self.redis_service.complete_job(
+        # [2025-05-20T21:18:00-04:00] Store the result in Redis and ensure it completes
+        # This will store the result and return only after the data is confirmed to be stored
+        storage_success = self.redis_service.complete_job(
             job_id=job_id,
             result=result  # Pass the full result data from the worker
         )
+        
+        # [2025-05-20T21:18:00-04:00] Log the storage result
+        if storage_success:
+            logger.info(f"[2025-05-20T21:18:00-04:00] Successfully stored result for job {job_id} in Redis")
+        else:
+            logger.error(f"[2025-05-20T21:18:00-04:00] Failed to store result for job {job_id} in Redis")
+        
+        # [2025-05-20T21:19:00-04:00] We no longer need to send the complete_job message directly
+        # The job update will be published to Redis after the result is stored
+        # The connection_manager will detect this and send the complete_job message
+        logger.info(f"[2025-05-20T21:19:00-04:00] Job completion processing finished for job {job_id}")
+        # The Redis service will publish the job update, which will trigger the connection_manager
+
         
         # [2025-05-20T19:15:00-04:00] Verify the data was stored correctly by immediately querying Redis
         job_data = self.redis_service.get_job_status(job_id)
@@ -1391,41 +1405,64 @@ class MessageHandler(MessageHandlerInterface):
                 # Parse message data
                 data = json.loads(message["data"])
                 job_id = data.get("job_id")
+                message_type = data.get("type")
+                status = data.get("status")
+                
+                # [2025-05-20T20:55:00-04:00] Log all incoming job update messages
+                logger.info(f"[JOB-UPDATE] Received message: job_id={job_id}, type={message_type}, status={status}")
                 
                 if job_id:
-                    # [2025-05-20T19:22:00-04:00] Check if this is a job completion message
-                    if data.get("status") == "completed" and data.get("type") == "update_job_progress":
-                        logger.info(f"[2025-05-20T19:22:00-04:00] Detected job completion for job {job_id}")
+                    # [2025-05-20T20:55:00-04:00] Check if this is a job completion message
+                    if status == "completed" and message_type == "update_job_progress":
+                        logger.info(f"[JOB-COMPLETE] Detected job completion for job {job_id}")
                         
                         # First, forward the original update_job_progress message
+                        logger.info(f"[JOB-COMPLETE] Forwarding original update_job_progress message for job {job_id}")
                         await self.connection_manager.send_job_update(job_id, data)
                         
                         # Get the result data from Redis after ensuring it's stored
+                        logger.info(f"[JOB-COMPLETE] Retrieving result data from Redis for job {job_id}")
                         job_data = self.redis_service.get_job_status(job_id)
+                        logger.info(f"[JOB-COMPLETE] Redis returned job_data: {job_data is not None}")
+                        
                         result = {}
                         
                         if job_data and "result" in job_data:
                             stored_result = job_data["result"]
-                            logger.info(f"[2025-05-20T19:22:00-04:00] Retrieved result for completed job {job_id}")
+                            logger.info(f"[JOB-COMPLETE] Retrieved result for job {job_id}, type: {type(stored_result).__name__}")
                             
                             # Process the result based on its type
                             try:
                                 if isinstance(stored_result, dict):
                                     # If it's already a dictionary, use it directly
+                                    logger.info(f"[JOB-COMPLETE] Result is already a dictionary")
                                     result = stored_result
                                 elif isinstance(stored_result, bytes):
                                     # If it's bytes, decode to string first
+                                    logger.info(f"[JOB-COMPLETE] Result is bytes, decoding to string")
                                     decoded = stored_result.decode('utf-8')
                                     # Then parse the string as JSON
                                     result = json.loads(decoded)
+                                    logger.info(f"[JOB-COMPLETE] Successfully parsed bytes as JSON")
                                 elif isinstance(stored_result, str):
                                     # If it's a string, parse it as JSON
+                                    logger.info(f"[JOB-COMPLETE] Result is string, parsing as JSON")
                                     result = json.loads(stored_result)
+                                    logger.info(f"[JOB-COMPLETE] Successfully parsed string as JSON")
                                 else:
-                                    logger.warning(f"[2025-05-20T19:22:00-04:00] Unexpected result type: {type(stored_result).__name__}")
+                                    logger.warning(f"[JOB-COMPLETE] Unexpected result type: {type(stored_result).__name__}")
                                     result = stored_result
+                                
+                                # Log the result keys if it's a dictionary
+                                if isinstance(result, dict):
+                                    logger.info(f"[JOB-COMPLETE] Result keys: {list(result.keys())}")
                             except Exception as e:
-                                logger.error(f"[2025-05-20T19:22:00-04:00] Error processing result: {str(e)}")
+                                logger.error(f"[JOB-COMPLETE] Error processing result: {str(e)}")
+                                logger.exception("[JOB-COMPLETE] Complete stack trace:")
+                        else:
+                            logger.warning(f"[JOB-COMPLETE] No result found in Redis for job {job_id}")
+                            if job_data:
+                                logger.info(f"[JOB-COMPLETE] Available job_data keys: {list(job_data.keys())}")
                         
                         # Create and send the complete_job message with the result data
                         complete_job_message = {
@@ -1439,10 +1476,12 @@ class MessageHandler(MessageHandlerInterface):
                         }
                         
                         # Send the complete_job message directly
-                        logger.info(f"[2025-05-20T19:22:00-04:00] Sending complete_job message for job {job_id}")
-                        await self.connection_manager.send_job_update(job_id, complete_job_message)
+                        logger.info(f"[JOB-COMPLETE] Sending complete_job message for job {job_id}")
+                        success = await self.connection_manager.send_job_update(job_id, complete_job_message)
+                        logger.info(f"[JOB-COMPLETE] Complete_job message sent successfully: {success}")
                     else:
                         # For non-completion messages, just forward them as before
+                        logger.info(f"[JOB-UPDATE] Forwarding non-completion message for job {job_id}")
                         await self.connection_manager.send_job_update(job_id, data)
             except Exception as e:
                 logger.error(f"Error handling Redis job update message: {str(e)}")
