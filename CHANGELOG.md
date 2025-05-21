@@ -5,6 +5,12 @@ All notable changes to the EMP Redis project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- [2025-05-20T19:25:00-04:00] Fixed job completion message flow to ensure correct order of operations:
+  - Moved complete_job message generation from connection_manager.py to message_handler.py
+  - Ensured job result data is properly stored in Redis before sending complete_job messages
+  - Added proper type checking and handling for different result data formats
+  - Eliminated duplicate complete_job messages
+  - Improved logging to track message flow and data processing
 - [2025-05-20T19:17:00-04:00] Enhanced job result data handling in connection_manager.py and message_handler.py:
   - Added robust type checking for result data retrieved from Redis
   - Improved handling of different result formats (dictionary, string, bytes)

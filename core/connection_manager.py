@@ -749,140 +749,32 @@ class ConnectionManager(ConnectionManagerInterface):
             await websocket.send_text(message_text)
             logger.debug(f"[connection_manager.py send_to_client()] Sent message of type {type(message).__name__} to client {client_id}: {message_text}")
             
-            # Check for completed status and send additional complete_job message if needed
+            # [2025-05-20T19:23:00-04:00] Check message type - we no longer need to send complete_job messages here
+            # The message_handler.py now handles this directly in the correct order
             try:
                 parsed_message = json.loads(message_text) if isinstance(message_text, str) else message_text
                 
-                if isinstance(parsed_message, dict) and parsed_message.get("status") == "completed" and parsed_message.get("type") == "update_job_progress":
-                    # [2025-05-20T18:24:00-04:00] Get the job ID from the message
+                # Log information about the message being sent
+                if isinstance(parsed_message, dict):
+                    message_type = parsed_message.get("type")
                     job_id = parsed_message.get("job_id")
+                    status = parsed_message.get("status")
                     
-                    # [2025-05-20T18:26:00-04:00] Add a small delay before getting the job status from Redis
-                    # This helps ensure the job result data is available in Redis
-                    import asyncio
-                    logger.info(f"[2025-05-20T18:26:00-04:00] Adding delay before getting job status for job {job_id}")
-                    await asyncio.sleep(1)  # 500ms delay
-                    
-                    # [2025-05-20T18:24:00-04:00] Get the full result data from Redis
-                    from core.redis_service import RedisService
-                    redis_service = RedisService()
-                    job_data = redis_service.get_job_status(job_id)
-                    logger.info(f"[2025-05-20T18:26:00-04:00] Retrieved job data from Redis: {job_data is not None}")
-                    
-                    # [2025-05-20T18:26:00-04:00] If job data is not available, try again after a longer delay
-                    if not job_data or "result" not in job_data:
-                        logger.warning(f"[2025-05-20T18:26:00-04:00] Job data not available on first try, waiting longer for job {job_id}")
-                        await asyncio.sleep(1.0)  # 1 second delay
-                        job_data = redis_service.get_job_status(job_id)
-                        logger.info(f"[2025-05-20T18:26:00-04:00] Retrieved job data after second try: {job_data is not None}")
-                    
-                    
-                    # [2025-05-20T18:47:00-04:00] Extract the result data from job_data with enhanced logging
-                    result = {}
-                    if job_data:
-                        logger.info(f"[REDIS-RETRIEVE] Job data keys for job {job_id}: {list(job_data.keys()) if isinstance(job_data, dict) else 'not a dict'}")
+                    if message_type == "complete_job":
+                        # This is a complete_job message sent directly from message_handler.py
+                        logger.info(f"[2025-05-20T19:23:00-04:00] Forwarding complete_job message for job {job_id}")
+                    elif message_type == "update_job_progress" and status == "completed":
+                        # This is a job completion update - we'll just forward it as is
+                        # The complete_job message will be sent separately by message_handler.py
+                        logger.info(f"[2025-05-20T19:23:00-04:00] Forwarding job completion update for job {job_id}")
                         
-                        if "result" in job_data:
-                            raw_result = job_data["result"]
-                            logger.info(f"[REDIS-RETRIEVE] Raw result type: {type(raw_result).__name__}, length: {len(raw_result) if raw_result else 0}")
-                            
-                            # Log a preview of the raw result
-                            preview = raw_result[:200] + "..." if isinstance(raw_result, (str, bytes)) and len(raw_result) > 200 else raw_result
-                            logger.info(f"[REDIS-RETRIEVE] Raw result preview: {preview}")
-                            
-                            try:
-                                # [2025-05-20T19:13:00-04:00] Handle different result types
-                                # If result is already a dictionary, use it directly
-                                if isinstance(raw_result, dict):
-                                    logger.info(f"[REDIS-RETRIEVE] Result is already a dictionary, no parsing needed")
-                                    result = raw_result
-                                # If result is bytes, decode to string first
-                                elif isinstance(raw_result, bytes):
-                                    raw_result = raw_result.decode('utf-8')
-                                    logger.info(f"[REDIS-RETRIEVE] Decoded bytes to string, length: {len(raw_result)}")
-                                    
-                                    # Then parse the string as JSON
-                                    logger.info(f"[REDIS-RETRIEVE] Parsing JSON string: {raw_result[:100] if len(raw_result) > 100 else raw_result}...")
-                                    result = json.loads(raw_result)
-                                # If result is a string, parse it as JSON
-                                elif isinstance(raw_result, str):
-                                    logger.info(f"[REDIS-RETRIEVE] Parsing JSON string: {raw_result[:100] if len(raw_result) > 100 else raw_result}...")
-                                    result = json.loads(raw_result)
-                                # Handle other types
-                                else:
-                                    logger.warning(f"[REDIS-RETRIEVE] Unexpected result type: {type(raw_result).__name__}")
-                                    result = raw_result
-                                
-                                if isinstance(result, dict):
-                                    result_keys = list(result.keys())
-                                    logger.info(f"[REDIS-RETRIEVE] Parsed result keys: {result_keys}")
-                                    
-                                    # Log the first few values
-                                    for key, value in list(result.items())[:3]:  # Show up to 3 key-value pairs
-                                        value_preview = str(value)[:100] + "..." if isinstance(value, str) and len(value) > 100 else value
-                                        logger.info(f"[REDIS-RETRIEVE] Result key: {key}, value: {value_preview}")
-                                else:
-                                    logger.warning(f"[REDIS-RETRIEVE] Parsed result is not a dict: {type(result).__name__}")
-                                
-                                logger.info(f"[REDIS-RETRIEVE] Successfully retrieved result data for job {job_id}")
-                            except Exception as e:
-                                logger.error(f"[REDIS-RETRIEVE] Error parsing result data for job {job_id}: {str(e)}")
-                                logger.error(f"[REDIS-RETRIEVE] Raw result causing error: {raw_result[:200]}...")
-                        else:
-                            logger.warning(f"[REDIS-RETRIEVE] No 'result' field in job data for job {job_id}")
-                    else:
-                        logger.warning(f"[REDIS-RETRIEVE] No job data found for job {job_id}")
-                        
-                    # [2025-05-20T18:47:00-04:00] If result is still empty, try to get it from the original message
-                    if not result and "result" in parsed_message:
-                        original_result = parsed_message.get("result")
-                        if original_result:
-                            logger.info(f"[REDIS-RETRIEVE] Using result from original message for job {job_id}")
-                            result = original_result
-                            
-                    # [2025-05-20T18:47:00-04:00] Log the final result that will be sent to the client
-                    if result:
-                        if isinstance(result, dict):
-                            final_keys = list(result.keys())
-                            logger.info(f"[REDIS-RETRIEVE] FINAL result keys for job {job_id}: {final_keys}")
-                        else:
-                            logger.info(f"[REDIS-RETRIEVE] FINAL result type for job {job_id}: {type(result).__name__}")
-                    else:
-                        logger.warning(f"[REDIS-RETRIEVE] FINAL result for job {job_id} is empty!")
-                        
-                    # [2025-05-20T18:47:00-04:00] Check if connector_details contains useful information
-                    if "connector_details" in parsed_message and parsed_message["connector_details"]:
-                        connector_details = parsed_message["connector_details"]
-                        logger.info(f"[REDIS-RETRIEVE] Message has connector_details: {connector_details is not None}")
-                        if isinstance(connector_details, dict):
-                            logger.info(f"[REDIS-RETRIEVE] Connector details keys: {list(connector_details.keys())}")
-                            
-                            # Check if connector_details has result or output data
-                            if "result" in connector_details:
-                                logger.info(f"[REDIS-RETRIEVE] Found result in connector_details")
-                            if "output" in connector_details:
-                                logger.info(f"[REDIS-RETRIEVE] Found output in connector_details")
-                    else:
-                        logger.info(f"[REDIS-RETRIEVE] Message has no connector_details")
-                        
-                    # [2025-05-20T18:47:00-04:00] Log the entire message for debugging
-                    logger.info(f"[REDIS-RETRIEVE] Complete message structure: {parsed_message}")
+                # We no longer need to query Redis or send additional messages here
+                # The message_handler.py now handles this in the correct sequence
                     
-                    
-                    # Send an explicit complete_job message with the full result data
-                    complete_job_message = {
-                        "type": "complete_job",
-                        "job_id": job_id,
-                        "status": "completed",
-                        "priority": None,
-                        "position": None,
-                        "result": result,  # Use the full result data from Redis
-                        "timestamp": time.time()
-                    }
-                    await websocket.send_text(json.dumps(complete_job_message))
-                    logger.info(f"[2025-05-20T18:24:00-04:00] Sent complete_job message for job {job_id} with full result data")
+                # [2025-05-20T19:24:00-04:00] We no longer need to send a complete_job message here
+                # This is now handled by message_handler.py in the correct sequence
             except Exception as e:
-                logger.error(f"Error sending complete_job message: {str(e)}")
+                logger.error(f"Error processing message: {str(e)}")
                 
             return True
             
