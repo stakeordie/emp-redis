@@ -5,6 +5,12 @@ All notable changes to the EMP Redis project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- [2025-05-20T21:35:00-04:00] Fixed job completion message handling:
+  - Used asyncio.to_thread to properly await the synchronous complete_job method
+  - Added detailed error handling and logging for the thread execution
+  - Ensured proper sequencing of job completion operations
+  - Fixed issue with job completion messages not being sent reliably
+
 - [2025-05-20T21:29:00-04:00] Eliminated duplicate job update messages:
   - Modified RedisService.update_job_progress to not publish redundant updates
   - Modified RedisService.complete_job to not publish redundant updates

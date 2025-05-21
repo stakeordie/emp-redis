@@ -613,12 +613,21 @@ class MessageHandler(MessageHandlerInterface):
         else:
             logger.warning(f"[REDIS-VERIFY] ORIGINAL result for job {job_id} is None or empty")
         
-        # [2025-05-20T21:18:00-04:00] Store the result in Redis and ensure it completes
-        # This will store the result and return only after the data is confirmed to be stored
-        storage_success = self.redis_service.complete_job(
-            job_id=job_id,
-            result=result  # Pass the full result data from the worker
-        )
+        # [2025-05-20T21:34:00-04:00] Store the result in Redis and ensure it completes
+        # Use asyncio.to_thread to run the synchronous complete_job method in a separate thread
+        # This allows us to await its completion without changing the method itself
+        try:
+            logger.info(f"[2025-05-20T21:34:00-04:00] Running complete_job in a separate thread for job {job_id}")
+            storage_success = await asyncio.to_thread(
+                self.redis_service.complete_job,
+                job_id=job_id,
+                result=result  # Pass the full result data from the worker
+            )
+            logger.info(f"[2025-05-20T21:34:00-04:00] Completed running complete_job in thread for job {job_id}")
+        except Exception as e:
+            logger.error(f"[2025-05-20T21:34:00-04:00] Error running complete_job in thread: {str(e)}")
+            logger.exception("Complete stack trace:")
+            storage_success = False
         
         # [2025-05-20T21:18:00-04:00] Log the storage result
         if storage_success:
