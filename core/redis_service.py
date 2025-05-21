@@ -330,8 +330,10 @@ class RedisService(RedisServiceInterface):
         self.client.hset(job_key, "last_updated_at", current_time)
         logger.info(f"[redis_service.py update_job_progress()] Updated last_updated_at for job {job_id} to {current_time}")
         
-        # Publish progress update event
-        self.publish_job_update(job_id, "processing", progress=progress, message=message, worker_id=worker_id)
+        # [2025-05-20T21:27:00-04:00] Don't publish progress update events
+        # This eliminates duplicate messages since the original message is already being forwarded
+        # The original message contains more information (connector_details) than what we would publish here
+        # self.publish_job_update(job_id, "processing", progress=progress, message=message, worker_id=worker_id)
         
         return True
     
@@ -386,14 +388,15 @@ class RedisService(RedisServiceInterface):
         
         logger.info(f"[2025-05-20T21:17:00-04:00] Job completed: {job_id}")
         
-        # [2025-05-20T21:17:00-04:00] Return the stored result data first
-        # This ensures the result is fully stored before the job update is published
+        # [2025-05-20T21:28:00-04:00] Return the stored result data first
+        # This ensures the result is fully stored before proceeding
         stored_result = True
         
-        # [2025-05-20T21:17:00-04:00] Send the standard completion event with status "completed"
-        # The connection_manager will detect this and send an additional complete_job message
-        if stored_result:
-            self.publish_job_update(job_id, "completed", result=result, worker_id=worker_id)
+        # [2025-05-20T21:28:00-04:00] Don't publish job updates
+        # This eliminates duplicate messages since the original message is already being forwarded
+        # The original message contains more information (connector_details) than what we would publish here
+        # if stored_result:
+        #     self.publish_job_update(job_id, "completed", result=result, worker_id=worker_id)
         
         return stored_result
         

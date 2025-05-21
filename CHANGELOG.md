@@ -5,6 +5,12 @@ All notable changes to the EMP Redis project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- [2025-05-20T21:29:00-04:00] Eliminated duplicate job update messages:
+  - Modified RedisService.update_job_progress to not publish redundant updates
+  - Modified RedisService.complete_job to not publish redundant updates
+  - Preserved the more detailed messages with connector details
+  - Improved message flow efficiency by removing unnecessary duplicates
+  - Fixed issue with duplicate "started" and "completed" messages
 - [2025-05-20T21:20:00-04:00] Fixed job completion message sequence:
   - Modified RedisService.complete_job to ensure result storage completes before publishing updates
   - Updated MessageHandler.handle_complete_job to properly await result storage
