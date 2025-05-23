@@ -175,7 +175,11 @@ class BaseWorker:
         # Worker state
         self.status = WorkerStatus.IDLE
         self.current_job_id = None
-
+        
+        # Dictionary to store chunked messages being received
+        # Format: {message_id: {"chunks": [chunk1, chunk2, ...], "total_chunks": N, "received_chunks": M}}
+        self.chunked_messages = {}
+    
     async def async_init(self):
         """Asynchronous initialization of worker components"""
         # Load connectors
@@ -384,7 +388,12 @@ class BaseWorker:
             message_type = message_obj.type
             logger.info(f"[base_worker.py handle_message()]: Received message of type: {message_type}")
             
-            # Handle message based on type
+            # Handle chunked messages
+            if message_type == "chunked_message":
+                await self.handle_chunked_message(message_data)
+                return
+            
+            # Handle different message types
             match(message_type):
                 case MessageType.CONNECTION_ESTABLISHED:
                     logger.info(f"[base_worker.py handle_message()]: Connection established: {getattr(message_obj, 'message', '')}")
@@ -458,6 +467,70 @@ class BaseWorker:
         except Exception as e:
             logger.error(f"[base_worker.py handle_message()]: Error handling message: {str(e)}")
 
+    async def handle_chunked_message(self, message_data):
+        """Handle a chunked message from the hub
+        
+        Args:
+            message_data: Chunked message data
+        """
+        # Extract chunk information
+        message_id = message_data.get("message_id")
+        chunk_index = message_data.get("chunk_index")
+        chunk_count = message_data.get("chunk_count")
+        chunk_data = message_data.get("chunk_data")
+        original_type = message_data.get("original_message_type", "unknown")
+        
+        if not message_id or chunk_index is None or chunk_count is None or chunk_data is None:
+            logger.error(f"[base_worker.py handle_chunked_message()] Invalid chunked message: {message_data}")
+            return
+            
+        # Initialize entry in chunked_messages if this is the first chunk
+        if message_id not in self.chunked_messages:
+            logger.info(f"[base_worker.py handle_chunked_message()] Starting to receive chunked message {message_id} with {chunk_count} chunks")
+            self.chunked_messages[message_id] = {
+                "chunks": [None] * chunk_count,  # Pre-allocate list for all chunks
+                "total_chunks": chunk_count,
+                "received_chunks": 0,
+                "original_type": original_type
+            }
+            
+        # Store this chunk
+        self.chunked_messages[message_id]["chunks"][chunk_index] = chunk_data
+        self.chunked_messages[message_id]["received_chunks"] += 1
+        
+        # Log progress
+        received = self.chunked_messages[message_id]["received_chunks"]
+        total = self.chunked_messages[message_id]["total_chunks"]
+        progress = (received / total) * 100
+        logger.debug(f"[base_worker.py handle_chunked_message()] Received chunk {chunk_index+1}/{chunk_count} ({progress:.1f}%) for message {message_id}")
+        
+        # Check if all chunks have been received
+        if received == total:
+            logger.info(f"[base_worker.py handle_chunked_message()] All {chunk_count} chunks received for message {message_id}. Reassembling...")
+            # Reassemble the complete message
+            complete_data = "".join(self.chunked_messages[message_id]["chunks"])
+            
+            try:
+                # Parse the reassembled JSON
+                complete_message = json.loads(complete_data)
+                
+                # Set the original message type
+                complete_message["type"] = self.chunked_messages[message_id]["original_type"]
+                
+                # Clean up the entry
+                del self.chunked_messages[message_id]
+                
+                # Log success
+                logger.info(f"[base_worker.py handle_chunked_message()] Successfully reassembled chunked message {message_id} of type {complete_message['type']}")
+                
+                # Handle the reassembled message
+                await self.handle_message(complete_message)
+                
+            except json.JSONDecodeError as e:
+                logger.error(f"[base_worker.py handle_chunked_message()] Failed to parse reassembled message: {str(e)}")
+                # Clean up the failed entry
+                del self.chunked_messages[message_id]
+    
     async def handle_job_notification(self, websocket, message_obj):
         """Handle job notification message from Redis Hub
         
