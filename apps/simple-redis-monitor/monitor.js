@@ -1193,12 +1193,27 @@ function handleStatsBroadcast(parsedMessage, rawMessage, source = 'unknown') {
     // Log the received broadcast with detailed information
     addLogEntry(`Received stats broadcast with ${Object.keys(workers).length} workers and ${connections.clients ? connections.clients.length : 0} clients`, 'info');
     
-    // [2025-04-06 19:58] Improved worker state handling to prevent workers from disappearing
-    // Save existing worker data to preserve important fields like current_job_id
+    // [2025-05-23T09:45:00-04:00] Fixed issue with stale worker cards in the UI
+    // First, save existing worker data to preserve important fields like current_job_id
     const existingWorkers = { ...state.workers };
     
-    // Update worker information by merging with existing data instead of replacing
+    // Clear the workers state to start fresh - this ensures we only keep workers that are actually connected
+    state.workers = {};
+    
+    // Get the list of actually connected workers from the connections data
+    const connectedWorkerIds = connections.workers || [];
+    
+    // Log the connected workers for debugging
+    console.log(`[2025-05-23T09:45:00-04:00] Connected workers from backend: ${connectedWorkerIds.length}`, connectedWorkerIds);
+    
+    // Only process workers that are actually connected according to the connections data
     Object.entries(workers).forEach(([workerId, workerData]) => {
+        // Skip workers that aren't in the connected workers list
+        if (!connectedWorkerIds.includes(workerId)) {
+            console.log(`[2025-05-23T09:45:00-04:00] Skipping disconnected worker: ${workerId}`);
+            return;
+        }
+        
         // Get existing worker data or create a new object
         const existingWorker = existingWorkers[workerId] || {};
         
@@ -1209,7 +1224,8 @@ function handleStatsBroadcast(parsedMessage, rawMessage, source = 'unknown') {
             status: workerData.status || existingWorker.status || 'unknown',
             connectedAt: existingWorker.connectedAt || Date.now(),
             jobsProcessed: workerData.jobs_processed || existingWorker.jobsProcessed || 0,
-            is_accepting_jobs: system.workers.active_workers.find(w => w.id === workerId) !== undefined,
+            is_accepting_jobs: system.workers && system.workers.active_workers ? 
+                system.workers.active_workers.find(w => w.id === workerId) !== undefined : false,
             // Include worker capabilities
             capabilities: workerData.capabilities || existingWorker.capabilities || {},
             // Add any additional worker data that might be useful
@@ -1217,7 +1233,12 @@ function handleStatsBroadcast(parsedMessage, rawMessage, source = 'unknown') {
             // Preserve current job information
             current_job_id: existingWorker.current_job_id || null
         };
+        
+        console.log(`[2025-05-23T09:45:00-04:00] Added connected worker: ${workerId}`);
     });
+    
+    // Log the final worker count
+    console.log(`[2025-05-23T09:45:00-04:00] Final worker count: ${Object.keys(state.workers).length}`);
     
     // Update client connections
     state.clients = {};
@@ -1243,8 +1264,8 @@ function handleStatsBroadcast(parsedMessage, rawMessage, source = 'unknown') {
         });
     }
     
-    // Update stats
-    state.stats.totalWorkers = Object.keys(workers).length;
+    // Update stats with the actual number of connected workers
+    state.stats.totalWorkers = Object.keys(state.workers).length;
     state.stats.totalClients = connections.clients ? connections.clients.length : 0;
     state.stats.totalMonitors = connections.monitors ? connections.monitors.length : 0;
     
