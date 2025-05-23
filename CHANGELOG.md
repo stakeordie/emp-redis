@@ -5,6 +5,12 @@ All notable changes to the EMP Redis project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- [2025-05-23T08:48:00-04:00] Fixed missing connector_statuses field in WorkerStatusMessage class:
+  - Added connector_statuses field to the WorkerStatusMessage model
+  - Fixed error "Unexpected keyword argument 'connector_statuses' for 'WorkerStatusMessage'"
+  - Ensured worker status updates can include connector status information
+  - Added timestamp and detailed comments for future reference
+
 - [2025-05-23T08:47:00-04:00] Fixed WebSocket message size errors by completing worker tracking transition:
   - Completed transition from Redis-based worker tracking to in-memory tracking
   - Fixed inconsistency in `update_worker_capabilities` method that was still writing to Redis

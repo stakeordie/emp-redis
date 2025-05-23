@@ -140,11 +140,13 @@ class WorkerHeartbeatAckMessage(BaseMessage):
     timestamp: float = Field(default_factory=time.time)
     
 class WorkerStatusMessage(BaseMessage):
+    # [2025-05-23T08:46:00-04:00] - Added connector_statuses field to support worker status updates with connector information
     type: str = MessageType.WORKER_STATUS
     message_id: Optional[str] = None
     worker_id: str
     status: Optional[str] = "idle"
     capabilities: Optional[Dict[str, Any]] = None
+    connector_statuses: Optional[Dict[str, Any]] = None  # Status of each connector
     timestamp: float = Field(default_factory=time.time)
 
 # Connector WebSocket Status Message
