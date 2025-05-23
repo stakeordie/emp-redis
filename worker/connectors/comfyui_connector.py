@@ -190,20 +190,11 @@ class ComfyUIConnector(WebSocketConnector):
                 
                 # Try to connect to the WebSocket endpoint
                 headers = self._get_connection_headers()
-                # [2025-05-23T09:31:00-04:00] Updated to use standardized message size limit
-                # Import the standardized limit if not already available
-                try:
-                    from worker.connectors.websocket_connector import MAX_WS_MESSAGE_SIZE_BYTES
-                except ImportError:
-                    # Fallback if import fails
-                    MAX_WS_MESSAGE_SIZE_MB = int(os.environ.get('MAX_WS_MESSAGE_SIZE_MB', 100))
-                    MAX_WS_MESSAGE_SIZE_BYTES = MAX_WS_MESSAGE_SIZE_MB * 1024 * 1024
-                    
                 async with session.ws_connect(
                     ws_url, 
                     headers=headers,
                     timeout=connection_timeout,
-                    max_msg_size=MAX_WS_MESSAGE_SIZE_BYTES  # Use standardized message size limit
+                    max_msg_size=1024*1024*100  # 100MB max message size
                 ) as ws:
                     # Successfully connected, now close it
                     await ws.close()

@@ -59,14 +59,6 @@ except ImportError:
 # Import logger - this should be available in all environments
 from core.utils.logger import logger
 
-# [2025-05-23T09:29:15-04:00] Added standardized WebSocket message size configuration
-# Define consistent size limits as environment variables with defaults
-MAX_WS_MESSAGE_SIZE_MB = int(os.environ.get('MAX_WS_MESSAGE_SIZE_MB', 100))  # 100MB default
-MAX_WS_MESSAGE_SIZE_BYTES = MAX_WS_MESSAGE_SIZE_MB * 1024 * 1024
-
-# Log the configured message size limit
-logger.info(f"[2025-05-23T09:29:30-04:00] WebSocket connector configured with message size limit: {MAX_WS_MESSAGE_SIZE_MB}MB ({MAX_WS_MESSAGE_SIZE_BYTES} bytes)")
-
 class WebSocketConnector(ConnectorInterface):
     """Base class for connectors that use WebSockets to communicate with external services"""
     
@@ -169,7 +161,6 @@ class WebSocketConnector(ConnectorInterface):
                 logger.debug(f"[connectors/websocket_connector.py connect()] WEBSOCKET_STATUS: Starting WebSocket connection with params: heartbeat=30.0, receive_timeout=60.0, autoclose=False, autoping=True")
                 
                 connection_start = time.time()
-                # [2025-05-23T09:30:00-04:00] Updated to use standardized message size limit
                 self.ws = await asyncio.wait_for(
                     self.session.ws_connect(
                         self.ws_url,
@@ -178,8 +169,7 @@ class WebSocketConnector(ConnectorInterface):
                         receive_timeout=60.0,  # Timeout for receiving messages
                         # Do not specify protocols to avoid handshake issues
                         autoclose=False,  # We'll handle closing ourselves
-                        autoping=True,    # Automatically respond to pings
-                        max_msg_size=MAX_WS_MESSAGE_SIZE_BYTES  # Use standardized message size limit
+                        autoping=True     # Automatically respond to pings
                     ),
                     timeout=connection_timeout
                 )
