@@ -111,6 +111,16 @@ class RedisService(RedisServiceInterface):
         # Reference to ConnectionManager (will be set after initialization)
         self.connection_manager = None
         
+        # [2025-05-23T08:45:00-04:00] - Clean up any stale worker records during initialization
+        # This ensures we start with a clean state and prevents WebSocket message size issues
+        try:
+            # We need to delay this cleanup until after __init__ completes
+            # It will be called from set_connection_manager instead
+            pass
+        except Exception as e:
+            logger.error(f"[2025-05-23T08:45:00-04:00] Error during initialization cleanup: {str(e)}")
+            # Non-fatal error, continue initialization
+        
     def set_connection_manager(self, connection_manager):
         """Set the reference to ConnectionManager
         
@@ -118,6 +128,19 @@ class RedisService(RedisServiceInterface):
             connection_manager: The ConnectionManager instance to use
         """
         self.connection_manager = connection_manager
+        
+        # [2025-05-23T08:46:00-04:00] - Clean up any stale worker records now that connection_manager is set
+        try:
+            # Now that we have the connection manager, we can safely clean up stale worker records
+            worker_count = len(self.client.keys(f"{WORKER_PREFIX}*"))
+            if worker_count > 0:
+                logger.info(f"[2025-05-23T08:46:00-04:00] Found {worker_count} stale worker records in Redis, cleaning up...")
+                self.cleanup_stale_worker_records()
+            else:
+                logger.info(f"[2025-05-23T08:46:00-04:00] No stale worker records found in Redis")
+        except Exception as e:
+            logger.error(f"[2025-05-23T08:46:00-04:00] Error during stale worker cleanup: {str(e)}")
+            # Non-fatal error, continue initialization
 
     async def connect_async(self) -> None:
         """
@@ -377,7 +400,7 @@ class RedisService(RedisServiceInterface):
                 
                 # Verify the result was stored correctly
                 stored_result = self.client.hget(job_key, "result")
-                if stored_result:
+                if stored_result is not None:
                     logger.info(f"[2025-05-20T18:29:00-04:00] Verified result stored in Redis for job {job_id}, size: {len(stored_result)} bytes")
                 else:
                     logger.warning(f"[2025-05-20T18:29:00-04:00] Failed to verify result storage for job {job_id}")
@@ -884,22 +907,19 @@ class RedisService(RedisServiceInterface):
         return True
         
     def update_worker_capabilities(self, worker_id: str, capabilities: Dict[str, Any]) -> bool:
-        """Update worker capabilities"""
-        worker_key = f"{WORKER_PREFIX}{worker_id}"
+        """Update worker capabilities (in-memory only, no longer uses Redis)
         
-        # Check if worker exists
-        if not self.client.exists(worker_key):
-            return False
-        
-        # Convert capabilities dict to JSON string
-        capabilities_json = json.dumps(capabilities)
-        
-        # Update worker capabilities
-        self.client.hset(worker_key, "capabilities", capabilities_json)
-        
-        # Refresh TTL for worker key (24 hours)
-        self.client.expire(worker_key, 86400)  # 24 hours in seconds
-        
+        Args:
+            worker_id: ID of the worker to update
+            capabilities: Dictionary of worker capabilities
+            
+        Returns:
+            bool: True if update was successful, False otherwise
+        """
+        # [2025-05-23T08:42:00-04:00] - Fixed inconsistency in worker tracking transition
+        # This is now a no-op since worker capabilities are tracked in memory by ConnectionManager
+        # We always return True to maintain compatibility with existing code
+        logger.debug(f"Worker capabilities update for {worker_id} (in-memory only)")
         return True
         
     def reassign_worker_jobs(self, worker_id: str) -> int:
@@ -1572,86 +1592,54 @@ class RedisService(RedisServiceInterface):
             await self.pubsub.subscribe(**{channel: callback})
 
         
+    def cleanup_stale_worker_records(self) -> bool:
+        """Remove all worker records from Redis
+        
+        This method is used to clean up stale worker records that may have been created
+        during the transition from Redis-based worker tracking to in-memory tracking.
+        
+        Returns:
+            bool: True if cleanup was successful, False otherwise
+        """
+        # [2025-05-23T08:43:00-04:00] - Added method to clean up stale worker records
+        try:
+            # Find all worker keys
+            worker_keys = self.client.keys(f"{WORKER_PREFIX}*")
+            
+            if worker_keys:
+                # Delete all worker keys
+                self.client.delete(*worker_keys)
+                logger.info(f"[2025-05-23T08:43:00-04:00] Cleaned up {len(worker_keys)} stale worker records from Redis")
+                
+            # Also clean up worker sets
+            self.client.delete("workers:all")
+            self.client.delete("workers:idle")
+            self.client.delete("workers:busy")
+            
+            return True
+        except Exception as e:
+            logger.error(f"[2025-05-23T08:43:00-04:00] Error cleaning up stale worker records: {str(e)}")
+            return False
+            
     def get_all_workers_status(self) -> Dict[str, Dict[str, Any]]:
         """Get detailed status information for all workers
+        
+        NOTE: Worker information is transitioning to be stored in-memory in ConnectionManager.
+        This method will now return an empty dictionary to prevent large WebSocket messages
+        with stale worker data. The actual worker status should be obtained from ConnectionManager.
         
         Returns:
             Dictionary with worker IDs as keys and worker status information as values
         """
-        workers_status = {}
-        current_time = time.time()
+        # [2025-05-23T08:43:00-04:00] - Updated to return empty dict during transition period
+        # This prevents large WebSocket messages with stale worker data
+        logger.debug("[2025-05-23T08:43:00-04:00] get_all_workers_status called (returning empty dict during transition)")
         
-        try:
-            # Get all worker keys
-            worker_keys = self.client.keys(f"{WORKER_PREFIX}*")
-            
-            for worker_key in worker_keys:
-                worker_id = worker_key.replace(f"{WORKER_PREFIX}", "")
-                # Get worker details from Redis and convert to proper dictionary
-                redis_result = self.client.hgetall(worker_key)
-                
-                # Convert bytes to strings for all values
-                worker_data: Dict[str, Any] = {}
-                for key, value in redis_result.items():
-                    key_str = key  # Already a string with decode_responses=True
-                    value_str = value  # Already a string with decode_responses=True
-                    worker_data[key_str] = value_str
-                
-                # Convert numeric fields to appropriate types
-                for field in ["registered_at", "last_heartbeat", "updated_at", "last_job_completed_at"]:
-                    if field in worker_data and worker_data[field]:
-                        try:
-                            worker_data[field] = float(worker_data[field])
-                        except (ValueError, TypeError):
-                            pass
-                
-                if "jobs_processed" in worker_data and worker_data["jobs_processed"]:
-                    try:
-                        worker_data["jobs_processed"] = int(worker_data["jobs_processed"])
-                    except (ValueError, TypeError):
-                        pass
-                
-                # Parse JSON fields
-                if "supported_job_types" in worker_data and worker_data["supported_job_types"]:
-                    try:
-                        worker_data["supported_job_types"] = json.loads(worker_data["supported_job_types"])
-                    except (json.JSONDecodeError, TypeError):
-                        pass
-                        
-                # Parse capabilities if present
-                if "capabilities" in worker_data and worker_data["capabilities"]:
-                    try:
-                        worker_data["capabilities"] = json.loads(worker_data["capabilities"])
-                    except (json.JSONDecodeError, TypeError):
-                        pass
-                
-                # Add additional calculated fields
-                if "last_heartbeat" in worker_data:
-                    last_heartbeat = float(worker_data["last_heartbeat"]) if isinstance(worker_data["last_heartbeat"], str) else worker_data["last_heartbeat"]
-                    worker_data["heartbeat_age"] = current_time - last_heartbeat
-                    
-                    # Add a human-readable last_seen field
-                    last_seen_time = datetime.datetime.fromtimestamp(last_heartbeat)
-                    worker_data["last_seen"] = last_seen_time.strftime("%Y-%m-%d %H:%M:%S")
-                
-                # Add uptime if registered_at is available
-                if "registered_at" in worker_data:
-                    registered_at = float(worker_data["registered_at"]) if isinstance(worker_data["registered_at"], str) else worker_data["registered_at"]
-                    worker_data["uptime_seconds"] = current_time - registered_at
-                    
-                    # Add a human-readable uptime field
-                    uptime_seconds = int(worker_data["uptime_seconds"])
-                    hours, remainder = divmod(uptime_seconds, 3600)
-                    minutes, seconds = divmod(remainder, 60)
-                    worker_data["uptime"] = f"{int(hours)}h {int(minutes)}m {int(seconds)}s"
-                
-                # Add to result dictionary
-                workers_status[worker_id] = worker_data
-            
-        except Exception as e:
-            logger.error(f"Error getting worker status: {str(e)}")
-            
-        return workers_status
+        # Clean up any stale worker records that might still exist in Redis
+        self.cleanup_stale_worker_records()
+        
+        # Return empty dictionary - worker status should now come from ConnectionManager
+        return {}
 
         
     def get_jobs_by_status_type_priority(

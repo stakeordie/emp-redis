@@ -5,6 +5,13 @@ All notable changes to the EMP Redis project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- [2025-05-23T08:47:00-04:00] Fixed WebSocket message size errors by completing worker tracking transition:
+  - Completed transition from Redis-based worker tracking to in-memory tracking
+  - Fixed inconsistency in `update_worker_capabilities` method that was still writing to Redis
+  - Updated `get_all_workers_status` to return empty dict and prevent large WebSocket messages
+  - Added `cleanup_stale_worker_records` method to remove stale worker records from Redis
+  - Added automatic cleanup during system initialization
+  - Fixed WebSocket error 1009 (message too large) caused by stale worker records
 - [2025-05-21T00:04:00-04:00] Enhanced message type handling in job completion flow:
   - Updated forward_job_completion to handle both dictionaries and CompleteJobMessage objects
   - Added support for Pydantic model serialization in monitor messages
