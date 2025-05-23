@@ -411,9 +411,9 @@ class RedisService(RedisServiceInterface):
         
         logger.info(f"[2025-05-20T21:17:00-04:00] Job completed: {job_id}")
         
-        # [2025-05-20T21:28:00-04:00] Return the stored result data first
-        # This ensures the result is fully stored before proceeding
-        stored_result = True
+        # [2025-05-23T08:55:26-04:00] Ensure we return a boolean value as declared in the function signature
+        # Previously this was set to True unconditionally, but we should reflect the actual storage success
+        storage_success = stored_result is not None
         
         # [2025-05-20T21:28:00-04:00] Don't publish job updates
         # This eliminates duplicate messages since the original message is already being forwarded
@@ -421,7 +421,7 @@ class RedisService(RedisServiceInterface):
         # if stored_result:
         #     self.publish_job_update(job_id, "completed", result=result, worker_id=worker_id)
         
-        return stored_result
+        return storage_success
         
     def cancel_job(self, job_id: str, reason: str = "Manually cancelled") -> bool:
         """Permanently cancel a job and remove it from the queue.
