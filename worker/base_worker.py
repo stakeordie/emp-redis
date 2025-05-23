@@ -360,6 +360,19 @@ class BaseWorker:
             message: The raw message string
         """
         try:
+            # [2025-05-23T09:15:08-04:00] Added message size logging to debug incoming WebSocket size issues
+            message_size = len(message)
+            
+            # Log message size if it's large
+            if message_size > 100000:  # Log messages larger than ~100KB
+                logger.warning(f"[base_worker.py handle_message()] Large incoming message detected: {message_size} bytes")
+                
+                # If it's really large, log more details to help debugging
+                if message_size > 500000:  # ~500KB
+                    logger.error(f"[base_worker.py handle_message()] Very large incoming message: {message_size} bytes")
+                    # Log a sample of the message to help identify what's causing the size issue
+                    logger.error(f"[base_worker.py handle_message()] Message sample: {message[:500]}...")
+            
             # Parse the message using MessageModels
             message_data = json.loads(message)
             message_obj = self.message_models.parse_message(message_data)
