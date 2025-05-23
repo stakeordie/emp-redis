@@ -10,6 +10,11 @@ import logging
 import time
 from typing import Dict, Any, Optional, Callable, List, Tuple
 
+# [2025-05-23T09:50:00-04:00] Added standardized message size configuration
+# Define consistent size limits as environment variables with defaults
+MAX_WS_MESSAGE_SIZE_MB = int(os.environ.get('MAX_WS_MESSAGE_SIZE_MB', 100))  # 100MB default
+MAX_WS_MESSAGE_SIZE_BYTES = MAX_WS_MESSAGE_SIZE_MB * 1024 * 1024
+
 # Standard import approach - works in both Docker and local environments
 # when the package structure is properly set up
 # Updated: 2025-04-17T14:15:00-04:00 - Simplified import logic to avoid duplicate imports
@@ -161,6 +166,9 @@ class WebSocketConnector(ConnectorInterface):
                 logger.debug(f"[connectors/websocket_connector.py connect()] WEBSOCKET_STATUS: Starting WebSocket connection with params: heartbeat=30.0, receive_timeout=60.0, autoclose=False, autoping=True")
                 
                 connection_start = time.time()
+                # [2025-05-23T09:50:15-04:00] Added max_msg_size parameter to increase message size limit
+                logger.info(f"[2025-05-23T09:50:15-04:00] Using WebSocket message size limit: {MAX_WS_MESSAGE_SIZE_MB}MB ({MAX_WS_MESSAGE_SIZE_BYTES} bytes)")
+                
                 self.ws = await asyncio.wait_for(
                     self.session.ws_connect(
                         self.ws_url,
@@ -169,7 +177,8 @@ class WebSocketConnector(ConnectorInterface):
                         receive_timeout=60.0,  # Timeout for receiving messages
                         # Do not specify protocols to avoid handshake issues
                         autoclose=False,  # We'll handle closing ourselves
-                        autoping=True     # Automatically respond to pings
+                        autoping=True,    # Automatically respond to pings
+                        max_msg_size=MAX_WS_MESSAGE_SIZE_BYTES  # Use standardized message size limit
                     ),
                     timeout=connection_timeout
                 )

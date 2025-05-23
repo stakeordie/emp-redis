@@ -13,6 +13,8 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, validator
 from contextlib import asynccontextmanager
+from starlette.websockets import WebSocketState
+from starlette.types import Receive, Scope, Send
 
 import sys
 import os
@@ -26,6 +28,23 @@ from core.redis_service import RedisService
 from core.utils.logger import logger
 
 logger.info("IT WORKS")
+
+# Define consistent size limits as environment variables with defaults
+# [2025-05-23T09:48:00-04:00] Added standardized WebSocket message size configuration
+MAX_WS_MESSAGE_SIZE_MB = int(os.environ.get('MAX_WS_MESSAGE_SIZE_MB', 100))  # 100MB default
+MAX_WS_MESSAGE_SIZE_BYTES = MAX_WS_MESSAGE_SIZE_MB * 1024 * 1024
+
+logger.info(f"[2025-05-23T09:48:15-04:00] Configured WebSocket message size limit: {MAX_WS_MESSAGE_SIZE_MB}MB ({MAX_WS_MESSAGE_SIZE_BYTES} bytes)")
+
+# Custom WebSocket class with increased message size limit
+# [2025-05-23T09:48:30-04:00] Added custom WebSocket class with increased message size limit
+class LargeMessageWebSocket(WebSocket):
+    """Custom WebSocket class that supports larger message sizes"""
+    def __init__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        super().__init__(scope, receive, send)
+        # Increase message size limit for WebSocket messages
+        self._max_message_size = MAX_WS_MESSAGE_SIZE_BYTES
+        logger.info(f"[2025-05-23T09:48:45-04:00] Created LargeMessageWebSocket with max_message_size={MAX_WS_MESSAGE_SIZE_MB}MB")
 
 # Global reference to message broker for access from endpoints
 global_message_broker = None
@@ -59,8 +78,13 @@ async def lifespan(app: FastAPI):
     redis_service = RedisService()
     await redis_service.close_async()
 
-# Initialize FastAPI with lifespan manager
-app = FastAPI(title="WebSocket Queue API", lifespan=lifespan)
+# Initialize FastAPI with lifespan manager and custom WebSocket class
+# [2025-05-23T09:49:00-04:00] Updated to use custom WebSocket class with increased message size limit
+app = FastAPI(
+    title="WebSocket Queue API", 
+    lifespan=lifespan,
+    websocket_class=LargeMessageWebSocket
+)
 
 # Add CORS middleware to allow cross-origin requests
 app.add_middleware(

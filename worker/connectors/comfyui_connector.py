@@ -14,6 +14,17 @@ from typing import Dict, Any, Optional, Union, Callable
 # Import logger early for diagnostics
 from core.utils.logger import logger
 
+# [2025-05-23T09:51:00-04:00] Added standardized message size configuration
+# Import from websocket_connector if available, otherwise define locally
+try:
+    from .websocket_connector import MAX_WS_MESSAGE_SIZE_MB, MAX_WS_MESSAGE_SIZE_BYTES
+    logger.info(f"[2025-05-23T09:51:15-04:00] Imported WebSocket message size limits from websocket_connector: {MAX_WS_MESSAGE_SIZE_MB}MB")
+except ImportError:
+    # Define consistent size limits as environment variables with defaults
+    MAX_WS_MESSAGE_SIZE_MB = int(os.environ.get('MAX_WS_MESSAGE_SIZE_MB', 100))  # 100MB default
+    MAX_WS_MESSAGE_SIZE_BYTES = MAX_WS_MESSAGE_SIZE_MB * 1024 * 1024
+    logger.info(f"[2025-05-23T09:51:30-04:00] Defined local WebSocket message size limits: {MAX_WS_MESSAGE_SIZE_MB}MB")
+
 # Updated import approach - uses proper package imports
 # Updated: 2025-04-07T15:04:00-04:00
 
@@ -190,11 +201,14 @@ class ComfyUIConnector(WebSocketConnector):
                 
                 # Try to connect to the WebSocket endpoint
                 headers = self._get_connection_headers()
+                # [2025-05-23T09:52:00-04:00] Updated to use standardized message size limit
+                logger.info(f"[2025-05-23T09:52:15-04:00] Using WebSocket message size limit: {MAX_WS_MESSAGE_SIZE_MB}MB ({MAX_WS_MESSAGE_SIZE_BYTES} bytes)")
+                
                 async with session.ws_connect(
                     ws_url, 
                     headers=headers,
                     timeout=connection_timeout,
-                    max_msg_size=1024*1024*100  # 100MB max message size
+                    max_msg_size=MAX_WS_MESSAGE_SIZE_BYTES  # Use standardized message size limit
                 ) as ws:
                     # Successfully connected, now close it
                     await ws.close()

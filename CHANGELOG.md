@@ -5,6 +5,11 @@ All notable changes to the EMP Redis project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- [2025-05-23T09:47:30-04:00] Increased WebSocket message size limits:
+  - Added standardized message size configuration using MAX_WS_MESSAGE_SIZE_MB environment variable
+  - Set default message size limit to 100MB for all WebSocket connections
+  - Added proper error handling for large messages
+  - Enhanced logging for message size tracking
 - [2025-05-23T08:48:00-04:00] Fixed missing connector_statuses field in WorkerStatusMessage class:
   - Added connector_statuses field to the WorkerStatusMessage model
   - Fixed error "Unexpected keyword argument 'connector_statuses' for 'WorkerStatusMessage'"
