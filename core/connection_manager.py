@@ -1599,12 +1599,37 @@ class ConnectionManager(ConnectionManagerInterface):
                 
                 # Send to all monitors
                 monitor_count = 0
+                # [2025-05-23T09:01:28-04:00] Added message size logging to debug WebSocket size issues
+                progress_json = json.dumps(progress_dict)
+                message_size = len(progress_json)
+                
+                # Log message size if it's large
+                if message_size > 100000:  # Log messages larger than ~100KB
+                    logger.warning(f"[connection_manager.py forward_job_progress] Large message detected: {message_size} bytes for job {job_id}")
+                    
+                    # If it's really large, log more details to help debugging
+                    if message_size > 500000:  # ~500KB
+                        logger.error(f"[connection_manager.py forward_job_progress] Very large message: {message_size} bytes for job {job_id}")
+                        
+                        # Log message structure without the full content
+                        if 'connector_details' in progress_dict and progress_dict['connector_details']:
+                            connector_details_size = len(str(progress_dict['connector_details']))
+                            logger.error(f"[connection_manager.py forward_job_progress] Connector details size: {connector_details_size} bytes")
+                            # Sample the beginning of connector_details to see what's in there
+                            connector_str = str(progress_dict['connector_details'])
+                            logger.error(f"[connection_manager.py forward_job_progress] Connector details sample: {connector_str[:500]}...")
+                
                 for monitor_id, websocket in list(self.monitor_connections.items()):
                     try:
-                        await websocket.send_text(json.dumps(progress_dict))
+                        # Send the message and log its size
+                        await websocket.send_text(progress_json)
+                        logger.debug(f"[connection_manager.py forward_job_progress] Sent message to monitor {monitor_id} (size: {message_size} bytes)")
                         monitor_count += 1
                     except Exception as e:
-                        logger.warning(f"[connection_manager.py forward_job_progress] Failed to send to monitor {monitor_id}: {str(e)}")
+                        logger.error(f"[connection_manager.py forward_job_progress] Failed to send to monitor {monitor_id}: {str(e)}")
+                        # [2025-05-23T09:01:28-04:00] Added exception details for WebSocket errors
+                        import traceback
+                        logger.error(f"[connection_manager.py forward_job_progress] Stack trace: {traceback.format_exc()}")
                 
                 monitor_success = monitor_count > 0
                 # if monitor_success:

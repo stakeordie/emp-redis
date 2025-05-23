@@ -321,12 +321,36 @@ class BaseWorker:
                 connector_details=connector_details
             )
             
+            # [2025-05-23T09:01:28-04:00] Added message size logging to debug WebSocket size issues
+            message_json = progress_message.model_dump_json()
+            message_size = len(message_json)
+            
+            # Log message size if it's large
+            if message_size > 100000:  # Log messages larger than ~100KB
+                logger.warning(f"[base_worker.py send_progress_update()] Large message detected: {message_size} bytes for job {job_id}, status: {status}")
+                
+                # If it's really large, log more details to help debugging
+                if message_size > 500000:  # ~500KB
+                    logger.error(f"[base_worker.py send_progress_update()] Very large message: {message_size} bytes for job {job_id}")
+                    
+                    # Log message structure without the full content
+                    message_dict = progress_message.model_dump()
+                    if 'connector_details' in message_dict and message_dict['connector_details']:
+                        connector_details_size = len(str(message_dict['connector_details']))
+                        logger.error(f"[base_worker.py send_progress_update()] Connector details size: {connector_details_size} bytes")
+                        # Sample the beginning of connector_details to see what's in there
+                        connector_str = str(message_dict['connector_details'])
+                        logger.error(f"[base_worker.py send_progress_update()] Connector details sample: {connector_str[:500]}...")
+            
             # Send the progress update
-            await websocket.send(progress_message.model_dump_json())
-            logger.debug(f"[base_worker.py send_progress_update()]: Sent progress update for job {job_id}: {progress}% - {message if message else status}")
+            await websocket.send(message_json)
+            logger.debug(f"[base_worker.py send_progress_update()]: Sent progress update for job {job_id}: {progress}% - {message if message else status} (size: {message_size} bytes)")
             
         except Exception as e:
             logger.error(f"[base_worker.py send_progress_update()]: Error sending progress update for job {job_id}: {str(e)}")
+            # [2025-05-23T09:01:28-04:00] Added exception details for WebSocket errors
+            import traceback
+            logger.error(f"[base_worker.py send_progress_update()]: Stack trace: {traceback.format_exc()}")
     
     async def handle_message(self, websocket, message):
         """Handle incoming message from Redis Hub
