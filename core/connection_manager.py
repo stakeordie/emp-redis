@@ -893,10 +893,38 @@ class ConnectionManager(ConnectionManagerInterface):
             if job_type:
                 log_details += f", job_type={job_type}"
                 
-            # Log message size but not full content to avoid cluttering logs
+            # [2025-05-23T09:15:46-04:00] Enhanced message size logging to debug WebSocket size issues
             msg_size = len(message_text)
-            #logger.info(f"[WORKER-MSG] Sending to worker {worker_id}: {log_details} ({msg_size} bytes)")
             
+            # Always log message size
+            logger.info(f"[WORKER-MSG] Sending to worker {worker_id}: {log_details} ({msg_size} bytes)")
+            
+            # Log more details for large messages
+            if msg_size > 100000:  # Log messages larger than ~100KB
+                logger.warning(f"[connection_manager.py send_to_worker()] Large outgoing message detected: {msg_size} bytes to worker {worker_id}, type={msg_type}")
+                
+                # If it's really large, log more details to help debugging
+                if msg_size > 500000:  # ~500KB
+                    logger.error(f"[connection_manager.py send_to_worker()] Very large outgoing message: {msg_size} bytes to worker {worker_id}")
+                    # Log a sample of the message to help identify what's causing the size issue
+                    logger.error(f"[connection_manager.py send_to_worker()] Message sample: {message_text[:500]}...")
+                    
+                    # Try to identify what's making the message so large
+                    if hasattr(message, "model_dump"):
+                        message_dict = message.model_dump()
+                        for key, value in message_dict.items():
+                            value_str = str(value)
+                            value_size = len(value_str)
+                            if value_size > 10000:  # Log fields larger than 10KB
+                                logger.error(f"[connection_manager.py send_to_worker()] Large field '{key}': {value_size} bytes")
+                                logger.error(f"[connection_manager.py send_to_worker()] Field '{key}' sample: {value_str[:200]}...")
+            
+            # [2025-05-23T09:15:46-04:00] Added message size limit check to prevent WebSocket errors
+            # WebSocket protocol typically has a message size limit around 1MB
+            if msg_size > 1000000:  # 1MB limit
+                logger.error(f"[connection_manager.py send_to_worker()] Message too large to send: {msg_size} bytes. Skipping to prevent WebSocket disconnection.")
+                return False
+                
             # Actually send the message
             await websocket.send_text(message_text)
             
