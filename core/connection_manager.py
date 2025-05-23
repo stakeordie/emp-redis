@@ -179,37 +179,63 @@ class ConnectionManager(ConnectionManagerInterface):
             worker_id: ID of the worker to disconnect
         """
         try:
+            # [2025-05-23T08:35:19-04:00] Enhanced worker cleanup to prevent stale worker records
+            logger.info(f"[connection_manager.py disconnect_worker()] Disconnecting worker {worker_id} and cleaning up all resources")
+            
             # Clean up local state
             if worker_id in self.worker_connections:
                 # Close the WebSocket connection if it's still open
                 try:
-                    logger.debug(f"connection_manager.py disconnect_worker: TIMEOUT AFTER 2 MINUTES: WHY? Closing WebSocket connection for worker {worker_id}")
+                    logger.debug(f"connection_manager.py disconnect_worker: Closing WebSocket connection for worker {worker_id}")
                     await self._close_websocket(self.worker_connections[worker_id], f"Worker {worker_id} disconnected")
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(f"Error closing WebSocket for worker {worker_id}: {str(e)}")
                 
                 # Remove from local tracking
                 del self.worker_connections[worker_id]
+                logger.debug(f"Removed worker {worker_id} from worker_connections")
             
-            # Remove worker from status tracking so it doesn't appear in the UI
+            # Remove worker from all tracking dictionaries
+            # 1. Status tracking
             if worker_id in self.worker_status:
                 del self.worker_status[worker_id]
+                logger.debug(f"Removed worker {worker_id} from worker_status")
             
-            # Remove worker capabilities from memory
+            # 2. Capabilities tracking
             if worker_id in self.worker_capabilities:
-                #logger.info(f"Removing capabilities for disconnected worker {worker_id}")
                 del self.worker_capabilities[worker_id]
+                logger.debug(f"Removed worker {worker_id} from worker_capabilities")
             
+            # 3. Heartbeat tracking
             if worker_id in self.worker_last_heartbeat:
                 del self.worker_last_heartbeat[worker_id]
+                logger.debug(f"Removed worker {worker_id} from worker_last_heartbeat")
             
-            # Always remove from job notification subscriptions when disconnected
+            # 4. Current jobs tracking
+            if worker_id in self.worker_current_jobs:
+                del self.worker_current_jobs[worker_id]
+                logger.debug(f"Removed worker {worker_id} from worker_current_jobs")
+            
+            # 5. Worker info tracking
+            if worker_id in self.worker_info:
+                del self.worker_info[worker_id]
+                logger.debug(f"Removed worker {worker_id} from worker_info")
+            
+            # 6. Failed jobs tracking
+            if worker_id in self.worker_failed_jobs:
+                del self.worker_failed_jobs[worker_id]
+                logger.debug(f"Removed worker {worker_id} from worker_failed_jobs")
+            
+            # 7. Job notification subscriptions
             if worker_id in self.job_notification_subscriptions:
                 self.job_notification_subscriptions.remove(worker_id)
+                logger.debug(f"Removed worker {worker_id} from job_notification_subscriptions")
             
-            #logger.info(f"Disconnected worker {worker_id}")
+            logger.info(f"[connection_manager.py disconnect_worker()] Successfully disconnected worker {worker_id} and cleaned up all resources")
         except Exception as e:
             logger.error(f"Error disconnecting worker {worker_id}: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
     
     def init_routes(self, app: FastAPI) -> None:
         """
