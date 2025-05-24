@@ -4,6 +4,12 @@ All notable changes to the EMP Redis project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- [2025-05-24T12:35:00-04:00] Standardized element naming in monitor.js:
+  - Changed all instances of jobTypeDropdown to jobType for consistency
+  - Added detailed comments explaining the changes
+  - Improved code maintainability by eliminating naming conflicts
+
 ### Added
 - [2025-05-24T11:56:00-04:00] Added job payload to API response:
   - Added payload field to JobStatusResponse model

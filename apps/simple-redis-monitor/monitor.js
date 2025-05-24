@@ -219,8 +219,8 @@ const elements = {
     // Connection controls
     connectionType: document.getElementById('connection-type'),
     websocketUrl: document.getElementById('websocket-url'),
+    // [2025-05-24T12:33:00-04:00] Using jobType consistently instead of jobTypeDropdown
     // [2025-05-19T17:50:00-04:00] Added job type dropdown reference
-    jobTypeDropdown: document.getElementById('job-type'),
     // [2025-05-19T17:54:00-04:00] Added job payload textarea reference
     jobPayload: document.getElementById('job-payload'),
     authToken: document.getElementById('auth-token'),
@@ -397,7 +397,8 @@ function init() {
     // 2025-04-09 13:41: Added batch submit button event listener
     document.getElementById('batch-submit-btn')?.addEventListener('click', batchSubmitJobs);
     elements.connectionType.addEventListener('change', updateWebSocketUrl);
-    elements.jobTypeDropdown.addEventListener('change', (event) => {
+    // [2025-05-24T12:33:30-04:00] Changed from jobTypeDropdown to jobType for consistency
+    elements.jobType.addEventListener('change', (event) => {
         const selectedJobType = event.target.value;
         updateJobPayload(selectedJobType);
     });
@@ -406,8 +407,9 @@ function init() {
     updateWebSocketUrl();
     
     // [2025-05-19T17:56:00-04:00] Initialize job payload with default for selected job type
-    if (elements.jobTypeDropdown && elements.jobPayload) {
-        const initialJobType = elements.jobTypeDropdown.value || 'simulation';
+    // [2025-05-24T12:34:00-04:00] Changed from jobTypeDropdown to jobType for consistency
+    if (elements.jobType && elements.jobPayload) {
+        const initialJobType = elements.jobType.value || 'simulation';
         updateJobPayload(initialJobType);
     }
     
@@ -2374,7 +2376,8 @@ function collectSupportedJobTypes() {
  * [2025-05-19T17:51:00-04:00] Update the job type dropdown with options based on connected workers
  */
 function updateJobTypeDropdown() {
-    const dropdown = elements.jobTypeDropdown;
+    // [2025-05-24T12:34:30-04:00] Changed from jobTypeDropdown to jobType for consistency
+    const dropdown = elements.jobType;
     if (!dropdown) return;
     
     // Save current selection if any
