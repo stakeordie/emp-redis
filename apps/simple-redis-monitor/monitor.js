@@ -3926,46 +3926,91 @@ function getStatusClass(status) {
 }
 
 /**
- * [2025-04-06 19:15] Format a date as a full date string
- * @param {Date|string} date - The date to format
+ * [2025-05-24T12:50:00-04:00] Format a date as a string with robust error handling
+ * @param {Date|string|number} date - The date to format
  * @returns {string} - Formatted date string
  */
 function formatDate(date) {
     if (!date) return 'N/A';
     
-    // Convert to Date object if it's a string
-    if (typeof date === 'string') {
-        date = new Date(date);
+    try {
+        let dateObj;
+        
+        // Handle different date formats
+        if (typeof date === 'number') {
+            // Handle Unix timestamp (seconds since epoch)
+            // If the number is small, it's likely seconds not milliseconds
+            if (date < 10000000000) {
+                dateObj = new Date(date * 1000);
+            } else {
+                dateObj = new Date(date);
+            }
+        } else if (typeof date === 'string') {
+            dateObj = new Date(date);
+        } else if (date instanceof Date) {
+            dateObj = date;
+        } else {
+            return 'Invalid date';
+        }
+        
+        // Validate the date is valid
+        if (isNaN(dateObj.getTime())) {
+            return 'Invalid date';
+        }
+        
+        return dateObj.toLocaleDateString() + ' ' + dateObj.toLocaleTimeString();
+    } catch (error) {
+        console.error('Error formatting date:', error, date);
+        return 'Date error';
     }
-    
-    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
 }
 
 /**
- * [2025-04-06 19:42] Format a date as a datetime string (YYYY-MM-DD HH:MM:SS)
+ * [2025-05-24T12:52:00-04:00] Format a date as a datetime string (YYYY-MM-DD HH:MM:SS) with robust error handling
  * @param {Date|string|number} date - The date to format
  * @returns {string} - Formatted datetime string
  */
 function formatDateTime(date) {
     if (!date) return 'N/A';
     
-    // Convert to Date object if it's a string or number
-    if (typeof date === 'string' || typeof date === 'number') {
-        date = new Date(date);
+    try {
+        let dateObj;
+        
+        // Handle different date formats
+        if (typeof date === 'number') {
+            // Handle Unix timestamp (seconds since epoch)
+            // If the number is small, it's likely seconds not milliseconds
+            if (date < 10000000000) {
+                dateObj = new Date(date * 1000);
+            } else {
+                dateObj = new Date(date);
+            }
+        } else if (typeof date === 'string') {
+            dateObj = new Date(date);
+        } else if (date instanceof Date) {
+            dateObj = date;
+        } else {
+            return 'Invalid date';
+        }
+        
+        // Validate the date is valid
+        if (isNaN(dateObj.getTime())) {
+            return 'Invalid date';
+        }
+        
+        // Format as YYYY-MM-DD HH:MM:SS
+        const year = dateObj.getFullYear();
+        const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+        const day = String(dateObj.getDate()).padStart(2, '0');
+        const hours = String(dateObj.getHours()).padStart(2, '0');
+        const minutes = String(dateObj.getMinutes()).padStart(2, '0');
+        const seconds = String(dateObj.getSeconds()).padStart(2, '0');
+        
+        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+    } catch (error) {
+        console.error('Error formatting datetime:', error, date);
+        return 'Date error';
     }
-    
-    // Check if date is valid
-    if (isNaN(date.getTime())) return 'N/A';
-    
-    // Format as YYYY-MM-DD HH:MM:SS
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    const seconds = String(date.getSeconds()).padStart(2, '0');
-    
-    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 }
 
 /**

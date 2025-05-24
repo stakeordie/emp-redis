@@ -4,7 +4,21 @@ All notable changes to the EMP Redis project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- [2025-05-24T13:09:00-04:00] Improved UI layout:
+  - Created vertical layout with Connected Workers section properly stacked above Job Queue
+  - Added right-column-container with flex column layout for better organization
+  - Improved responsive design for better mobile experience
+  - Reorganized UI elements to prioritize worker status information
+
 ### Fixed
+- [2025-05-24T12:52:00-04:00] Fixed date formatting functions to handle all date formats:
+  - Added robust error handling to formatDate and formatDateTime functions
+  - Fixed TypeError when displaying job details with invalid date formats
+  - Added support for Unix timestamps in seconds and milliseconds
+  - Improved error reporting and fallback display for invalid dates
+  - Added detailed comments explaining the date handling logic
+
 - [2025-05-24T12:49:00-04:00] Standardized element naming in monitor.js:
   - Changed all instances of jobTypeDropdown to jobType for consistency
   - Documented duplicate jobPayload element references with clear comments
@@ -21,12 +35,15 @@ All notable changes to the EMP Redis project will be documented in this file.
   - Fixed details button functionality to ensure modal opens correctly
 
 ### Added
-- [2025-05-24T12:55:00-04:00] Added modal view for REST API responses:
+- [2025-05-24T13:01:00-04:00] Improved REST API response display:
   - Added maximize button to REST API response container
   - Implemented modal for better JSON viewing with syntax highlighting
   - Added copy to clipboard functionality with visual feedback
   - Added keyboard shortcuts (Escape to close, Ctrl+C to copy)
-  - Improved user experience for viewing large JSON payloads
+  - Fixed scrolling issues in the REST API response container
+  - Made inner text area scrollable while keeping outer container fixed
+  - Improved styling with monospace font and better visual hierarchy
+  - Enhanced user experience for viewing large JSON payloads
 
 - [2025-05-24T11:56:00-04:00] Added job payload to API response:
   - Added payload field to JobStatusResponse model

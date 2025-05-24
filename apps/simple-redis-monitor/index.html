@@ -476,6 +476,7 @@
       margin-bottom: 15px;
     }
     
+    /* [2025-05-24T12:55:00-04:00] Updated REST response container to fix scrolling issues */
     .rest-response-container {
       margin-top: 10px;
       padding: 10px;
@@ -484,23 +485,58 @@
       border: 1px solid #ddd;
       min-height: 150px;
       flex-grow: 1;
-      overflow-y: auto;
+      overflow: hidden; /* Changed from overflow-y: auto to prevent outer container scrolling */
       width: 100%;
       max-width: 100%;
       box-sizing: border-box;
       transition: all 0.3s ease;
+      display: flex;
+      flex-direction: column;
     }
     
+    /* [2025-05-24T13:00:00-04:00] Further improved REST response element for better scrolling */
     .rest-response {
       min-height: 100px;
+      max-height: 200px; /* Set maximum height for scrollable area */
       width: 100%;
+      overflow-y: auto; /* Make the inner content scrollable */
+      flex: 1; /* Take up remaining space in container */
+      margin: 0; /* Remove default margins */
       white-space: pre-wrap;
       word-break: break-word;
+      font-family: monospace;
+      font-size: 14px;
+      background-color: #f8f8f8;
+      padding: 10px;
+      border-radius: 4px;
+      border: 1px solid #ddd;
     }
     
+    /* [2025-05-24T13:00:30-04:00] Added styles for maximize button */
+    .maximize-btn {
+      background: none;
+      border: none;
+      font-size: 18px;
+      cursor: pointer;
+      color: #555;
+      margin-left: 10px;
+      padding: 0 5px;
+    }
+    
+    .maximize-btn:hover {
+      color: #000;
+      background-color: #eee;
+      border-radius: 3px;
+    }
+    
+    /* [2025-05-24T12:57:00-04:00] Updated response header to accommodate maximize button */
     .response-header {
       margin-top: 0;
       margin-bottom: 10px;
+      font-size: 1.1em;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
     
     /* [2025-05-20T13:51:20-04:00] Highlight effect for the REST response container */
@@ -1049,8 +1085,22 @@
     </div>
 
     <!-- Right Column -->
+    <div class="right-column-container">
+      <!-- [2025-05-24T13:05:00-04:00] Created vertical layout for right column content -->
+      <!-- Connected Workers Section (Above Job Queue) -->
+      <div class="card workers-section">
+        <h2>Connected Workers</h2>
+        <!-- [2025-04-06 18:59] Updated to use cards instead of table for workers -->
+        <div id="workers-container">
+          <!-- Worker cards will be added here dynamically -->
+        </div>
+        <div id="no-workers-message" class="hidden">
+          No workers connected
+        </div>
+      </div>
 
-    <div class="card job-queue-column">
+      <!-- Job Queue Section (Below Connected Workers) -->
+      <div class="card job-queue-section">
       <h2>Job Queue</h2>
       <!-- [2025-04-06 18:59] Updated to only show queued jobs -->
       <!-- [2025-05-20T13:55:06-04:00] Added proper overflow handling for the jobs table -->
@@ -1079,6 +1129,7 @@
         No queued jobs
       </div>
     </div>
+    </div> <!-- Close right-column-container -->
 
 
 
@@ -1105,10 +1156,31 @@
       min-width: 400px; /* Ensures the submission column doesn't get too narrow */
     }
 
+    /* [2025-05-24T13:08:00-04:00] Added styles for right column container with vertical layout */
+    .right-column-container {
+      flex: 4;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .workers-section {
+      margin-bottom: 0;
+    }
+
+    .job-queue-section {
+      margin-bottom: 0;
+      flex: 1;
+    }
+
     /* Responsive layout - stack on small screens */
     @media (max-width: 768px) {
       .job-management-row {
         flex-direction: column;
+      }
+
+      .right-column-container {
+        width: 100%;
       }
 
       .job-queue-column,
@@ -1119,17 +1191,7 @@
     }
   </style>
 
-  <!-- Workers Section -->
-  <div class="card">
-    <h2>Connected Workers</h2>
-    <!-- [2025-04-06 18:59] Updated to use cards instead of table for workers -->
-    <div id="workers-container">
-      <!-- Worker cards will be added here dynamically -->
-    </div>
-    <div id="no-workers-message" class="hidden">
-      No workers connected
-    </div>
-  </div>
+  <!-- [2025-05-24T13:03:00-04:00] Removed redundant Workers Section (moved above Job Queue) -->
 
   <style>
     /* [2025-04-06 18:59] Added styles for worker cards */
