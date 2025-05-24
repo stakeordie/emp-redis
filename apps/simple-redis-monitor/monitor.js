@@ -1973,10 +1973,14 @@ async function checkJobStatusFromUI() {
         
         // Format the position to be more user-friendly
         if (displayJobStatus.status === 'pending' && displayJobStatus.position !== undefined) {
-            // Add a human-readable position description
+            // [2025-05-23T19:48:33-04:00] Updated to work with 0-based positions from backend
             if (displayJobStatus.position === 0) {
-                displayJobStatus.position_description = 'Next in queue';
+                // Position 0 means this job is next up
+                displayJobStatus.display_position = 1;
+                displayJobStatus.position_description = 'Next up';
             } else {
+                // For other positions, add 1 to display position (to make it 1-based for display only)
+                displayJobStatus.display_position = displayJobStatus.position + 1;
                 displayJobStatus.position_description = `${displayJobStatus.position} job${displayJobStatus.position !== 1 ? 's' : ''} ahead in queue`;
             }
         }
@@ -2884,7 +2888,7 @@ function updateUI() {
                 <td>
                     ${job.position !== undefined ? 
                         (job.position === 0 ? 
-                            '<span class="position-next">Next in queue</span>' : 
+                            '<span class="position-next">Next up</span>' : 
                             `<span class="position-waiting">${job.position} job${job.position !== 1 ? 's' : ''} ahead</span>`
                         ) : 'N/A'}
                 </td>

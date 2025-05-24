@@ -122,6 +122,7 @@ class JobStatusResponse(BaseModel):
     result: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
     position_description: Optional[str] = None
+    payload: Optional[Dict[str, Any]] = None  # [2025-05-24T11:45:00-04:00] Added to include job payload in response
     
     @validator('display_position', always=True)
     def set_display_position(cls, v, values):
@@ -340,7 +341,8 @@ async def get_job_status(job_id: str):
             position=job_data.get('position'),
             progress=float(job_data.get('progress', 0)) if job_data.get('progress') is not None else None,
             result=job_data.get('result'),
-            error=job_data.get('error')
+            error=job_data.get('error'),
+            payload=job_data.get('job_request_payload')  # [2025-05-24T11:45:00-04:00] Added to include job payload in response
         )
         
         return response_data

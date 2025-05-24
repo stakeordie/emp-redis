@@ -757,8 +757,9 @@ class RedisService(RedisServiceInterface):
                             pending_jobs_ahead += 1
                             logger.info(f"[2025-05-20T15:34:23-04:00] Job {other_job_id_str} has same priority but was created earlier ({other_job_created_at} < {job_created_at}), count: {pending_jobs_ahead}")
                 
-                # [2025-05-20T15:50:06-04:00] Ensure position is 1-based (minimum 1, never 0)
-                position = pending_jobs_ahead + 1
+                # [2025-05-23T19:48:33-04:00] Reverted to 0-based indexing for job positions
+                # This is the natural way to represent queue positions (0 = next up, 1 = one job ahead, etc.)
+                position = pending_jobs_ahead
                 
                 # Log the position calculation for debugging
                 logger.info(f"[2025-05-20T15:34:23-04:00] Job {job_id} has {position} pending jobs ahead of it in the queue")

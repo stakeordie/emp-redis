@@ -5,6 +5,16 @@ All notable changes to the EMP Redis project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- [2025-05-24T11:56:00-04:00] Added job payload to API response:
+  - Added payload field to JobStatusResponse model
+  - Updated get_job_status endpoint to include original job payload in response
+  - Enables viewing the original job parameters when checking job status
+  - Improves debugging and monitoring capabilities
+- [2025-05-23T19:49:23-04:00] Fixed job position numbering to use 0-based indexing:
+  - Reverted backend position calculation to use natural 0-based indexing
+  - Updated frontend to properly display 0-based positions (0 = next up, 1 = one job ahead, etc.)
+  - Fixed position descriptions to be consistent with the 0-based approach
+  - Improved user experience by showing clearer queue position information
 - [2025-05-23T09:47:30-04:00] Increased WebSocket message size limits:
   - Added standardized message size configuration using MAX_WS_MESSAGE_SIZE_MB environment variable
   - Set default message size limit to 100MB for all WebSocket connections
