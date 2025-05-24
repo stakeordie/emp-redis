@@ -5,9 +5,10 @@ All notable changes to the EMP Redis project will be documented in this file.
 ## [Unreleased]
 
 ### Changed
-- [2025-05-24T13:09:00-04:00] Improved UI layout:
-  - Created vertical layout with Connected Workers section properly stacked above Job Queue
-  - Added right-column-container with flex column layout for better organization
+- [2025-05-24T13:18:00-04:00] Improved UI layout and scrolling behavior:
+  - Created vertical layout with Connected Workers, Job Queue, and Finished Jobs stacked vertically
+  - Added fixed heights with scrolling for all sections to prevent layout shifts
+  - Implemented consistent scrolling behavior across all sections
   - Improved responsive design for better mobile experience
   - Reorganized UI elements to prioritize worker status information
 

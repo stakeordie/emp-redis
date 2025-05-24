@@ -366,31 +366,31 @@
       flex-direction: column;
       gap: 10px;
     }
-    
+
     /* [2025-05-20T11:26:44-04:00] Added styles for submit buttons container */
     .submit-buttons-container {
       display: flex;
       gap: 10px;
       margin-bottom: 10px;
     }
-    
+
     /* [2025-05-20T11:30:59-04:00] REST API URL display styles */
     .rest-api-url-container {
       margin: 5px 0;
       font-size: 0.85rem;
       color: #666;
     }
-    
+
     .rest-api-label {
       font-weight: bold;
       margin-right: 5px;
     }
-    
+
     .rest-api-url {
       font-family: monospace;
       color: #4a90e2;
     }
-    
+
     /* [2025-05-20T11:34:47-04:00] REST API synchronous option styles */
     .rest-api-options {
       margin: 10px 0;
@@ -399,30 +399,30 @@
       border-radius: 4px;
       border: 1px solid #ddd;
     }
-    
+
     .rest-sync-label {
       display: flex;
       align-items: center;
       margin-bottom: 5px;
       cursor: pointer;
     }
-    
+
     .rest-sync-checkbox {
       margin-right: 5px;
     }
-    
+
     .rest-timeout-container {
       display: flex;
       align-items: center;
       margin-top: 5px;
     }
-    
+
     .rest-timeout {
       width: 60px;
       margin-left: 5px;
       padding: 2px 5px;
     }
-    
+
     /* [2025-05-20T11:34:47-04:00] Job status check styles */
     .job-status-check-container {
       margin: 15px 0;
@@ -431,20 +431,20 @@
       border-radius: 4px;
       border: 1px solid #c0d9f0;
     }
-    
+
     .job-status-check-form {
       display: flex;
       align-items: center;
       gap: 10px;
     }
-    
+
     .job-status-id {
       flex: 1;
       padding: 5px 10px;
       border: 1px solid #ccc;
       border-radius: 4px;
     }
-    
+
     .btn-check-status {
       padding: 5px 10px;
       background-color: #5cb85c;
@@ -453,21 +453,22 @@
       border-radius: 4px;
       cursor: pointer;
     }
-    
+
     .btn-check-status:hover {
       background-color: #4cae4c;
     }
-    
+
     /* REST API response container styles */
     /* [2025-05-20T13:51:20-04:00] Fixed height container to prevent layout shifts */
     .fixed-height-container {
-      min-height: 300px; /* Fixed minimum height to prevent layout shifts */
+      min-height: 300px;
+      /* Fixed minimum height to prevent layout shifts */
       width: 100%;
       display: flex;
       flex-direction: column;
       margin-bottom: 20px;
     }
-    
+
     .job-status-check-container {
       width: 100%;
       max-width: 100%;
@@ -475,7 +476,7 @@
       overflow-x: hidden;
       margin-bottom: 15px;
     }
-    
+
     /* [2025-05-24T12:55:00-04:00] Updated REST response container to fix scrolling issues */
     .rest-response-container {
       margin-top: 10px;
@@ -485,7 +486,8 @@
       border: 1px solid #ddd;
       min-height: 150px;
       flex-grow: 1;
-      overflow: hidden; /* Changed from overflow-y: auto to prevent outer container scrolling */
+      overflow: hidden;
+      /* Changed from overflow-y: auto to prevent outer container scrolling */
       width: 100%;
       max-width: 100%;
       box-sizing: border-box;
@@ -493,15 +495,19 @@
       display: flex;
       flex-direction: column;
     }
-    
+
     /* [2025-05-24T13:00:00-04:00] Further improved REST response element for better scrolling */
     .rest-response {
       min-height: 100px;
-      max-height: 200px; /* Set maximum height for scrollable area */
+      max-height: 200px;
+      /* Set maximum height for scrollable area */
       width: 100%;
-      overflow-y: auto; /* Make the inner content scrollable */
-      flex: 1; /* Take up remaining space in container */
-      margin: 0; /* Remove default margins */
+      overflow-y: auto;
+      /* Make the inner content scrollable */
+      flex: 1;
+      /* Take up remaining space in container */
+      margin: 0;
+      /* Remove default margins */
       white-space: pre-wrap;
       word-break: break-word;
       font-family: monospace;
@@ -511,7 +517,7 @@
       border-radius: 4px;
       border: 1px solid #ddd;
     }
-    
+
     /* [2025-05-24T13:00:30-04:00] Added styles for maximize button */
     .maximize-btn {
       background: none;
@@ -522,13 +528,13 @@
       margin-left: 10px;
       padding: 0 5px;
     }
-    
+
     .maximize-btn:hover {
       color: #000;
       background-color: #eee;
       border-radius: 3px;
     }
-    
+
     /* [2025-05-24T12:57:00-04:00] Updated response header to accommodate maximize button */
     .response-header {
       margin-top: 0;
@@ -538,18 +544,18 @@
       justify-content: space-between;
       align-items: center;
     }
-    
+
     /* [2025-05-20T13:51:20-04:00] Highlight effect for the REST response container */
     .highlight-container {
       background-color: rgba(76, 175, 80, 0.1);
       border-color: #4CAF50;
     }
-    
+
     /* Error response styling */
     .error-response {
       color: #d32f2f;
     }
-    
+
     /* [2025-05-20T11:52:27-04:00] Enhanced overflow handling for REST response */
     .rest-response {
       font-family: monospace;
@@ -571,32 +577,40 @@
       text-overflow: ellipsis;
       display: block;
     }
-    
+
     /* Button styles */
     .rest-submit {
       background-color: #4a90e2;
     }
-    
+
     /* [2025-05-20T13:27:02-04:00] Added highlight effects for auto-filled fields */
     @keyframes highlight-pulse {
-      0% { box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.7); }
-      70% { box-shadow: 0 0 0 10px rgba(76, 175, 80, 0); }
-      100% { box-shadow: 0 0 0 0 rgba(76, 175, 80, 0); }
+      0% {
+        box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.7);
+      }
+
+      70% {
+        box-shadow: 0 0 0 10px rgba(76, 175, 80, 0);
+      }
+
+      100% {
+        box-shadow: 0 0 0 0 rgba(76, 175, 80, 0);
+      }
     }
-    
+
     .highlight-field {
       animation: highlight-pulse 1s ease-in-out 3;
       border-color: #4CAF50 !important;
       background-color: rgba(76, 175, 80, 0.1) !important;
     }
-    
+
     .highlight-button {
       animation: highlight-pulse 1s ease-in-out 3;
       background-color: #45a049 !important;
       transform: scale(1.05);
       transition: transform 0.3s;
     }
-    
+
     /* [2025-05-20T13:41:23-04:00] Added styles for job position display */
     .position-next {
       color: #4CAF50;
@@ -606,7 +620,7 @@
       border-radius: 4px;
       border: 1px solid rgba(76, 175, 80, 0.3);
     }
-    
+
     .position-waiting {
       color: #ff9800;
       font-weight: bold;
@@ -615,7 +629,7 @@
       border-radius: 4px;
       border: 1px solid rgba(255, 152, 0, 0.3);
     }
-    
+
     .rest-submit:hover {
       background-color: #3a80d2;
     }
@@ -707,48 +721,65 @@
       width: 100% !important;
       border-collapse: collapse !important;
     }
-    
+
     /* Adjust column widths for better space utilization */
-    table th, table td {
+    table th,
+    table td {
       padding: 6px 8px !important;
       overflow: hidden !important;
       text-overflow: ellipsis !important;
     }
-    
+
     /* [2025-05-20T13:55:06-04:00] Optimized column widths to prevent table overflow */
-    table th:nth-child(2), table td:nth-child(2) { /* Client ID */
+    table th:nth-child(2),
+    table td:nth-child(2) {
+      /* Client ID */
       width: 80px !important;
     }
-    
-    table th:nth-child(3), table td:nth-child(3) { /* Job Type */
+
+    table th:nth-child(3),
+    table td:nth-child(3) {
+      /* Job Type */
       width: 80px !important;
     }
-    
-    table th:nth-child(4), table td:nth-child(4) { /* Status */
+
+    table th:nth-child(4),
+    table td:nth-child(4) {
+      /* Status */
       width: 70px !important;
     }
-    
-    table th:nth-child(5), table td:nth-child(5) { /* Priority */
+
+    table th:nth-child(5),
+    table td:nth-child(5) {
+      /* Priority */
       width: 50px !important;
       text-align: center !important;
     }
-    
-    table th:nth-child(6), table td:nth-child(6) { /* Position */
+
+    table th:nth-child(6),
+    table td:nth-child(6) {
+      /* Position */
       width: 90px !important;
       font-size: 0.8rem !important;
     }
-    
-    table th:nth-child(7), table td:nth-child(7) { /* Created */
+
+    table th:nth-child(7),
+    table td:nth-child(7) {
+      /* Created */
       width: 100px !important;
       font-size: 0.85rem !important;
     }
-    
-    table th:nth-child(8), table td:nth-child(8) { /* Failures */
+
+    table th:nth-child(8),
+    table td:nth-child(8) {
+      /* Failures */
       width: 60px !important;
       text-align: center !important;
     }
-    
-    table th:nth-child(9), table td:nth-child(9) { /* Actions */
+
+    table th:nth-child(9),
+    table td:nth-child(9) {
+      /* Actions */
       width: 80px !important;
       text-align: center !important;
     }
@@ -760,23 +791,23 @@
       margin-bottom: 15px;
       -webkit-overflow-scrolling: touch;
     }
-    
+
     .compact-table {
       font-size: 0.9rem;
       border-spacing: 0;
     }
-    
+
     .compact-table th,
     .compact-table td {
       padding: 4px 6px !important;
     }
-    
+
     /* Ensure text doesn't get cut off */
     #jobs-table-body td:first-child,
     #finished-jobs-table-body td:first-child {
       text-overflow: clip !important;
     }
-    
+
     /* [2025-05-19T17:59:00-04:00] Styling for job failure count */
     .failure-count {
       display: inline-block;
@@ -789,7 +820,7 @@
       min-width: 20px;
       text-align: center;
     }
-    
+
     /* [2025-05-19T18:04:00-04:00] Styling for Force Retry button */
     .btn-force-retry {
       background-color: #ff9800;
@@ -802,11 +833,11 @@
       font-size: 0.8rem;
       transition: background-color 0.3s;
     }
-    
+
     .btn-force-retry:hover {
       background-color: #f57c00;
     }
-    
+
     .btn-force-retry:active {
       background-color: #ef6c00;
     }
@@ -895,7 +926,8 @@
 
     <div class="card job-submission-column">
       <h2>Submit Job</h2>
-      <div class="job-submission-container" style="width: 100%; max-width: 100%; box-sizing: border-box; overflow-x: hidden;">
+      <div class="job-submission-container"
+        style="width: 100%; max-width: 100%; box-sizing: border-box; overflow-x: hidden;">
         <!-- Priority buttons -->
         <div class="priority-buttons">
           <div class="priority-label">Priority:</div>
@@ -1033,13 +1065,13 @@
             <button id="submit-job-btn" class="btn-submit">Submit Job: WebSocket</button>
             <button id="submit-job-rest-btn" class="btn-submit rest-submit">Submit Job: REST</button>
           </div>
-          
+
           <!-- [2025-05-20T11:30:59-04:00] Added REST API URL display -->
           <div class="rest-api-url-container">
             <span class="rest-api-label">REST API URL:</span>
             <span id="rest-api-url" class="rest-api-url">http://localhost:8001/api/jobs</span>
           </div>
-          
+
           <!-- [2025-05-20T11:34:47-04:00] Added synchronous option for REST API requests -->
           <div class="rest-api-options">
             <label class="rest-sync-label">
@@ -1051,7 +1083,7 @@
               <input type="number" id="rest-timeout" class="rest-timeout" value="300" min="1" max="3600">
             </div>
           </div>
-          
+
           <!-- [2025-05-20T13:51:20-04:00] Redesigned job status and response section with fixed layout -->
           <div class="fixed-height-container">
             <!-- Job Status Check Section -->
@@ -1062,7 +1094,7 @@
                 <button id="check-job-status-btn" class="btn-check-status">Check Status</button>
               </div>
             </div>
-            
+
             <!-- REST API Response Display - Always visible but empty when not in use -->
             <div id="rest-response-container" class="rest-response-container">
               <h3 class="response-header">REST API Response</h3>
@@ -1091,7 +1123,7 @@
       <div class="card workers-section">
         <h2>Connected Workers</h2>
         <!-- [2025-04-06 18:59] Updated to use cards instead of table for workers -->
-        <div id="workers-container">
+        <div id="workers-container" class="scrollable-container">
           <!-- Worker cards will be added here dynamically -->
         </div>
         <div id="no-workers-message" class="hidden">
@@ -1101,35 +1133,64 @@
 
       <!-- Job Queue Section (Below Connected Workers) -->
       <div class="card job-queue-section">
-      <h2>Job Queue</h2>
-      <!-- [2025-04-06 18:59] Updated to only show queued jobs -->
-      <!-- [2025-05-20T13:55:06-04:00] Added proper overflow handling for the jobs table -->
-      <div id="jobs-table-container" class="table-responsive">
-        <table id="jobs-table" class="compact-table">
-          <thead>
-            <tr>
-              <th class="job-id-column">Job ID</th>
-              <th>Client ID</th>
-              <th>Job Type</th>
-              <th>Status</th>
-              <th>Priority</th>
-              <th>Position</th>
-              <th>Created</th>
-              <!-- [2025-05-19T17:57:00-04:00] Added failures column to track job failure count -->
-              <th>Failures</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody id="jobs-table-body">
-            <!-- Job rows will be added here dynamically -->
-          </tbody>
-        </table>
+        <h2>Job Queue</h2>
+        <!-- [2025-04-06 18:59] Updated to only show queued jobs -->
+        <!-- [2025-05-20T13:55:06-04:00] Added proper overflow handling for the jobs table -->
+        <div id="jobs-table-container" class="table-responsive">
+          <table id="jobs-table" class="compact-table">
+            <thead>
+              <tr>
+                <th class="job-id-column">Job ID</th>
+                <th>Client ID</th>
+                <th>Job Type</th>
+                <th>Status</th>
+                <th>Priority</th>
+                <th>Position</th>
+                <th>Created</th>
+                <!-- [2025-05-19T17:57:00-04:00] Added failures column to track job failure count -->
+                <th>Failures</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="jobs-table-body">
+              <!-- Job rows will be added here dynamically -->
+            </tbody>
+          </table>
+        </div>
+        <div id="no-jobs-message" class="hidden">
+          No queued jobs
+        </div>
       </div>
-      <div id="no-jobs-message" class="hidden">
-        No queued jobs
+      <!-- [2025-04-06 19:40] Finished Jobs Section -->
+      <div class="card finished-jobs-section">
+        <h2>Finished Jobs</h2>
+        <div id="finished-jobs-container" class="table-responsive">
+          <table id="finished-jobs-table" class="compact-table">
+            <thead>
+              <tr>
+                <th class="job-id-column">Job ID</th>
+                <th>Client ID</th>
+                <th>Worker ID</th>
+                <th>Job Type</th>
+                <th>Status</th>
+                <th>Progress</th>
+                <th>Duration</th>
+                <th>Started</th>
+                <th>Finished</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="finished-jobs-table-body">
+              <!-- Finished job rows will be added here dynamically -->
+            </tbody>
+          </table>
+        </div>
+        <div id="no-finished-jobs-message" class="hidden">
+          No finished jobs
+        </div>
       </div>
     </div>
-    </div> <!-- Close right-column-container -->
+  </div> <!-- Close right-column-container -->
 
 
 
@@ -1145,31 +1206,78 @@
     }
 
     .job-queue-column {
-      flex: 4; /* Increased from 3 to 4 to make it wider */
+      flex: 4;
+      /* Increased from 3 to 4 to make it wider */
       margin-bottom: 0;
-      min-width: 0; /* Ensures content can shrink below min-content width */
+      min-width: 0;
+      /* Ensures content can shrink below min-content width */
     }
 
     .job-submission-column {
       flex: 2;
       margin-bottom: 0;
-      min-width: 400px; /* Ensures the submission column doesn't get too narrow */
+      min-width: 400px;
+      /* Ensures the submission column doesn't get too narrow */
     }
 
-    /* [2025-05-24T13:08:00-04:00] Added styles for right column container with vertical layout */
+    /* [2025-05-24T13:18:00-04:00] Updated right column layout with fixed heights and scrolling */
     .right-column-container {
-      flex: 4;
+      flex: 5;
       display: flex;
       flex-direction: column;
       gap: 20px;
+      height: calc(100vh - 100px);
+      /* Set a height relative to viewport */
     }
 
-    .workers-section {
+    /* Fixed heights with scrolling for all sections */
+    .workers-section,
+    .job-queue-section,
+    .finished-jobs-section {
       margin-bottom: 0;
+      overflow: hidden;
+      /* Prevent outer container scrolling */
+      display: flex;
+      flex-direction: column;
+      padding: 15px;
+    }
+
+    /* Specific heights for each section */
+    .workers-section {
+      height: 25%;
+      /* 25% of container height */
+      min-height: 250px;
     }
 
     .job-queue-section {
-      margin-bottom: 0;
+      height: 40%;
+      /* 40% of container height */
+      min-height: 200px;
+    }
+
+    .finished-jobs-section {
+      height: 25%;
+      /* 35% of container height */
+      min-height: 150px;
+    }
+
+    /* Section headers with consistent styling */
+    .workers-section h2,
+    .job-queue-section h2,
+    .finished-jobs-section h2 {
+      margin-top: 0;
+      padding: 10px;
+      background-color: #f8f9fa;
+      border-bottom: 1px solid #eee;
+    }
+
+    /* Scrollable containers for all sections */
+    .scrollable-container,
+    .table-responsive {
+      height: calc(100% - 43px);
+      /* Full height minus header */
+      overflow-y: auto;
+      padding: 0 5px;
       flex: 1;
     }
 
@@ -1270,35 +1378,6 @@
     <h2>Logs</h2>
     <div id="logs" class="logs">
       <!-- Log entries will be added here dynamically -->
-    </div>
-  </div>
-
-  <!-- [2025-04-06 19:40] Finished Jobs Section -->
-  <div class="card">
-    <h2>Finished Jobs</h2>
-    <div id="finished-jobs-container">
-      <table id="finished-jobs-table">
-        <thead>
-          <tr>
-            <th class="job-id-column">Job ID</th>
-            <th>Client ID</th>
-            <th>Worker ID</th>
-            <th>Job Type</th>
-            <th>Status</th>
-            <th>Progress</th>
-            <th>Duration</th>
-            <th>Started</th>
-            <th>Finished</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody id="finished-jobs-table-body">
-          <!-- Finished job rows will be added here dynamically -->
-        </tbody>
-      </table>
-    </div>
-    <div id="no-finished-jobs-message" class="hidden">
-      No finished jobs
     </div>
   </div>
 
