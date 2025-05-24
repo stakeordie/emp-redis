@@ -5,12 +5,29 @@ All notable changes to the EMP Redis project will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
-- [2025-05-24T12:35:00-04:00] Standardized element naming in monitor.js:
+- [2025-05-24T12:49:00-04:00] Standardized element naming in monitor.js:
   - Changed all instances of jobTypeDropdown to jobType for consistency
-  - Added detailed comments explaining the changes
-  - Improved code maintainability by eliminating naming conflicts
+  - Documented duplicate jobPayload element references with clear comments
+  - Added modal elements to the elements object for better organization
+  - Updated modal functionality to use the elements object for consistency
+  - Added detailed comments explaining all changes
+  - Improved code maintainability by clarifying naming conflicts
+
+- [2025-05-24T12:47:00-04:00] Improved button layout and functionality:
+  - Added details button to active jobs table to match finished jobs table
+  - Created horizontal flex container for action buttons to improve layout
+  - Standardized all buttons to use onclick attributes for consistency
+  - Added proper styling for action buttons with hover effects
+  - Fixed details button functionality to ensure modal opens correctly
 
 ### Added
+- [2025-05-24T12:55:00-04:00] Added modal view for REST API responses:
+  - Added maximize button to REST API response container
+  - Implemented modal for better JSON viewing with syntax highlighting
+  - Added copy to clipboard functionality with visual feedback
+  - Added keyboard shortcuts (Escape to close, Ctrl+C to copy)
+  - Improved user experience for viewing large JSON payloads
+
 - [2025-05-24T11:56:00-04:00] Added job payload to API response:
   - Added payload field to JobStatusResponse model
   - Updated get_job_status endpoint to include original job payload in response

@@ -222,6 +222,7 @@ const elements = {
     // [2025-05-24T12:33:00-04:00] Using jobType consistently instead of jobTypeDropdown
     // [2025-05-19T17:50:00-04:00] Added job type dropdown reference
     // [2025-05-19T17:54:00-04:00] Added job payload textarea reference
+    // [2025-05-24T12:38:00-04:00] Note: This element is also referenced in the job submission section
     jobPayload: document.getElementById('job-payload'),
     authToken: document.getElementById('auth-token'),
     // Connection info display elements
@@ -240,7 +241,7 @@ const elements = {
     jobType: document.getElementById('job-type'),
     jobPriority: document.getElementById('job-priority'),
     priorityButtons: document.querySelectorAll('.priority-btn'),
-    jobPayload: document.getElementById('job-payload'),
+    // [2025-05-24T12:41:00-04:00] This is a duplicate of the jobPayload element defined in the connection controls sectio
     submitJobBtn: document.getElementById('submit-job-btn'),
     // [2025-05-20T11:26:44-04:00] Added REST API elements
     submitJobRestBtn: document.getElementById('submit-job-rest-btn'),
@@ -248,6 +249,12 @@ const elements = {
     restResponse: document.getElementById('rest-response'),
     // [2025-05-20T11:30:59-04:00] Added REST API URL display element
     restApiUrl: document.getElementById('rest-api-url'),
+    
+    // [2025-05-24T12:50:00-04:00] Added REST API response modal elements
+    restResponseModal: document.getElementById('rest-response-modal'),
+    restResponseModalContent: document.getElementById('rest-response-modal-content'),
+    restResponseModalClose: document.getElementById('rest-response-modal-close'),
+    restResponseModalCopy: document.getElementById('rest-response-modal-copy'),
     // [2025-05-20T11:34:47-04:00] Added synchronous option elements
     restSyncCheckbox: document.getElementById('rest-sync-checkbox'),
     restTimeout: document.getElementById('rest-timeout'),
@@ -276,7 +283,11 @@ const elements = {
     finishedJobsContainer: document.getElementById('finished-jobs-container'),
     
     // Logs
-    logs: document.getElementById('logs')
+    logs: document.getElementById('logs'),
+    
+    // [2025-05-24T12:45:00-04:00] Added modal elements for better organization
+    jobDetailsModal: document.getElementById('job-details-modal'),
+    jobDetailsContent: document.getElementById('job-details-content')
 };
 
 /**
@@ -1928,6 +1939,11 @@ async function checkJobStatus(jobId) {
  * This function updates the REST response container with the given content
  * The fixed layout structure prevents any layout shifts
  */
+/**
+ * [2025-05-24T12:51:00-04:00] Display REST API response with maximize button for JSON viewing
+ * @param {string} content - The response content to display
+ * @param {boolean} isError - Whether the response is an error
+ */
 function displayRestResponse(content, isError = false) {
     // Update the response content
     elements.restResponse.textContent = content;
@@ -1944,6 +1960,248 @@ function displayRestResponse(content, isError = false) {
     setTimeout(() => {
         elements.restResponseContainer.classList.remove('highlight-container');
     }, 1500);
+    
+    // [2025-05-24T12:51:30-04:00] Add maximize button if it doesn't exist
+    let maximizeBtn = document.getElementById('rest-response-maximize');
+    if (!maximizeBtn) {
+        // Create the maximize button
+        maximizeBtn = document.createElement('button');
+        maximizeBtn.id = 'rest-response-maximize';
+        maximizeBtn.className = 'maximize-btn';
+        maximizeBtn.innerHTML = '⤢'; // Unicode maximize icon
+        maximizeBtn.title = 'View in larger modal (Ctrl+M)';
+        
+        // Add the button to the container
+        const responseHeader = elements.restResponseContainer.querySelector('.response-header');
+        if (responseHeader) {
+            responseHeader.appendChild(maximizeBtn);
+        } else {
+            elements.restResponseContainer.insertBefore(maximizeBtn, elements.restResponse);
+        }
+        
+        // Add click event to open modal
+        maximizeBtn.addEventListener('click', () => showRestResponseModal(content));
+    }
+    
+    // Update the button's onclick to use the current content
+    maximizeBtn.onclick = () => showRestResponseModal(content);
+}
+
+/**
+ * [2025-05-24T12:52:00-04:00] Show REST API response in a modal for better viewing
+ * @param {string} content - The content to display in the modal
+ */
+function showRestResponseModal(content) {
+    // Create modal if it doesn't exist
+    let modal = elements.restResponseModal;
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'rest-response-modal';
+        modal.className = 'modal';
+        modal.innerHTML = `
+            <div class="modal-content rest-modal-content">
+                <div class="modal-header">
+                    <h2>REST API Response</h2>
+                    <div class="modal-actions">
+                        <button id="rest-response-modal-copy" class="copy-btn" title="Copy to clipboard (Ctrl+C)">📋 Copy</button>
+                        <span class="copy-feedback" id="copy-feedback">Copied!</span>
+                        <button id="rest-response-modal-close" class="close-button" title="Close (Escape)">×</button>
+                    </div>
+                </div>
+                <pre id="rest-response-modal-content" class="modal-json-content"></pre>
+            </div>
+        `;
+        document.body.appendChild(modal);
+        
+        // Store references to modal elements
+        elements.restResponseModal = modal;
+        elements.restResponseModalContent = document.getElementById('rest-response-modal-content');
+        elements.restResponseModalClose = document.getElementById('rest-response-modal-close');
+        elements.restResponseModalCopy = document.getElementById('rest-response-modal-copy');
+        
+        // Add event listeners
+        elements.restResponseModalClose.addEventListener('click', () => {
+            modal.style.display = 'none';
+        });
+        
+        elements.restResponseModalCopy.addEventListener('click', () => {
+            copyToClipboard(elements.restResponseModalContent.textContent);
+        });
+        
+        // Close modal when clicking outside of it
+        window.addEventListener('click', (event) => {
+            if (event.target === modal) {
+                modal.style.display = 'none';
+            }
+        });
+        
+        // Add keyboard shortcuts
+        window.addEventListener('keydown', (event) => {
+            if (modal.style.display === 'block') {
+                // Close on Escape
+                if (event.key === 'Escape') {
+                    modal.style.display = 'none';
+                }
+                
+                // Copy on Ctrl+C
+                if (event.ctrlKey && event.key === 'c') {
+                    copyToClipboard(elements.restResponseModalContent.textContent);
+                    event.preventDefault();
+                }
+            }
+        });
+        
+        // Add CSS for modal
+        const style = document.createElement('style');
+        style.textContent = `
+            .modal {
+                display: none;
+                position: fixed;
+                z-index: 1000;
+                left: 0;
+                top: 0;
+                width: 100%;
+                height: 100%;
+                background-color: rgba(0,0,0,0.5);
+            }
+            .rest-modal-content {
+                background-color: white;
+                margin: 5% auto;
+                padding: 0;
+                border-radius: 5px;
+                width: 90%;
+                max-width: 1200px;
+                max-height: 90vh;
+                display: flex;
+                flex-direction: column;
+                overflow: hidden;
+            }
+            .modal-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 10px 20px;
+                background-color: #f5f5f5;
+                border-bottom: 1px solid #ddd;
+            }
+            .modal-actions {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+            }
+            .modal-json-content {
+                padding: 20px;
+                overflow: auto;
+                flex: 1;
+                margin: 0;
+                background-color: #f8f8f8;
+                font-family: monospace;
+                font-size: 14px;
+                white-space: pre-wrap;
+                max-height: calc(90vh - 60px);
+            }
+            .copy-btn {
+                padding: 5px 10px;
+                background-color: #f0f0f0;
+                border: 1px solid #ccc;
+                border-radius: 3px;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                gap: 5px;
+            }
+            .copy-btn:hover {
+                background-color: #e0e0e0;
+            }
+            .copy-feedback {
+                color: #4CAF50;
+                font-size: 14px;
+                opacity: 0;
+                transition: opacity 0.3s;
+            }
+            .copy-feedback.visible {
+                opacity: 1;
+            }
+            .maximize-btn {
+                background: none;
+                border: none;
+                font-size: 18px;
+                cursor: pointer;
+                color: #555;
+                margin-left: 10px;
+                vertical-align: middle;
+            }
+            .maximize-btn:hover {
+                color: #000;
+            }
+            .response-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+    
+    // Update modal content with formatted JSON if possible
+    try {
+        // Try to parse and re-stringify the content for pretty formatting
+        const jsonObj = JSON.parse(content);
+        elements.restResponseModalContent.textContent = JSON.stringify(jsonObj, null, 2);
+    } catch (e) {
+        // If not valid JSON, just display the content as is
+        elements.restResponseModalContent.textContent = content;
+    }
+    
+    // Show modal
+    modal.style.display = 'block';
+}
+
+/**
+ * [2025-05-24T12:53:00-04:00] Copy content to clipboard with feedback
+ * @param {string} text - The text to copy to clipboard
+ */
+function copyToClipboard(text) {
+    // Use the Clipboard API if available
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(text)
+            .then(() => showCopyFeedback())
+            .catch(err => console.error('Could not copy text: ', err));
+    } else {
+        // Fallback for browsers that don't support Clipboard API
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = 0;
+        document.body.appendChild(textarea);
+        textarea.select();
+        
+        try {
+            const successful = document.execCommand('copy');
+            if (successful) {
+                showCopyFeedback();
+            } else {
+                console.error('Failed to copy');
+            }
+        } catch (err) {
+            console.error('Error copying text: ', err);
+        }
+        
+        document.body.removeChild(textarea);
+    }
+}
+
+/**
+ * [2025-05-24T12:53:30-04:00] Show feedback when content is copied
+ */
+function showCopyFeedback() {
+    const feedback = document.getElementById('copy-feedback');
+    if (feedback) {
+        feedback.classList.add('visible');
+        setTimeout(() => {
+            feedback.classList.remove('visible');
+        }, 2000);
+    }
 }
 
 /**
@@ -2897,9 +3155,14 @@ function updateUI() {
                 </td>
                 <td>${createdAtStr}</td>
                 <td>${failureCount > 0 ? `<span class="failure-count">${failureCount}</span>` : '0'}</td>
-                <td>
-                    <button class="btn-cancel" onclick="cancelJob('${job.id}')">Cancel</button>
-                    ${failureCount > 0 ? `<button class="btn-force-retry" onclick="forceRetryJob('${job.id}')">Force Retry</button>` : ''}
+                <td class="job-actions">
+                    <!-- [2025-05-24T12:42:00-04:00] Improved button layout with horizontal flex container -->
+                    <div class="action-buttons-container">
+                        <button class="btn-cancel" onclick="cancelJob('${job.id}')">Cancel</button>
+                        ${failureCount > 0 ? `<button class="btn-force-retry" onclick="forceRetryJob('${job.id}')">Force Retry</button>` : ''}
+                        <!-- [2025-05-24T12:44:00-04:00] Changed to use onclick for consistency with other buttons -->
+                        <button class="action-btn" onclick="showJobDetails('${job.id}')" title="View details">⋯</button>
+                    </div>
                 </td>
             `;
             
@@ -2999,7 +3262,8 @@ function updateUI() {
                 <td>${finishedTime}</td>
                 <td class="job-actions">
                     ${job.status === 'failed' ? `
-                        <button class="action-btn retry-btn" data-job-id="${job.id}" title="Retry job">↻</button>
+                        <!-- [2025-05-24T12:46:00-04:00] Changed to use onclick for consistency with other buttons -->
+                        <button class="action-btn" onclick="retryJob('${job.id}')" title="Retry job">↻</button>
                         <div class="error-tooltip">
                             <button class="action-btn error-btn" title="View error">!</button>
                             <div class="tooltip-content">
@@ -3007,7 +3271,8 @@ function updateUI() {
                             </div>
                         </div>
                     ` : ''}
-                    <button class="action-btn details-btn" data-job-id="${job.id}" title="View details">⋯</button>
+                    <!-- [2025-05-24T12:45:00-04:00] Changed to use onclick for consistency with other buttons -->
+                    <button class="action-btn" onclick="showJobDetails('${job.id}')" title="View details">⋯</button>
                 </td>
             `;
             
@@ -3434,8 +3699,9 @@ function showJobDetails(jobId) {
         return;
     }
     
+    // [2025-05-24T12:47:00-04:00] Use elements object for modal references
     // Create modal if it doesn't exist
-    let modal = document.getElementById('job-details-modal');
+    let modal = elements.jobDetailsModal;
     if (!modal) {
         modal = document.createElement('div');
         modal.id = 'job-details-modal';
@@ -3465,6 +3731,28 @@ function showJobDetails(jobId) {
         // Add CSS for modal
         const style = document.createElement('style');
         style.textContent = `
+            /* [2025-05-24T12:43:00-04:00] Added styles for action buttons container */
+            .action-buttons-container {
+                display: flex;
+                flex-direction: row;
+                gap: 5px;
+                align-items: center;
+            }
+            .job-actions {
+                white-space: nowrap;
+            }
+            .action-btn {
+                cursor: pointer;
+                background-color: #f0f0f0;
+                border: 1px solid #ccc;
+                border-radius: 3px;
+                padding: 2px 8px;
+                font-size: 14px;
+            }
+            .action-btn:hover {
+                background-color: #e0e0e0;
+            }
+
             .modal {
                 display: none;
                 position: fixed;
@@ -3558,8 +3846,9 @@ function showJobDetails(jobId) {
         document.head.appendChild(style);
     }
     
+    // [2025-05-24T12:48:00-04:00] Use elements object for modal content reference
     // Update modal content
-    const content = modal.querySelector('#job-details-content');
+    const content = elements.jobDetailsContent || modal.querySelector('#job-details-content');
     content.innerHTML = `
         <div class="job-details-grid">
             <div class="detail-row">
