@@ -72,17 +72,7 @@ class A1111Connector(RESTSyncConnector):
         # Updated: 2025-04-17T14:10:00-04:00 - Added configurable connection timeout
         self.connection_timeout = float(os.environ.get("WORKER_A1111_CONNECTION_TIMEOUT", os.environ.get("A1111_CONNECTION_TIMEOUT", "30.0")))
         self.request_timeout = aiohttp.ClientTimeout(total=self.connection_timeout)
-        
-        # Log which variables we're using
-        logger.info(f"[a1111_connector.py __init__] Using environment variables:")
-        logger.info(f"[a1111_connector.py __init__] WORKER_A1111_HOST: {self.host}")
-        logger.info(f"[a1111_connector.py __init__] WORKER_A1111_PORT: {self.port}")
-        logger.info(f"[a1111_connector.py __init__] Base URL: {self.base_url}")
-        logger.info(f"[a1111_connector.py __init__] API Prefix: {self.api_prefix}")
-        logger.info(f"[a1111_connector.py __init__] WORKER_A1111_JOB_TYPE/A1111_JOB_TYPE: {self.job_type}")
-        logger.info(f"[a1111_connector.py __init__] Connection timeout: {self.connection_timeout}s")
-        logger.info(f"[a1111_connector.py __init__] Username environment variable: {'set' if self.username else 'not set'}")
-        
+          
         # Update connection details
         self.connection_details = {
             "host": self.host,
@@ -140,7 +130,6 @@ class A1111Connector(RESTSyncConnector):
             nonlocal job_completed
             # Don't send progress updates if the job is already completed
             if job_completed and status == "processing":
-                logger.info(f"[a1111_connector.py safe_send_progress_update] Ignoring progress update for completed job {job_id}")
                 return
             # If this is a completion update, set the flag
             if status in ["completed", "failed", "error"]:
@@ -150,9 +139,7 @@ class A1111Connector(RESTSyncConnector):
         
         try:
             # Set current job ID for tracking
-            self.current_job_id = job_id
-            logger.info(f"[a1111_connector.py process_job] Processing job {job_id}")
-            
+            self.current_job_id = job_id            
             # Create session if it doesn't exist with proper timeout
             # Updated: 2025-04-17T14:10:00-04:00 - Added timeout to client session
             if self.session is None:
@@ -171,7 +158,7 @@ class A1111Connector(RESTSyncConnector):
                 try:
                     request_payload = json.loads(request_payload)
                 except json.JSONDecodeError as e:
-                    logger.warning(f"[a1111_connector.py process_job] Failed to parse payload as JSON: {str(e)}")
+                    logger.error(f"[a1111_connector.py process_job] Failed to parse payload as JSON: {str(e)}")
                     # Keep payload as string if it can't be parsed
             
             # Construct the full URL with API prefix
@@ -179,12 +166,7 @@ class A1111Connector(RESTSyncConnector):
             if endpoint.startswith('/'):
                 endpoint = endpoint[1:]
             url = f"{self.base_url}{self.api_prefix}/{endpoint}"
-            
-            # Log detailed request information for debugging
-            logger.info(f"[a1111_connector.py process_job] Sending {method.upper()} request to {url}")
-            logger.info(f"[a1111_connector.py process_job] Request payload: {json.dumps(request_payload)[:1000]}")
-            logger.info(f"[a1111_connector.py process_job] Using timeout: {self.connection_timeout}s")
-            
+                        
             # Send progress update
             await safe_send_progress_update(job_id, 10, "processing", f"Sending {method.upper()} request to A1111 API")
             
@@ -197,7 +179,7 @@ class A1111Connector(RESTSyncConnector):
             # [2025-05-25T11:15:00-04:00] IMPORTANT: Create a service request message that will be broadcast to monitors
             try:
                 # Log with a very distinctive message to ensure we can see it in the logs
-                logger.info(f"[a1111_connector.py process_job] [2025-05-25T11:15:00-04:00] BROADCASTING SERVICE REQUEST for job {job_id} to endpoint {endpoint}")
+                logger.debug(f"[a1111_connector.py process_job] [2025-05-25T11:15:00-04:00] BROADCASTING SERVICE REQUEST for job {job_id} to endpoint {endpoint}")
                 
                 # Create a message that will be sent directly to the websocket
                 # This bypasses the Hub's message routing and goes directly to the monitor
@@ -221,8 +203,8 @@ class A1111Connector(RESTSyncConnector):
                 message_size = len(message_json)
                 
                 # Log the message details with very distinctive timestamps
-                logger.info(f"[a1111_connector.py process_job] [2025-05-25T11:15:00-04:00] Sending service request message (size: {message_size} bytes)")
-                logger.info(f"[a1111_connector.py process_job] [2025-05-25T11:15:00-04:00] Message structure: {list(service_request_message.keys())}")
+                logger.debug(f"[a1111_connector.py process_job] [2025-05-25T11:15:00-04:00] Sending service request message (size: {message_size} bytes)")
+                logger.debug(f"[a1111_connector.py process_job] [2025-05-25T11:15:00-04:00] Message structure: {list(service_request_message.keys())}")
                 
                 # Send the message directly using the websocket
                 # This bypasses the Hub's message routing and goes directly to the monitor
@@ -245,7 +227,7 @@ class A1111Connector(RESTSyncConnector):
                 await websocket.send(progress_json)
                 
                 # Log success with very distinctive timestamp
-                logger.info(f"[a1111_connector.py process_job] [2025-05-25T11:15:00-04:00] Successfully sent service request message for job {job_id}")
+                logger.debug(f"[a1111_connector.py process_job] [2025-05-25T11:15:00-04:00] Successfully sent service request message for job {job_id}")
                 
             except Exception as e:
                 # Log but don't fail the job if broadcasting fails
@@ -291,9 +273,7 @@ class A1111Connector(RESTSyncConnector):
                                     
                                     if progress_changed or eta_changed:
                                         last_progress = progress_percent
-                                        last_eta = eta
-                                        last_update_time = time.time()
-                                        
+                                        last_eta = eta                                        
                                         # Scale to 10-90 range to leave room for start/end updates
                                         scaled_progress = 10 + int(progress_percent * 0.8)
                                         
@@ -311,14 +291,14 @@ class A1111Connector(RESTSyncConnector):
                                         logger.info(f"[a1111_connector.py poll_progress] A1111 job completed, stopping progress polling")
                                         return  # Exit the polling function completely instead of just breaking the loop
                         except Exception as e:
-                            logger.warning(f"[a1111_connector.py poll_progress] Error polling progress: {str(e)}")
+                            logger.error(f"[a1111_connector.py poll_progress] Error polling progress: {str(e)}")
                             # We don't send an update here - if there's a real problem, the main request will time out
                             # which is the correct behavior
                         
                         # Wait before polling again (1 second)
                         await asyncio.sleep(1.0)
                 except Exception as e:
-                    logger.warning(f"[a1111_connector.py poll_progress] Error in progress polling: {str(e)}")
+                    logger.error(f"[a1111_connector.py poll_progress] Error in progress polling: {str(e)}")
             
             # Use asyncio.wait_for to implement a more reliable timeout
             # Updated: 2025-04-17T14:11:00-04:00 - Added asyncio.wait_for for better timeout handling
@@ -360,9 +340,7 @@ class A1111Connector(RESTSyncConnector):
                     
                     # Parse response with timeout
                     # Updated: 2025-04-17T14:11:00-04:00 - Added timeout for response parsing
-                    result = await asyncio.wait_for(response.json(), timeout=self.connection_timeout)
-                    logger.info(f"[a1111_connector.py process_job] Received successful response from A1111 API")
-                    
+                    result = await asyncio.wait_for(response.json(), timeout=self.connection_timeout)                    
                     # Send completion update
                     await safe_send_progress_update(job_id, 100, "completed", "Job completed successfully")
                     
@@ -407,12 +385,10 @@ class A1111Connector(RESTSyncConnector):
         finally:
             # Updated: 2025-04-17T14:12:00-04:00 - Always clear current job ID
             # [2025-05-20T12:02:05-04:00] Added proper cleanup of progress polling task
-            logger.info(f"[a1111_connector.py process_job] Completed job {job_id}")
             self.current_job_id = None
             
             # Cancel the progress polling task if it exists
             if progress_polling_task is not None and not progress_polling_task.done():
-                logger.info(f"[a1111_connector.py process_job] Canceling progress polling task for job {job_id}")
                 progress_polling_task.cancel()
                 
                 # Wait for the task to be properly canceled
@@ -423,6 +399,4 @@ class A1111Connector(RESTSyncConnector):
                     # This is expected when canceling the task
                     pass
                 except Exception as e:
-                    logger.warning(f"[a1111_connector.py process_job] Error while canceling progress polling task: {str(e)}")
-                    
-                logger.info(f"[a1111_connector.py process_job] Progress polling task for job {job_id} has been canceled")
+                    logger.error(f"[a1111_connector.py process_job] Error while canceling progress polling task: {str(e)}")
