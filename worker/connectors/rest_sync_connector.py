@@ -29,10 +29,10 @@ except ImportError:
 from core.utils.logger import logger
 
 class RESTSyncConnector(ConnectorInterface):
-    """Connector for synchronous REST API calls"""
+    """Base class for REST synchronous connectors"""
     
-    # [2025-05-25T22:10:00-04:00] Implemented connector_id property
-    # This is a base class, so it raises NotImplementedError
+    # [2025-05-25T22:32:00-04:00] Implemented connector_id property to replace connector_name
+    # This base class is not directly usable by workers
     @property
     def connector_id(self) -> str:
         """Get the connector identifier used for loading and identification
