@@ -233,35 +233,61 @@ async def load_connectors() -> Dict[str, ConnectorInterface]:
             # Store the loaded module for dependency resolution
             loaded_modules[connector_name] = module
             
-            # [2025-05-25T22:00:00-04:00] Simplified connector class finding logic to be more reliable
+            # [2025-05-25T22:08:00-04:00] Enhanced connector class finding logic with better debugging
             # Support both the new connector_id property and the old connector_name attribute
             connector_class = None
+            
+            # Log all classes in the module for debugging
+            class_list = [name for name, obj in module.__dict__.items() if isinstance(obj, type)]
+            logger.info(f"[connector_loader.py load_connectors() DEBUG] Classes in {module.__name__}: {class_list}")
+            
             for cls_name, cls in module.__dict__.items():
                 if not isinstance(cls, type):
                     continue
-                    
-                # Skip if not a ConnectorInterface subclass
+                
+                # Check if it's a ConnectorInterface subclass
                 try:
-                    if not issubclass(cls, ConnectorInterface):
+                    is_connector = issubclass(cls, ConnectorInterface)
+                    if not is_connector:
                         continue
+                    logger.info(f"[connector_loader.py load_connectors() DEBUG] Found ConnectorInterface subclass: {cls_name}")
                 except TypeError:
                     # This happens for non-class objects
                     continue
                     
                 # Skip abstract base classes
                 if cls == ConnectorInterface or cls.__name__ == 'WebSocketConnector':
+                    logger.info(f"[connector_loader.py load_connectors() DEBUG] Skipping abstract class: {cls_name}")
                     continue
                     
-                # First try the new connector_id property approach
+                # [2025-05-25T22:10:00-04:00] Completely redesigned connector_id checking
+                # This fixes issues with property access and improves reliability
                 try:
-                    # Create a temporary instance
+                    # First check if the class has a connector_id property
+                    # We need to be careful because it's a property, not an attribute
+                    
+                    # Create a temporary instance to access the property
                     instance = cls()
-                    # Check if connector_id property matches
-                    if hasattr(instance, 'connector_id') and callable(getattr(instance, 'connector_id')):
-                        if instance.connector_id == connector_name:
-                            connector_class = cls
-                            logger.info(f"[connector_loader.py load_connectors()] Found connector class {cls_name} with connector_id='{connector_name}'")
-                            break
+                    
+                    # Check if the class has the connector_id property
+                    if hasattr(cls, 'connector_id') or hasattr(instance, 'connector_id'):
+                        # Get the connector_id value
+                        try:
+                            connector_id_value = instance.connector_id
+                            logger.info(f"[connector_loader.py load_connectors() DEBUG] Class {cls_name} has connector_id='{connector_id_value}'")
+                            
+                            # Check if it matches the requested connector name
+                            if connector_id_value == connector_name:
+                                connector_class = cls
+                                logger.info(f"[connector_loader.py load_connectors()] Found connector class {cls_name} with connector_id='{connector_name}'")
+                                break
+                            else:
+                                logger.info(f"[connector_loader.py load_connectors() DEBUG] Class {cls_name} connector_id='{connector_id_value}' doesn't match '{connector_name}'")
+                        except Exception as prop_error:
+                            logger.error(f"[connector_loader.py load_connectors() ERROR] Error accessing connector_id property on {cls_name}: {prop_error}")
+                    else:
+                        logger.info(f"[connector_loader.py load_connectors() DEBUG] Class {cls_name} has no connector_id property")
+
                 except Exception as e:
                     # Fall back to checking connector_name attribute
                     try:
