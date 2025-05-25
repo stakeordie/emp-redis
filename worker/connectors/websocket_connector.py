@@ -33,7 +33,8 @@ class WebSocketConnector(ConnectorInterface):
     
     # Base class is not directly usable by workers
     # Updated: 2025-04-07T15:50:00-04:00
-    connector_name = None  # Set to None to indicate this is not directly usable
+    # [2025-05-25T20:55:00-04:00] Changed connector_name type to Optional[str] to allow string values in subclasses
+    connector_name: Optional[str] = None  # Set to None to indicate this is not directly usable
     
     # Version identifier to verify code deployment
     VERSION = "2025-04-17-15:05-error-handling-fix"

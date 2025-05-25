@@ -59,10 +59,9 @@ from core.utils.logger import logger
 class ComfyUIConnector(WebSocketConnector):
     """Connector for ComfyUI service"""
     
-    # [2025-05-25T16:30:00-04:00] Changed connector_name to None to match base class type
-    # This is required for type compatibility with WebSocketConnector
-    # The actual name "comfyui" is set in the WORKER_CONNECTORS environment variable
-    connector_name = None
+    # [2025-05-25T20:50:00-04:00] Changed connector_name to 'comfyui' to match the expected name in connector_loader.py
+    # Previously set to None to match base class type, but this was causing connector loading issues
+    connector_name = 'comfyui'
     
     # Version tracking
     # Updated: 2025-04-25T15:35:00-04:00 - Added improved connection error handling

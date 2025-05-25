@@ -38,9 +38,9 @@ class A1111Connector(RESTSyncConnector):
     
     # Class attribute to identify the connector type
     # This should match the name used in the WORKER_CONNECTORS environment variable
-    # [2025-05-25T15:25:00-04:00] Fixed type compatibility with ConnectorInterface
-    # Base class defines this as None, so we need to maintain the same type
-    connector_name = None
+    # [2025-05-25T21:00:00-04:00] Changed connector_name to 'a1111' to match the expected name in connector_loader.py
+    # Previously set to None for type compatibility, but this was causing connector loading issues
+    connector_name = 'a1111'
     
     def __init__(self):
         """Initialize the A1111 connector"""

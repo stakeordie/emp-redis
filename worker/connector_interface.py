@@ -10,7 +10,8 @@ class ConnectorInterface(ABC):
     # This should be overridden by each connector implementation
     # and should match the name used in the WORKER_CONNECTORS environment variable
     # Updated: 2025-04-07T15:48:00-04:00
-    connector_name = None
+    # [2025-05-25T21:05:00-04:00] Changed connector_name type to Optional[str] to allow string values in subclasses
+    connector_name: Optional[str] = None
     
     @abstractmethod
     async def initialize(self) -> bool:

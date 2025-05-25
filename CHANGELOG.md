@@ -19,6 +19,13 @@ All notable changes to the EMP Redis project will be documented in this file.
   - Helps with debugging and understanding what's being requested from services
 
 ### Changed
+- [2025-05-25T21:05:00-04:00] Fixed connector loading errors in ConnectorInterface, WebSocketConnector, ComfyUIConnector, and A1111Connector:
+  - Changed connector_name type to Optional[str] in ConnectorInterface and WebSocketConnector
+  - Set connector_name to 'comfyui' in ComfyUIConnector
+  - Set connector_name to 'a1111' in A1111Connector
+  - Fixed "Could not find connector class with connector_name" errors
+  - Reduced excessive logging in base_worker.py
+
 - [2025-05-25T18:45:00-04:00] Fixed remaining type errors in worker_main.py and apps/comfy-worker/scripts/a1111/docker/config.py:
   - Added null checks for worker_base in worker_main.py to prevent "None not callable" errors
   - Fixed Dict and Any imports in config.py
