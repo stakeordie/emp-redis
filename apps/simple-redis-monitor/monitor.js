@@ -1377,21 +1377,21 @@ function handleStatsBroadcast(parsedMessage, rawMessage, source = 'unknown') {
 }
 
 /**
- * Handle job accepted message
+ * [2025-05-24T23:25:00-04:00] Handle job accepted message
  * @param {Object} message - Parsed job accepted message
  * @param {string} source - Source of the message ('monitor' or 'client')
- * [2025-04-06 20:50] Added job_type and client_id capture and preservation
  */
 function handleJobAccepted(message, source = 'unknown') {
     const jobId = message.jobId || message.job_id;
     const status = message.status;
     const position = message.position;
-    // [2025-04-06 20:50] Capture job_type from the message
     const jobType = message.job_type || message.type || null;
-    // [2025-04-06 20:50] Capture client_id from the message
     const clientId = message.client_id || null;
+    // [2025-05-24T23:25:00-04:00] Capture payload from the message
+    const payload = message.payload || null;
     
     console.log(`[DEBUG] Job accepted: ${jobId}, type: ${jobType || 'unknown'}, client: ${clientId || 'unknown'}, source: ${source}`);
+    console.log(`[DEBUG] Job payload:`, payload);
     
     // Add job to state
     state.jobs[jobId] = {
@@ -1399,8 +1399,10 @@ function handleJobAccepted(message, source = 'unknown') {
         status: status || 'pending',
         position: position,
         progress: 0,
-        job_type: jobType, // [2025-04-06 20:50] Store job type
-        client_id: clientId, // [2025-04-06 20:50] Store client ID
+        job_type: jobType,
+        client_id: clientId,
+        // [2025-05-24T23:25:00-04:00] Store payload
+        payload: payload,
         createdAt: new Date(),
         updatedAt: new Date(),
         source_update: source
@@ -1582,22 +1584,19 @@ function handleJobFailed(message, rawMessage, source = 'unknown') {
 }
 
 /**
- * Handle job completion message
+ * [2025-05-24T23:35:00-04:00] Handle job completion message
  * @param {Object} message - Parsed job completion message
  * @param {string} source - Source of the message ('monitor' or 'client')
- * [2025-04-06 19:35] Added to properly handle job completion
- * [2025-04-06 20:40] Added client_id capture from monitor messages
- * [2025-04-06 20:50] Added job_type capture and preservation
  */
 function handleJobCompleted(message, source = 'unknown') {
-    // [2025-04-06 19:35] Extract job details from message
+    // Extract job details from message
     const jobId = message.jobId || message.job_id;
     const workerId = message.workerId || message.worker_id;
     const result = message.result || {};
-    // [2025-04-06 20:40] Capture client_id from the message
     const clientId = message.client_id || null;
-    // [2025-04-06 20:50] Capture job_type from the message
     const jobType = message.job_type || message.type || null;
+    // [2025-05-24T23:35:00-04:00] Capture payload from the message
+    const payload = message.payload || null;
 
     // Log the completion with job type
     console.log(`[DEBUG] Job completed: ${jobId} (type: ${jobType || 'unknown'}) by worker ${workerId}, client: ${clientId}`);
@@ -1610,11 +1609,13 @@ function handleJobCompleted(message, source = 'unknown') {
             state.jobs[jobId] = {
                 id: jobId,
                 worker_id: workerId,
-                client_id: clientId, // [2025-04-06 20:40] Store client ID
-                job_type: jobType, // [2025-04-06 20:50] Store job type
+                client_id: clientId,
+                job_type: jobType,
                 status: 'completed',
                 progress: 100,
                 result: result,
+                // [2025-05-24T23:40:00-04:00] Store payload data
+                payload: payload,
                 createdAt: Date.now() - 1000, // Assume it was created a second ago
                 completedAt: Date.now(),
                 updated_at: Date.now(),
@@ -1632,13 +1633,19 @@ function handleJobCompleted(message, source = 'unknown') {
             state.jobs[jobId].worker_id = workerId;
             state.jobs[jobId].source_update = source;
 
-            // [2025-04-06 20:40] Update client_id if it's provided and not already set
+            // [2025-05-24T23:45:00-04:00] Update payload if it's provided and not already set
+            if (payload && !state.jobs[jobId].payload) {
+                state.jobs[jobId].payload = payload;
+                console.log(`[DEBUG] Updated payload for job ${jobId}`);
+            }
+
+            // Update client_id if it's provided and not already set
             if (clientId && !state.jobs[jobId].client_id) {
                 state.jobs[jobId].client_id = clientId;
                 console.log(`[DEBUG] Updated client_id for job ${jobId} to ${clientId}`);
             }
             
-            // [2025-04-06 20:50] Update job_type if it's provided and not already set
+            // Update job_type if it's provided and not already set
             if (jobType && (!state.jobs[jobId].job_type && !state.jobs[jobId].type)) {
                 state.jobs[jobId].job_type = jobType;
                 console.log(`[DEBUG] Updated job_type for job ${jobId} to ${jobType}`);
@@ -1698,6 +1705,8 @@ function handleJobProgress(message, source = 'unknown') {
     const status = message.status || 'processing';
     // [2025-04-06 20:40] Capture client_id from the message
     const clientId = message.client_id || null;
+    // [2025-05-24T23:30:00-04:00] Get payload from message if available
+    const payload = message.payload || null;
     
     console.log(`[DEBUG] Job progress update received with jobId: ${jobId}, workerId: ${workerId}, clientId: ${clientId}, source: ${source}`);
     addLogEntry(`Job progress update: ${jobId} - ${progress}% (Client: ${clientId || 'unknown'})`, 'info');
@@ -1715,7 +1724,9 @@ function handleJobProgress(message, source = 'unknown') {
                 progress: progress,
                 createdAt: Date.now(),
                 updated_at: Date.now(),
-                source_update: source  // Track which source last updated this job
+                source_update: source,  // Track which source last updated this job
+                // [2025-05-24T23:30:00-04:00] Store payload if available
+                payload: payload
             };
         } else {
             // Log before update
@@ -3456,7 +3467,7 @@ function formatDuration(startDate, job) {
 }
 
 /**
- * [2025-04-06 19:13] Format job payload for display
+ * [2025-05-24T23:15:00-04:00] Format job payload for display
  * @param {Object} payload - The job payload
  * @returns {string} - Formatted payload string
  */
@@ -3464,6 +3475,9 @@ function formatPayload(payload) {
     if (!payload) return 'No payload data';
     
     try {
+        // Log the payload for debugging
+        console.log('[DEBUG] Formatting payload:', payload, 'Type:', typeof payload);
+        
         // If payload is already a string, try to parse it as JSON for pretty printing
         if (typeof payload === 'string') {
             try {
@@ -3478,6 +3492,7 @@ function formatPayload(payload) {
         // If payload is an object, stringify it
         return JSON.stringify(payload, null, 2);
     } catch (e) {
+        console.error('Error formatting payload:', e, payload);
         return 'Error displaying payload';
     }
 }

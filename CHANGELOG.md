@@ -20,6 +20,13 @@ All notable changes to the EMP Redis project will be documented in this file.
   - Reorganized UI elements to prioritize worker status information
 
 ### Fixed
+- [2025-05-24T23:50:00-04:00] Fixed empty payloads in job details view:
+  - Added payload preservation throughout the job lifecycle
+  - Updated job handling code to properly store and display payload data
+  - Added debugging logs to track payload data flow
+  - Fixed issue where payload data was lost during job status transitions
+  - Improved error handling in payload formatting
+
 - [2025-05-24T12:52:00-04:00] Fixed date formatting functions to handle all date formats:
   - Added robust error handling to formatDate and formatDateTime functions
   - Fixed TypeError when displaying job details with invalid date formats
