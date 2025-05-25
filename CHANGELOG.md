@@ -19,10 +19,11 @@ All notable changes to the EMP Redis project will be documented in this file.
   - Helps with debugging and understanding what's being requested from services
 
 ### Changed
-- [2025-05-25T21:05:00-04:00] Fixed connector loading errors in ConnectorInterface, WebSocketConnector, ComfyUIConnector, and A1111Connector:
-  - Changed connector_name type to Optional[str] in ConnectorInterface and WebSocketConnector
-  - Set connector_name to 'comfyui' in ComfyUIConnector
-  - Set connector_name to 'a1111' in A1111Connector
+- [2025-05-25T21:20:00-04:00] Fixed connector loading errors with improved type compatibility:
+  - Added connector_id attribute to connector classes for identification
+  - Updated connector_loader.py to check for both connector_name and connector_id
+  - Maintained type compatibility with base classes
+  - Added detailed logging for connector class discovery
   - Fixed "Could not find connector class with connector_name" errors
   - Reduced excessive logging in base_worker.py
 

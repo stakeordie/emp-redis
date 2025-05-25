@@ -233,22 +233,35 @@ async def load_connectors() -> Dict[str, ConnectorInterface]:
             # Store the loaded module for dependency resolution
             loaded_modules[connector_name] = module
             
-            # Find the connector class in the module using the connector_name attribute
+            # [2025-05-25T21:20:00-04:00] Updated to check for both connector_name and connector_id attributes
+            # This allows for better type compatibility while still enabling connector identification
             connector_class = None
             for cls_name, cls in module.__dict__.items():
                 if isinstance(cls, type):
                     # Log class information for debugging
                     try:
-                        
-                        # Check if the class has the connector_name attribute matching our connector_name
-                        if hasattr(cls, 'connector_name') and cls.connector_name == connector_name:
+                        # First check for connector_id attribute (preferred for type compatibility)
+                        if hasattr(cls, 'connector_id') and cls.connector_id == connector_name:
                             connector_class = cls
+                            logger.info(f"[connector_loader.py load_connectors()] Found connector class {cls_name} with connector_id='{connector_name}'")
+                            break
+                        # Fall back to connector_name attribute for backward compatibility
+                        elif hasattr(cls, 'connector_name') and cls.connector_name == connector_name:
+                            connector_class = cls
+                            logger.info(f"[connector_loader.py load_connectors()] Found connector class {cls_name} with connector_name='{connector_name}'")
                             break
                     except Exception as e:
                         logger.error(f"[connector_loader.py load_connectors()] Error checking class {cls_name}: {e}")
             
             if connector_class is None:
-                logger.error(f"[connector_loader.py load_connectors() ERROR] Could not find connector class with connector_name='{connector_name}' in {module.__name__}")
+                logger.error(f"[connector_loader.py load_connectors() ERROR] Could not find connector class with connector_name or connector_id='{connector_name}' in {module.__name__}")
+                # Log available classes for debugging
+                try:
+                    class_info = [f"{cls_name}: connector_id={getattr(cls, 'connector_id', None)}, connector_name={getattr(cls, 'connector_name', None)}" 
+                                 for cls_name, cls in module.__dict__.items() if isinstance(cls, type)]
+                    logger.error(f"[connector_loader.py load_connectors() DEBUG] Available classes in {module.__name__}: {class_info}")
+                except Exception as e:
+                    logger.error(f"[connector_loader.py load_connectors() DEBUG] Error getting class info: {e}")
                 continue
             
             # Create connector instance
