@@ -16,7 +16,7 @@ if worker_dir is not None:
 
 import json
 import asyncio
-import aiohttp  # type: ignore # Ignore aiohttp import error
+import aiohttp  # Removed unnecessary type ignore
 import time
 import logging
 from typing import Dict, Any, Optional, Union, Callable, cast, List, Tuple
@@ -38,7 +38,8 @@ class A1111Connector(RESTSyncConnector):
     
     # Class attribute to identify the connector type
     # This should match the name used in the WORKER_CONNECTORS environment variable
-    connector_name: str = "a1111"  # Explicitly type as str to fix lint error
+    # [2025-05-25T15:15:00-04:00] Fixed type compatibility with ConnectorInterface
+    connector_name = "a1111"  # No type annotation to match parent class
     
     def __init__(self):
         """Initialize the A1111 connector"""
@@ -195,7 +196,7 @@ class A1111Connector(RESTSyncConnector):
                     "timestamp": time.time(),
                     "job_id": job_id,
                     "worker_id": self.worker_id if hasattr(self, "worker_id") else "unknown",
-                    "service": self.get_job_type(),
+                    "service": self.get_job_type() if hasattr(self, "job_type") else "a1111",
                     "request_type": f"a1111_{endpoint}",
                     "content": {
                         "endpoint": endpoint,
