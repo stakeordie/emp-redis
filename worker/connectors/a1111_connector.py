@@ -38,13 +38,18 @@ class A1111Connector(RESTSyncConnector):
     
     # Class attribute to identify the connector type
     # This should match the name used in the WORKER_CONNECTORS environment variable
-    # [2025-05-25T15:15:00-04:00] Fixed type compatibility with ConnectorInterface
-    connector_name = "a1111"  # No type annotation to match parent class
+    # [2025-05-25T15:25:00-04:00] Fixed type compatibility with ConnectorInterface
+    # Base class defines this as None, so we need to maintain the same type
+    connector_name = None
     
     def __init__(self):
         """Initialize the A1111 connector"""
-        # Call parent constructor to initialize base REST connector
+        # Base URL for the A1111 API
+        self.base_url = os.environ.get("WORKER_A1111_URL", "http://localhost:7860")
         super().__init__()
+        
+        # [2025-05-25T15:25:00-04:00] Set job_type explicitly to avoid None attribute errors
+        self.job_type = "a1111"
         
         # Override REST API connection settings with A1111-specific ones
         self.host = os.environ.get("WORKER_A1111_HOST", "localhost")
@@ -259,6 +264,11 @@ class A1111Connector(RESTSyncConnector):
                     while True:
                         # Poll the progress endpoint every 5 seconds
                         try:
+                            # [2025-05-25T15:25:00-04:00] Added null check for session to prevent attribute errors
+                            if not hasattr(self, 'session') or self.session is None:
+                                logger.error(f"[2025-05-25T15:25:00-04:00] Session is None or not initialized in poll_progress")
+                                break
+                                
                             async with self.session.get(progress_url, headers=self._get_headers()) as progress_response:
                                 if progress_response.status == 200:
                                     progress_data = await progress_response.json()
