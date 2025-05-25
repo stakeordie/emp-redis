@@ -29,9 +29,6 @@ ConnectorInterface = None
 load_connectors = None
 get_worker_capabilities = None
 
-# Use a step-by-step approach to avoid multiple import errors
-logger.info("[base_worker.py] Attempting to import required modules")
-
 # Try different import approaches in sequence
 import_success = False
 
@@ -256,7 +253,6 @@ class BaseWorker:
             logger.error(f"[base_worker.py send_status_update()]: Error sending status update: {str(e)}")
     
     async def send_heartbeat(self, websocket):
-        logger.debug("[base_worker.py send_heartbeat()]: 0")
         """Send heartbeat messages to keep the connection alive
         
         Args:
@@ -264,7 +260,6 @@ class BaseWorker:
         """
         try:
             print(f"[PRINT] Starting heartbeat for worker {self.worker_id}")  # Direct print
-            logger.debug(f"[base_worker.py send_heartbeat()]: Starting heartbeat for worker {self.worker_id}")
             status_interval = 5  # Send full status every 5 heartbeats
             counter = 0
             while True:
@@ -283,7 +278,6 @@ class BaseWorker:
                     )
                     # Send heartbeat message
                     await websocket.send(heartbeat_message.model_dump_json())
-                    logger.debug(f"[base_worker.py send_heartbeat()]: HEARTBEAT SENT")
                     # Wait for next heartbeat
                     await asyncio.sleep(self.heartbeat_interval)
                 except Exception as e:
@@ -302,7 +296,6 @@ class BaseWorker:
             status: Current job status (default: "processing")
             message: Optional status message
         """
-        logger.debug(f"[base_worker.py send_progress_update()]: TESTING")
         try:
             # Get connector details if available
             connector_details = None
@@ -356,9 +349,7 @@ class BaseWorker:
                         logger.error(f"[base_worker.py send_progress_update()] Connector details sample: {connector_str[:500]}...")
             
             # Send the progress update
-            await websocket.send(message_json)
-            logger.debug(f"[base_worker.py send_progress_update()]: Sent progress update for job {job_id}: {progress}% - {message if message else status} (size: {message_size} bytes)")
-            
+            await websocket.send(message_json)            
         except Exception as e:
             logger.error(f"[base_worker.py send_progress_update()]: Error sending progress update for job {job_id}: {str(e)}")
             # [2025-05-23T09:01:28-04:00] Added exception details for WebSocket errors
@@ -391,32 +382,30 @@ class BaseWorker:
             message_obj = self.message_models.parse_message(message_data)
             
             if not message_obj:
-                logger.info(f"[base_worker.py handle_message()]: Invalid message format: {message[:300]}...")
+                logger.error(f"[base_worker.py handle_message()]: Invalid message format: {message[:300]}...")
                 return
             
-            message_type = message_obj.type
-            logger.info(f"[base_worker.py handle_message()]: Received message of type: {message_type}")
-            
+            message_type = message_obj.type            
             # Handle message based on type
             match(message_type):
                 case MessageType.CONNECTION_ESTABLISHED:
                     logger.info(f"[base_worker.py handle_message()]: Connection established: {getattr(message_obj, 'message', '')}")
-                case MessageType.JOB_AVAILABLE:
-                    # Ensure we have a JobAvailableMessage or compatible dict
-                    if hasattr(message_obj, 'job_id') and hasattr(message_obj, 'job_type'):
-                        await self.handle_job_notification(websocket, cast(Any, message_obj))
-                    else:
-                        logger.warning(f"[base_worker.py handle_message()]: Received JOB_AVAILABLE message with invalid format")
+                # case MessageType.JOB_AVAILABLE:
+                #     # Ensure we have a JobAvailableMessage or compatible dict
+                #     if hasattr(message_obj, 'job_id') and hasattr(message_obj, 'job_type'):
+                #         await self.handle_job_notification(websocket, cast(Any, message_obj))
+                #     else:
+                #         logger.warning(f"[base_worker.py handle_message()]: Received JOB_AVAILABLE message with invalid format")
                 case MessageType.JOB_ASSIGNED:
                     await self.handle_job_assigned(websocket, cast(Any, message_obj))
                 
-                case MessageType.WORKER_HEARTBEAT:
-                    # Acknowledge heartbeat from server with detailed logging
-                    logger.info(f"[base_worker.py handle_message()]: HEARTBEAT RESPONSE RECEIVED from server for worker {self.worker_id}")
+                # case MessageType.WORKER_HEARTBEAT:
+                #     # Acknowledge heartbeat from server with detailed logging
+                #     logger.info(f"[base_worker.py handle_message()]: HEARTBEAT RESPONSE RECEIVED from server for worker {self.worker_id}")
                 
-                case MessageType.WORKER_HEARTBEAT_ACK:
-                    # Handle heartbeat acknowledgment from server
-                    logger.info(f"[base_worker.py handle_message()]: HEARTBEAT ACK RECEIVED from server for worker {self.worker_id}")
+                # case MessageType.WORKER_HEARTBEAT_ACK:
+                #     # Handle heartbeat acknowledgment from server
+                #     logger.info(f"[base_worker.py handle_message()]: HEARTBEAT ACK RECEIVED from server for worker {self.worker_id}")
                 case MessageType.JOB_COMPLETED_ACK:
                     # Handle job completion acknowledgment from the server
                     if hasattr(message_obj, 'job_id'):
@@ -431,15 +420,15 @@ class BaseWorker:
                     if hasattr(message_obj, 'job_id'):
                         job_id = message_obj.job_id
                         error = getattr(message_obj, 'error', 'Unknown error')
-                        logger.info(f"[base_worker.py handle_message()]: Job failure acknowledged by server: {job_id} - Error: {error}")
+                        logger.error(f"[base_worker.py handle_message()]: Job failure acknowledged by server: {job_id} - Error: {error}")
                         
                         # Ensure worker state is reset to idle
                         if self.status != WorkerStatus.IDLE:
-                            logger.info(f"[base_worker.py handle_message()]: Resetting worker state to idle after job failure acknowledgment")
+                            logger.error(f"[base_worker.py handle_message()]: Resetting worker state to idle after job failure acknowledgment")
                             self.status = WorkerStatus.IDLE
                             self.current_job_id = None
                     else:
-                        logger.warning(f"[base_worker.py handle_message()]: Received JOB_FAILED_ACK message with invalid format")
+                        logger.error(f"[base_worker.py handle_message()]: Received JOB_FAILED_ACK message with invalid format")
                 
                 case MessageType.WORKER_REGISTERED:
                     # Handle worker registration confirmation
@@ -449,23 +438,23 @@ class BaseWorker:
                 case MessageType.ERROR:
                     # Handle error messages from the server
                     error_text = getattr(message_obj, 'error', 'Unknown error')
-                    logger.warning(f"[base_worker.py handle_message()]: Received error from server: {error_text}")
+                    logger.error(f"[base_worker.py handle_message()]: Received error from server: {error_text}")
                     
                     # If we're in a non-idle state and the error is related to job claiming,
                     # reset the worker state to idle
                     if self.status != WorkerStatus.IDLE and "claim job" in error_text.lower():
-                        logger.info(f"[base_worker.py handle_message()]: Resetting worker state to idle after claim error")
+                        logger.error(f"[base_worker.py handle_message()]: Resetting worker state to idle after claim error")
                         self.status = WorkerStatus.IDLE
                         self.current_job_id = None
                 
-                case MessageType.ACK:
-                    # Handle generic acknowledgment messages from the server
-                    # 2025-04-17-16:02 - Removed fail_job specific handling as it's now handled by JOB_FAILED_ACK
-                    original_id = getattr(message_obj, 'original_id', None)
-                    original_type = getattr(message_obj, 'original_type', None)
-                    logger.info(f"[base_worker.py handle_message()]: Received ACK from server for {original_type} message with ID {original_id}")
-                case _:
-                    logger.debug(f"[base_worker.py handle_message()]: Received unhandled message type: {message_type}")
+                # case MessageType.ACK:
+                #     # Handle generic acknowledgment messages from the server
+                #     # 2025-04-17-16:02 - Removed fail_job specific handling as it's now handled by JOB_FAILED_ACK
+                #     original_id = getattr(message_obj, 'original_id', None)
+                #     original_type = getattr(message_obj, 'original_type', None)
+                #     logger.info(f"[base_worker.py handle_message()]: Received ACK from server for {original_type} message with ID {original_id}")
+                # case _:
+                #     logger.debug(f"[base_worker.py handle_message()]: Received unhandled message type: {message_type}")
         except json.JSONDecodeError:
             logger.error(f"[base_worker.py handle_message()]: Invalid JSON: {message[:100]}...")
         except Exception as e:
@@ -479,15 +468,6 @@ class BaseWorker:
             message_obj: The job notification message object
         """
         try:
-            # 2025-04-25-18:45 - Add comprehensive logging to understand message structure
-            logger.info(f"""[base_worker.py handle_job_notification()]
-╔══════════════════════════════════════════════════════════════════════════════╗
-║ JOB NOTIFICATION RECEIVED - DETAILED MESSAGE STRUCTURE                      ║
-║ Message Type: {type(message_obj)}                                            ║
-║ Worker ID: {self.worker_id}                                                   ║
-║ Raw Message: {str(message_obj)[:500]}                                         ║
-╚══════════════════════════════════════════════════════════════════════════════╝""")
-            
             # First check if worker is idle before proceeding
             if self.status != WorkerStatus.IDLE:
                 logger.info(f"[base_worker.py handle_job_notification()]: Ignoring job notification - worker is busy")
@@ -498,29 +478,22 @@ class BaseWorker:
             job_type = 'unknown'
             priority = 0
             last_failed_worker = None
-            
-            # Log all available attributes and methods
-            if hasattr(message_obj, '__dict__'):
-                logger.info(f"[base_worker.py handle_job_notification()]: Message attributes: {message_obj.__dict__}")
-            
+                       
             # Try different ways to access message data
             if isinstance(message_obj, dict):
                 # It's a dictionary
-                logger.info(f"[base_worker.py handle_job_notification()]: Message is a dictionary with keys: {message_obj.keys()}")
                 job_id = message_obj.get('job_id')
                 job_type = message_obj.get('job_type', 'unknown')
                 priority = message_obj.get('priority', 0)
                 last_failed_worker = message_obj.get('last_failed_worker')
             elif hasattr(message_obj, 'job_id'):
                 # It has direct attributes
-                logger.info(f"[base_worker.py handle_job_notification()]: Message has direct attributes")
                 job_id = message_obj.job_id
                 job_type = getattr(message_obj, 'job_type', 'unknown')
                 priority = getattr(message_obj, 'priority', 0)
                 last_failed_worker = getattr(message_obj, 'last_failed_worker', None)
             else:
                 # Try to parse as JSON string
-                logger.info(f"[base_worker.py handle_job_notification()]: Trying to parse message as JSON string")
                 try:
                     import json
                     if isinstance(message_obj, str):
@@ -529,7 +502,6 @@ class BaseWorker:
                         job_type = parsed.get('job_type', 'unknown')
                         priority = parsed.get('priority', 0)
                         last_failed_worker = parsed.get('last_failed_worker')
-                        logger.info(f"[base_worker.py handle_job_notification()]: Successfully parsed JSON with keys: {parsed.keys()}")
                 except Exception as e:
                     logger.error(f"[base_worker.py handle_job_notification()]: Failed to parse message as JSON: {str(e)}")
             
@@ -538,31 +510,10 @@ class BaseWorker:
                 logger.error(f"[base_worker.py handle_job_notification()]: Job notification missing job_id")
                 return
             
-            # Log the extracted values
-            logger.info(f"""[base_worker.py handle_job_notification()]
-╔══════════════════════════════════════════════════════════════════════════════╗
-║ EXTRACTED JOB NOTIFICATION VALUES                                           ║
-║ Job ID: {job_id}                                                             ║
-║ Job Type: {job_type}                                                          ║
-║ Priority: {priority}                                                          ║
-║ Last Failed Worker: {last_failed_worker}                                      ║
-╚══════════════════════════════════════════════════════════════════════════════╝""")
-            
             # Check if this worker previously failed this job
             if last_failed_worker and last_failed_worker == self.worker_id:
-                # Log with eye-catching format to make it obvious in the logs
-                logger.info(f"""[base_worker.py handle_job_notification()]
-╔══════════════════════════════════════════════════════════════════════════════╗
-║ IGNORING JOB NOTIFICATION - WORKER PREVIOUSLY FAILED THIS JOB                ║
-║ Job ID: {job_id}                                                             ║
-║ Worker ID: {self.worker_id}                                                   ║
-║ Last Failed Worker: {last_failed_worker}                                      ║
-║ Job Type: {job_type}                                                          ║
-╚══════════════════════════════════════════════════════════════════════════════╝""")
                 return
-            
-            logger.info(f"[base_worker.py handle_job_notification()]: Received job notification - job_id: {job_id}, type: {job_type}, priority: {priority}")
-            
+                        
             # Check if connectors are initialized
             if self.connectors is None:
                 logger.error(f"[base_worker.py handle_job_notification()]: Connectors not initialized yet")
@@ -570,7 +521,7 @@ class BaseWorker:
                 
             # Check if we can handle this job type
             if self.connectors is not None and job_type not in self.connectors:
-                logger.warning(f"[base_worker.py handle_job_notification()]: Received job notification for unsupported job type: {job_type}")
+                logger.error(f"[base_worker.py handle_job_notification()]: Received job notification for unsupported job type: {job_type}")
                 return
             
             # Claim the job using ClaimJobMessage class
@@ -578,12 +529,7 @@ class BaseWorker:
                 worker_id=self.worker_id,
                 job_id=job_id
             )
-            
-            # Add debug logging to show worker state before claiming
-            logger.debug(f"[base_worker.py handle_job_notification()]: Worker state before claiming job {job_id}: {self.status.name}")
-            
-            # Send claim request
-            logger.info(f"[base_worker.py handle_job_notification()]: Sending claim request for job {job_id}")
+                        
             await websocket.send(claim_message.model_dump_json())
             
             # Note: We don't update worker state here - we'll wait for JOB_ASSIGNED message
@@ -597,10 +543,7 @@ class BaseWorker:
         Args:
             websocket: The WebSocket connection to the Redis Hub
             message_obj: The job assigned message object
-        """
-
-        logger.info(f"[base_worker.py handle_job_assigned] Received job assigned message: {message_obj}")
-        
+        """        
         try:
             # Extract job details safely with fallbacks
             if isinstance(message_obj, dict):
@@ -628,9 +571,7 @@ class BaseWorker:
             if job_id is None:
                 logger.error(f"[base_worker.py handle_job_assigned()]: Cannot process job: missing job_id")
                 return
-            
-            logger.info(f"[base_worker.py handle_job_assigned()]: Processing job {job_id} of type {job_type}")
-            
+                        
             # Update worker state
             self.status = WorkerStatus.BUSY
             self.current_job_id = job_id
@@ -664,11 +605,11 @@ class BaseWorker:
                 
                 # Add detailed logging to verify the message is being sent
                 fail_message_json = fail_message.model_dump_json()
-                logger.info(f"[base_worker.py handle_job_assigned()]: SENDING FAIL_JOB MESSAGE: {fail_message_json}")
+                logger.error(f"[base_worker.py handle_job_assigned()]: SENDING FAIL_JOB MESSAGE: {fail_message_json}")
                 
                 # Send the message
                 await websocket.send(fail_message_json)
-                logger.info(f"[base_worker.py handle_job_assigned()]: Sent FailJobMessage for job {job_id_str} to be requeued")
+                logger.error(f"[base_worker.py handle_job_assigned()]: Sent FailJobMessage for job {job_id_str} to be requeued")
                 
                 # Reset worker state
                 self.status = WorkerStatus.IDLE
@@ -698,11 +639,11 @@ class BaseWorker:
                 
                 # Add detailed logging to verify the message is being sent
                 fail_message_json = fail_message.model_dump_json()
-                logger.info(f"[base_worker.py handle_job_assigned()]: SENDING FAIL_JOB MESSAGE: {fail_message_json}")
+                logger.error(f"[base_worker.py handle_job_assigned()]: SENDING FAIL_JOB MESSAGE: {fail_message_json}")
                 
                 # Send the message
                 await websocket.send(fail_message_json)
-                logger.info(f"[base_worker.py handle_job_assigned()]: Sent FailJobMessage for job {job_id_str} to be requeued")
+                logger.error(f"[base_worker.py handle_job_assigned()]: Sent FailJobMessage for job {job_id_str} to be requeued")
                 
                 # Reset worker state
                 self.status = WorkerStatus.IDLE
@@ -714,7 +655,6 @@ class BaseWorker:
                     status="idle"
                 )
                 await websocket.send(idle_status.model_dump_json())
-                logger.info(f"[base_worker.py handle_job_assigned()]: Worker status reset to idle")
                 return
             
             try:
@@ -749,15 +689,14 @@ class BaseWorker:
                     
                     # Add detailed logging to verify the message is being sent
                     fail_message_json = fail_message.model_dump_json()
-                    logger.info(f"[base_worker.py handle_job_assigned()]: SENDING FAIL_JOB MESSAGE FOR NORMAL FAILURE: {fail_message_json}")
+                    logger.error(f"[base_worker.py handle_job_assigned()]: SENDING FAIL_JOB MESSAGE FOR NORMAL FAILURE: {fail_message_json}")
                     
                     # Send the message
                     await websocket.send(fail_message_json)
-                    logger.info(f"[base_worker.py handle_job_assigned()]: Sent FailJobMessage for job {job_id_str} to be requeued")
+                    logger.error(f"[base_worker.py handle_job_assigned()]: Sent FailJobMessage for job {job_id_str} to be requeued")
                 else:
                     # Only send 100% completion update for successful jobs
                     await self.send_progress_update(websocket, job_id, 100, "completed", "Job completed successfully")
-                    logger.info(f"[base_worker.py handle_job_assigned()]: Job {job_id} completed successfully")
                     
                     # Send job completion message using CompleteJobMessage class only for successful jobs
                     job_id_str = str(job_id) if job_id is not None else "unknown_job"
@@ -782,11 +721,11 @@ class BaseWorker:
                 
                 # Add detailed logging to verify the message is being sent
                 fail_message_json = fail_message.model_dump_json()
-                logger.info(f"[base_worker.py handle_job_assigned()]: SENDING FAIL_JOB MESSAGE: {fail_message_json}")
+                logger.error(f"[base_worker.py handle_job_assigned()]: SENDING FAIL_JOB MESSAGE: {fail_message_json}")
                 
                 # Send the message
                 await websocket.send(fail_message_json)
-                logger.info(f"[base_worker.py handle_job_assigned()]: Sent FailJobMessage for job {job_id_str} to be requeued")
+                logger.error(f"[base_worker.py handle_job_assigned()]: Sent FailJobMessage for job {job_id_str} to be requeued")
             
             finally:
                 # Reset worker state
@@ -798,9 +737,7 @@ class BaseWorker:
                     worker_id=self.worker_id,
                     status="idle"
                 )
-                await websocket.send(idle_status.model_dump_json())
-                logger.info(f"[base_worker.py handle_job_assigned()]: Worker status reset to idle")
-                
+                await websocket.send(idle_status.model_dump_json())                
         except Exception as e:
             logger.error(f"[base_worker.py handle_job_assigned()]: Error in handle_job_assigned: {str(e)}")
             
