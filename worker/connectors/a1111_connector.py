@@ -20,7 +20,7 @@ import aiohttp  # type: ignore # Ignore aiohttp import error
 import time
 import logging
 from typing import Dict, Any, Optional, Union, Callable, cast, List, Tuple
-from ..base_worker import BaseWorker, send_progress_update
+from ..base_worker import BaseWorker
 
 # Try direct imports first (for Docker container)
 try:
