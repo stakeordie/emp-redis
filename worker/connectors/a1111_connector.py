@@ -217,9 +217,21 @@ class A1111Connector(RESTSyncConnector):
                 # This bypasses the Hub's message routing and goes directly to the monitor
                 await websocket.send(message_json)
                 
-                # [2025-05-25T11:20:00-04:00] Also send a normal progress update to ensure the job status is updated
-                # The send_progress_update function expects (self, websocket, job_id, progress, status, message)
-                await self.send_progress_update(websocket, job_id, 10, "processing", f"Sending {method.upper()} request to A1111 API")
+                # [2025-05-25T13:45:00-04:00] Send a progress update message directly
+                # A1111Connector doesn't inherit from BaseWorker, so we can't use self.send_progress_update
+                progress_message = {
+                    "type": "update_job_progress",
+                    "job_id": job_id,
+                    "worker_id": self.worker_id if hasattr(self, "worker_id") else "unknown",
+                    "progress": 10,
+                    "status": "processing",
+                    "message": f"Sending {method.upper()} request to A1111 API",
+                    "timestamp": time.time()
+                }
+                
+                # Convert to JSON and send directly
+                progress_json = json.dumps(progress_message)
+                await websocket.send(progress_json)
                 
                 # Log success with very distinctive timestamp
                 logger.info(f"[a1111_connector.py process_job] [2025-05-25T11:15:00-04:00] Successfully sent service request message for job {job_id}")
