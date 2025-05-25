@@ -31,6 +31,21 @@ from core.utils.logger import logger
 class RESTSyncConnector(ConnectorInterface):
     """Connector for synchronous REST API calls"""
     
+    # [2025-05-25T22:10:00-04:00] Implemented connector_id property
+    # This is a base class, so it raises NotImplementedError
+    @property
+    def connector_id(self) -> str:
+        """Get the connector identifier used for loading and identification
+        
+        Returns:
+            str: The connector identifier string
+            
+        Raises:
+            NotImplementedError: This base class should not be used directly
+        """
+        # Base class is not directly usable
+        raise NotImplementedError("RESTSyncConnector is a base class and should not be used directly")
+    
     # Version identifier to verify code deployment
     VERSION = "2025-04-17-14:20-improved-timeout-handling"
     

@@ -233,29 +233,45 @@ async def load_connectors() -> Dict[str, ConnectorInterface]:
             # Store the loaded module for dependency resolution
             loaded_modules[connector_name] = module
             
-            # [2025-05-25T21:45:00-04:00] Updated to use the connector_id property instead of connector_name attribute
-            # This provides a cleaner way to identify connectors without type compatibility issues
+            # [2025-05-25T22:00:00-04:00] Simplified connector class finding logic to be more reliable
+            # Support both the new connector_id property and the old connector_name attribute
             connector_class = None
             for cls_name, cls in module.__dict__.items():
-                if isinstance(cls, type):
+                if not isinstance(cls, type):
+                    continue
+                    
+                # Skip if not a ConnectorInterface subclass
+                try:
+                    if not issubclass(cls, ConnectorInterface):
+                        continue
+                except TypeError:
+                    # This happens for non-class objects
+                    continue
+                    
+                # Skip abstract base classes
+                if cls == ConnectorInterface or cls.__name__ == 'WebSocketConnector':
+                    continue
+                    
+                # First try the new connector_id property approach
+                try:
+                    # Create a temporary instance
+                    instance = cls()
+                    # Check if connector_id property matches
+                    if hasattr(instance, 'connector_id') and callable(getattr(instance, 'connector_id')):
+                        if instance.connector_id == connector_name:
+                            connector_class = cls
+                            logger.info(f"[connector_loader.py load_connectors()] Found connector class {cls_name} with connector_id='{connector_name}'")
+                            break
+                except Exception as e:
+                    # Fall back to checking connector_name attribute
                     try:
-                        # Check if the class is a subclass of ConnectorInterface
-                        if issubclass(cls, ConnectorInterface):
-                            # Create a temporary instance to access the connector_id property
-                            # We need to catch NotImplementedError for abstract base classes
-                            try:
-                                # Create an instance only if it's not an abstract class
-                                if not any(method.__isabstractmethod__ for method in [getattr(cls, method) for method in dir(cls) if callable(getattr(cls, method))]):
-                                    instance = cls()
-                                    if instance.connector_id == connector_name:
-                                        connector_class = cls
-                                        logger.info(f"[connector_loader.py load_connectors()] Found connector class {cls_name} with connector_id='{connector_name}'")
-                                        break
-                            except (NotImplementedError, TypeError) as e:
-                                # This is expected for abstract base classes or classes with required constructor arguments
-                                pass
-                    except Exception as e:
-                        logger.error(f"[connector_loader.py load_connectors()] Error checking class {cls_name}: {e}")
+                        if hasattr(cls, 'connector_name') and cls.connector_name == connector_name:
+                            connector_class = cls
+                            logger.info(f"[connector_loader.py load_connectors()] Found connector class {cls_name} with connector_name='{connector_name}'")
+                            break
+                    except Exception as nested_e:
+                        logger.error(f"[connector_loader.py load_connectors()] Error checking class {cls_name}: {e}, {nested_e}")
+                        continue
             
             if connector_class is None:
                 logger.error(f"[connector_loader.py load_connectors() ERROR] Could not find connector class with connector_id='{connector_name}' in {module.__name__}")

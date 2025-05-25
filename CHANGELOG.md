@@ -19,13 +19,12 @@ All notable changes to the EMP Redis project will be documented in this file.
   - Helps with debugging and understanding what's being requested from services
 
 ### Changed
-- [2025-05-25T21:45:00-04:00] Refactored connector identification with cleaner design:
-  - Removed unnecessary connector_name attribute
-  - Added connector_id as an abstract property in ConnectorInterface
-  - Implemented connector_id property in all connector classes
-  - Updated connector_loader.py to use the connector_id property
-  - Improved type safety and code clarity
-  - Fixed "Could not find connector class with connector_name" errors
+- [2025-05-25T22:15:00-04:00] Fixed connector loading with backward compatibility:
+  - Simplified connector class finding logic in connector_loader.py
+  - Added connector_id property to all connector classes including simulation_connector
+  - Added fallback to connector_name for backward compatibility
+  - Improved error handling and debugging in connector loading
+  - Fixed "Could not find connector class with connector_id" errors
   - Reduced excessive logging in base_worker.py
 
 - [2025-05-25T18:45:00-04:00] Fixed remaining type errors in worker_main.py and apps/comfy-worker/scripts/a1111/docker/config.py:

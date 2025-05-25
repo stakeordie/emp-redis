@@ -43,6 +43,21 @@ class RESTAsyncConnector(ConnectorInterface, ABC):
     - parse_result_from_response(response) - Extract result from result response
     """
     
+    # [2025-05-25T22:15:00-04:00] Implemented connector_id property
+    # This is a base class, so it raises NotImplementedError
+    @property
+    def connector_id(self) -> str:
+        """Get the connector identifier used for loading and identification
+        
+        Returns:
+            str: The connector identifier string
+            
+        Raises:
+            NotImplementedError: This base class should not be used directly
+        """
+        # Base class is not directly usable
+        raise NotImplementedError("RESTAsyncConnector is a base class and should not be used directly")
+    
     # Version identifier to verify code deployment
     VERSION = "2025-04-06-21:10-initial-implementation"
     

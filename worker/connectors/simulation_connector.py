@@ -15,8 +15,18 @@ from core.utils.logger import logger
 class SimulationConnector(ConnectorInterface):
     """Connector for simulating job processing"""
     
-    # Set the connector name to match the environment variable
-    # Updated: 2025-04-07T15:52:00-04:00
+    # [2025-05-25T22:05:00-04:00] Implemented connector_id property to replace connector_name
+    # This provides a cleaner way to identify connectors without type compatibility issues
+    @property
+    def connector_id(self) -> str:
+        """Get the connector identifier used for loading and identification
+        
+        Returns:
+            str: The connector identifier string 'simulation'
+        """
+        return 'simulation'
+        
+    # Keep connector_name for backward compatibility
     connector_name = "simulation"
     
     # Version identifier to verify code deployment
