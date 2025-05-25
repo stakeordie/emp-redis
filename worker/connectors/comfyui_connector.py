@@ -18,12 +18,10 @@ from core.utils.logger import logger
 # Import from websocket_connector if available, otherwise define locally
 try:
     from .websocket_connector import MAX_WS_MESSAGE_SIZE_MB, MAX_WS_MESSAGE_SIZE_BYTES
-    logger.info(f"[2025-05-23T09:51:15-04:00] Imported WebSocket message size limits from websocket_connector: {MAX_WS_MESSAGE_SIZE_MB}MB")
 except ImportError:
     # Define consistent size limits as environment variables with defaults
     MAX_WS_MESSAGE_SIZE_MB = int(os.environ.get('MAX_WS_MESSAGE_SIZE_MB', 100))  # 100MB default
     MAX_WS_MESSAGE_SIZE_BYTES = MAX_WS_MESSAGE_SIZE_MB * 1024 * 1024
-    logger.info(f"[2025-05-23T09:51:30-04:00] Defined local WebSocket message size limits: {MAX_WS_MESSAGE_SIZE_MB}MB")
 
 # Updated import approach - uses proper package imports
 # Updated: 2025-04-07T15:04:00-04:00
@@ -54,38 +52,41 @@ except ImportError as e:
             logger.error(f"[comfyui_connector.py] Python path: {sys.path}")
             raise ImportError(f"Could not import ConnectorInterface: {e3}")
 
-# Now import WebSocketConnector - this should be loaded by the connector_loader first
-WebSocketConnector = None
-# [2025-05-25T15:40:00-04:00] Simplified import structure to fix inheritance issues
+# [2025-05-25T15:45:00-04:00] Completely revamped import structure to fix type errors
+# Import logger first - this should be available in all environments
+from core.utils.logger import logger
+
+# Import the WebSocketConnector class for inheritance
+# Use TYPE_CHECKING to avoid circular imports during type checking
+from typing import TYPE_CHECKING, Dict, Any, Optional, Union, List, Tuple, cast
+
+# Import the actual WebSocketConnector class for runtime
+import sys
+import os
+
+# Define a clean import path for the WebSocketConnector
 try:
     # Try relative import first (preferred method)
     from .websocket_connector import WebSocketConnector
-    logger.info(f"[comfyui_connector.py] Successfully imported WebSocketConnector via relative import")
+    logger.info(f"[2025-05-25T15:45:00-04:00] Successfully imported WebSocketConnector via relative import")
 except ImportError as e:
-    # Fall back to worker package import
     try:
+        # Fall back to worker package import
         from worker.connectors.websocket_connector import WebSocketConnector
-        logger.info(f"[comfyui_connector.py] Successfully imported WebSocketConnector via worker package import")
+        logger.info(f"[2025-05-25T15:45:00-04:00] Successfully imported WebSocketConnector via worker package import")
     except ImportError as e2:
-        # Last attempt with absolute import
+        # Add the connectors directory to the path if needed
+        connectors_dir = os.path.dirname(os.path.abspath(__file__))
+        if connectors_dir not in sys.path:
+            sys.path.insert(0, connectors_dir)
         try:
-            import sys
-            import os
-            # Add the connectors directory to the path if needed
-            connectors_dir = os.path.dirname(os.path.abspath(__file__))
-            if connectors_dir not in sys.path:
-                sys.path.insert(0, connectors_dir)
-            # Now try a direct import
-            from websocket_connector import WebSocketConnector
-            logger.info(f"[comfyui_connector.py] Successfully imported WebSocketConnector via absolute import")
+            # Last attempt with absolute import
+            import websocket_connector
+            WebSocketConnector = websocket_connector.WebSocketConnector
+            logger.info(f"[2025-05-25T15:45:00-04:00] Successfully imported WebSocketConnector via absolute import")
         except ImportError as e3:
-            logger.error(f"[comfyui_connector.py] Failed to import WebSocketConnector: {e3}")
+            logger.error(f"[2025-05-25T15:45:00-04:00] Failed to import WebSocketConnector: {e3}")
             raise ImportError(f"Could not import WebSocketConnector. Make sure it's loaded first: {e3}")
-
-from core.utils.logger import logger
-
-# [2025-05-25T15:40:00-04:00] WebSocketConnector is already imported above
-# No need for a duplicate import here
 
 class ComfyUIConnector(WebSocketConnector):
     """Connector for ComfyUI service"""
@@ -211,11 +212,14 @@ class ComfyUIConnector(WebSocketConnector):
                 # [2025-05-23T09:52:00-04:00] Updated to use standardized message size limit
                 logger.info(f"[2025-05-23T09:52:15-04:00] Using WebSocket message size limit: {MAX_WS_MESSAGE_SIZE_MB}MB ({MAX_WS_MESSAGE_SIZE_BYTES} bytes)")
                 
+                # [2025-05-25T15:50:00-04:00] Fixed timeout type for ws_connect
+                # ClientWSTimeout is the correct type for WebSocket connections
+                ws_timeout = aiohttp.ClientWSTimeout(ws_receive=connection_timeout.total)
+                
                 async with session.ws_connect(
                     ws_url, 
                     headers=headers,
-                    # [2025-05-25T15:30:00-04:00] Fixed timeout type for ws_connect
-                    timeout=aiohttp.ClientWSTimeout(ws_receive=connection_timeout.total),
+                    timeout=ws_timeout,
                     max_msg_size=MAX_WS_MESSAGE_SIZE_BYTES  # Use standardized message size limit
                 ) as ws:
                     # Successfully connected, now close it
@@ -477,8 +481,8 @@ class ComfyUIConnector(WebSocketConnector):
                         # Got the prompt_queued message, extract prompt_id
                         self.prompt_id = response.get("data", {}).get("prompt_id")
                         logger.info(f"[comfyui_connector.py send_workflow] COMFYUI_STATUS: Workflow queued successfully, prompt ID: {self.prompt_id}")
-                        # [2025-05-25T15:30:00-04:00] Fixed return type to match function signature
-                        return self.prompt_id if self.prompt_id else None
+                        # [2025-05-25T15:55:00-04:00] Fixed return type to match function signature
+                        return str(self.prompt_id) if self.prompt_id else None
                     elif msg_type == "error":
                         # Error message from ComfyUI
                         error_msg = response.get("data", {}).get("message", "Unknown error")
@@ -838,8 +842,17 @@ class ComfyUIConnector(WebSocketConnector):
             process_duration = time.time() - process_start_time
             logger.info(f"[comfyui_connector.py _process_service_job] COMFYUI_STATUS: Job {job_id} completed in {process_duration:.2f}s")
             
-            # [2025-05-25T15:30:00-04:00] Fixed return type to match function signature
-            return result if isinstance(result, dict) else {}
+            # [2025-05-25T15:55:00-04:00] Fixed return type to match function signature
+            if not result:
+                return {}
+            elif isinstance(result, dict):
+                return result
+            else:
+                # Convert to dict if possible
+                try:
+                    return dict(result)
+                except (TypeError, ValueError):
+                    return {}
         except Exception as e:
             # Enhanced error logging
             error_type = type(e).__name__
