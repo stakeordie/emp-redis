@@ -150,25 +150,11 @@ class ComfyUIConnector(WebSocketConnector):
         # Actually test the connection to the ComfyUI server
         protocol = "wss" if self.use_ssl else "ws"
         ws_url = f"{protocol}://{self.host}:{self.port}/ws"
-        # 2025-04-25-18:05 - Added eye-catching log entry for connection validation attempt
-        logger.info(f"""[comfyui_connector.py validate_connection()] 
-╔══════════════════════════════════════════════════════════════════════════════╗
-║ COMFYUI CONNECTION VALIDATION ATTEMPT                                        ║
-║ URL: {ws_url}                                                                ║
-║ Timeout: 3.0s                                                                ║
-║ Time: {time.strftime('%Y-%m-%d %H:%M:%S')}                                   ║
-╚══════════════════════════════════════════════════════════════════════════════╝""")
-        
         # Create a session and try to connect with a very short timeout
         async with aiohttp.ClientSession() as session:
             try:
-                # Use a very short timeout for the connection test - fail fast if server is unreachable
-                connection_timeout = aiohttp.ClientTimeout(total=3.0)  # 3 second timeout
-                
                 # Try to connect to the WebSocket endpoint
                 headers = self._get_connection_headers()
-                # [2025-05-23T09:52:00-04:00] Updated to use standardized message size limit
-                logger.info(f"[2025-05-23T09:52:15-04:00] Using WebSocket message size limit: {MAX_WS_MESSAGE_SIZE_MB}MB ({MAX_WS_MESSAGE_SIZE_BYTES} bytes)")
                 
                 async with session.ws_connect(
                     ws_url, 
@@ -180,36 +166,17 @@ class ComfyUIConnector(WebSocketConnector):
                 ) as ws:
                     # Successfully connected, now close it
                     await ws.close()
-                    # 2025-04-25-18:05 - Added eye-catching log entry for successful connection validation
-                    logger.info(f"""[comfyui_connector.py validate_connection()] 
-╔══════════════════════════════════════════════════════════════════════════════╗
-║ COMFYUI CONNECTION VALIDATION SUCCESS!!! ✓✓✓                                 ║
-║ URL: {ws_url}                                                                ║
-║ Connection test completed successfully                                       ║
-╚══════════════════════════════════════════════════════════════════════════════╝""")
+
                     return True
                     
             except asyncio.TimeoutError as e:
                 error_msg = f"Connection timeout after 3s: {ws_url}"
-                # 2025-04-25-18:05 - Added eye-catching log entry for connection validation timeout
-                logger.error(f"""[comfyui_connector.py validate_connection()] 
-╔══════════════════════════════════════════════════════════════════════════════╗
-║ COMFYUI CONNECTION VALIDATION FAILED!!! ✗✗✗                                  ║
-║ URL: {ws_url}                                                                ║
-║ Error: CONNECTION TIMEOUT after 3s                                           ║
-╚══════════════════════════════════════════════════════════════════════════════╝""")
+
                 raise Exception(error_msg) from e
                 
             except aiohttp.ClientConnectorError as e:
                 error_msg = f"Cannot connect to ComfyUI server at {self.host}:{self.port}: {str(e)}"
-                # 2025-04-25-18:05 - Added eye-catching log entry for connection validation error
-                logger.error(f"""[comfyui_connector.py validate_connection()] 
-╔══════════════════════════════════════════════════════════════════════════════╗
-║ COMFYUI CONNECTION VALIDATION FAILED!!! ✗✗✗                                  ║
-║ URL: {ws_url}                                                                ║
-║ Error: CONNECTION ERROR - Cannot connect to server                           ║
-║ Details: {str(e)}                                                            ║
-╚══════════════════════════════════════════════════════════════════════════════╝""")
+
                 raise Exception(error_msg) from e
                 
             except aiohttp.WSServerHandshakeError as e:
@@ -237,26 +204,23 @@ class ComfyUIConnector(WebSocketConnector):
         try:
             # Validate configuration
             protocol = "wss" if self.use_ssl else "ws"
-            ws_url = f"{protocol}://{self.host}:{self.port}/ws"
-            logger.info(f"[comfyui_connector.py initialize()] ComfyUI connector initializing with URL: {ws_url}")
-            
+            ws_url = f"{protocol}://{self.host}:{self.port}/ws"            
             # Test the connection - will raise an exception if connection fails
             try:
                 await self.validate_connection()
-                logger.info(f"[comfyui_connector.py initialize()] ComfyUI connection test successful")
                 # Clear any previous connection errors
                 self.connection_error = None
                 return True
             except Exception as e:
                 # Log the connection error but allow worker to start
-                logger.warning(f"[comfyui_connector.py initialize()] ComfyUI connection test failed: {str(e)}")
-                logger.warning(f"[comfyui_connector.py initialize()] Worker will start but ComfyUI jobs will fail until connection is restored")
+                logger.error(f"[comfyui_connector.py initialize()] ComfyUI connection test failed: {str(e)}")
+                logger.error(f"[comfyui_connector.py initialize()] Worker will start but ComfyUI jobs will fail until connection is restored")
                 # Store the connection error so jobs will fail immediately
                 self.connection_error = e
                 return True  # Still return True to allow worker to start
         except Exception as e:
             # Log the issue but don't prevent worker from starting
-            logger.warning(f"[comfyui_connector.py initialize()] Initialization error: {e}")
+            logger.error(f"[comfyui_connector.py initialize()] Initialization error: {e}")
             self.connection_error = e
             return True  # Still return True to allow worker to continue
     
