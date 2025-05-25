@@ -18,7 +18,9 @@ import json
 import asyncio
 import aiohttp  # type: ignore # Ignore aiohttp import error
 import time
-from typing import Dict, Any, Optional, Union, Callable, cast
+import logging
+from typing import Dict, Any, Optional, Union, Callable, cast, List, Tuple
+from ..base_worker import BaseWorker, send_progress_update
 
 # Try direct imports first (for Docker container)
 try:
@@ -181,16 +183,15 @@ class A1111Connector(RESTSyncConnector):
                 **request_payload
             }
             
-            # [2025-05-25T10:40:00-04:00] IMPORTANT: Create a custom message for service requests
-            # This uses the exact same format as progress updates but with a different type
+            # [2025-05-25T11:15:00-04:00] IMPORTANT: Create a service request message that will be broadcast to monitors
             try:
                 # Log with a very distinctive message to ensure we can see it in the logs
-                logger.info(f"[a1111_connector.py process_job] [2025-05-25T10:40:00-04:00] BROADCASTING SERVICE REQUEST for job {job_id} to endpoint {endpoint}")
+                logger.info(f"[a1111_connector.py process_job] [2025-05-25T11:15:00-04:00] BROADCASTING SERVICE REQUEST for job {job_id} to endpoint {endpoint}")
                 
-                # Create a message that exactly matches the format of progress updates
-                # but with a different type field
+                # Create a message that will be sent directly to the websocket
+                # This bypasses the Hub's message routing and goes directly to the monitor
                 service_request_message = {
-                    "type": "service_request",  # This is the key difference from progress updates
+                    "type": "service_request",  # This is a special message type that the monitor will recognize
                     "timestamp": time.time(),
                     "job_id": job_id,
                     "worker_id": self.worker_id if hasattr(self, "worker_id") else "unknown",
@@ -208,21 +209,25 @@ class A1111Connector(RESTSyncConnector):
                 message_json = json.dumps(service_request_message)
                 message_size = len(message_json)
                 
-                # Log the message details
-                logger.info(f"[a1111_connector.py process_job] [2025-05-25T10:40:00-04:00] Sending service request message (size: {message_size} bytes)")
-                logger.info(f"[a1111_connector.py process_job] [2025-05-25T10:40:00-04:00] Message structure: {list(service_request_message.keys())}")
+                # Log the message details with very distinctive timestamps
+                logger.info(f"[a1111_connector.py process_job] [2025-05-25T11:15:00-04:00] Sending service request message (size: {message_size} bytes)")
+                logger.info(f"[a1111_connector.py process_job] [2025-05-25T11:15:00-04:00] Message structure: {list(service_request_message.keys())}")
                 
                 # Send the message directly using the websocket
-                # This is exactly how progress updates are sent
+                # This bypasses the Hub's message routing and goes directly to the monitor
                 await websocket.send(message_json)
                 
-                # Log success
-                logger.info(f"[a1111_connector.py process_job] [2025-05-25T10:40:00-04:00] Successfully sent service request message for job {job_id}")
+                # [2025-05-25T11:20:00-04:00] Also send a normal progress update to ensure the job status is updated
+                # The send_progress_update function expects (self, websocket, job_id, progress, status, message)
+                await self.send_progress_update(websocket, job_id, 10, "processing", f"Sending {method.upper()} request to A1111 API")
+                
+                # Log success with very distinctive timestamp
+                logger.info(f"[a1111_connector.py process_job] [2025-05-25T11:15:00-04:00] Successfully sent service request message for job {job_id}")
                 
             except Exception as e:
                 # Log but don't fail the job if broadcasting fails
                 error_type = type(e).__name__
-                logger.error(f"[a1111_connector.py process_job] [2025-05-25T10:40:00-04:00] FAILED to send service request: {error_type} - {str(e)}")
+                logger.error(f"[a1111_connector.py process_job] [2025-05-25T11:15:00-04:00] FAILED to send service request: {error_type} - {str(e)}")
                 # Continue with the job processing
             
             # [2025-05-19T21:30:00-04:00] Implement progress polling for A1111 jobs

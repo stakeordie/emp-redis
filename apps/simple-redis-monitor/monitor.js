@@ -1707,6 +1707,56 @@ function handleJobProgress(message, source = 'unknown') {
     const clientId = message.client_id || null;
     // [2025-05-24T23:30:00-04:00] Get payload from message if available
     const payload = message.payload || null;
+    // [2025-05-25T11:00:00-04:00] Get message text for special service request detection
+    const messageText = message.message || '';
+    
+    // [2025-05-25T11:00:00-04:00] Check if this is a special service request message
+    if (status === 'service_request' && messageText.startsWith('SERVICE_REQUEST:')) {
+        console.log(`[2025-05-25T11:00:00-04:00] Detected service request message for job ${jobId}`);
+        
+        try {
+            // Parse the service request message
+            // Format: SERVICE_REQUEST:<endpoint>:<method>:<url>:<payload_json>
+            const parts = messageText.split(':');
+            if (parts.length >= 5) {
+                const endpoint = parts[1];
+                const method = parts[2];
+                const url = parts[3];
+                // Rejoin the remaining parts as they might contain colons within the JSON
+                const payloadJson = parts.slice(4).join(':');
+                let requestPayload = {};
+                
+                try {
+                    requestPayload = JSON.parse(payloadJson);
+                } catch (e) {
+                    console.error(`[2025-05-25T11:00:00-04:00] Error parsing service request payload: ${e.message}`);
+                }
+                
+                // Create a service request message in the format expected by handleServiceRequest
+                const serviceRequestMessage = {
+                    type: 'service_request',
+                    timestamp: Date.now(),
+                    job_id: jobId,
+                    worker_id: workerId,
+                    service: 'a1111', // Hardcoded for now since we know it's from A1111 connector
+                    request_type: `a1111_${endpoint}`,
+                    content: {
+                        endpoint: endpoint,
+                        method: method,
+                        url: url,
+                        payload: requestPayload
+                    }
+                };
+                
+                // Handle the service request using the existing handler
+                console.log(`[2025-05-25T11:00:00-04:00] Forwarding to handleServiceRequest: ${endpoint}, ${method}, ${url}`);
+                handleServiceRequest(serviceRequestMessage, source);
+                return; // Skip normal progress update handling
+            }
+        } catch (e) {
+            console.error(`[2025-05-25T11:00:00-04:00] Error processing service request message: ${e.message}`);
+        }
+    }
     
     console.log(`[DEBUG] Job progress update received with jobId: ${jobId}, workerId: ${workerId}, clientId: ${clientId}, source: ${source}`);
     addLogEntry(`Job progress update: ${jobId} - ${progress}% (Client: ${clientId || 'unknown'})`, 'info');
