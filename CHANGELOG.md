@@ -19,6 +19,20 @@ All notable changes to the EMP Redis project will be documented in this file.
   - Helps with debugging and understanding what's being requested from services
 
 ### Changed
+- [2025-05-25T15:05:00-04:00] Improved logging system across core components:
+  - Changed warning logs to error logs for better visibility of issues
+  - Removed unnecessary info and debug logging statements
+  - Added timestamps to all error logs for better traceability
+  - Converted verbose logging to code comments to maintain documentation
+  - Improved error reporting for invalid message formats
+  - Reduced log noise for routine operations
+
+- [2025-05-25T15:00:00-04:00] Fixed type errors in message handler:
+  - Fixed incompatible type error for forward_job_completion by converting CompleteJobMessage to dict
+  - Ensured job_type is always a string for JobAvailableMessage
+  - Added proper null checks and default values
+  - Added detailed comments with timestamps for traceability
+
 - [2025-05-24T13:12:00-04:00] Improved UI layout and scrolling behavior:
   - Created vertical layout with Connected Workers, Job Queue, and Finished Jobs stacked vertically
   - Added fixed heights with scrolling for all sections to prevent layout shifts
@@ -29,24 +43,10 @@ All notable changes to the EMP Redis project will be documented in this file.
 ### Fixed
 - [2025-05-25T09:45:00-04:00] Fixed issue requiring double-click on job details buttons:
   - Implemented event delegation for job action buttons
-  - Replaced inline onclick handlers with data attributes
-  - Added proper event listeners for job queue and finished jobs tables
-  - Improved event handling to prevent event propagation issues
-  - Enhanced UI responsiveness for job detail actions
-
-- [2025-05-25T09:25:00-04:00] Fixed empty payloads in job details view for REST API jobs:
-  - Added payload preservation for jobs submitted via REST API
-  - Updated job status checking to properly store payload data from REST API responses
-  - Fixed issue where REST API job payloads weren't showing in job details modal
-  - Added debugging logs to track REST API payload data flow
-  - Ensured payload data is preserved throughout the job lifecycle
-
-- [2025-05-24T23:50:00-04:00] Fixed empty payloads in job details view:
-  - Added payload preservation throughout the job lifecycle
-  - Updated job handling code to properly store and display payload data
-  - Added debugging logs to track payload data flow
-  - Fixed issue where payload data was lost during job status transitions
-  - Improved error handling in payload formatting
+  - Fixed event binding to properly handle dynamically added elements
+  - Improved click handling to respond to the first click
+  - Added proper event propagation handling
+  - Enhanced button styling for better user feedback
 
 - [2025-05-24T12:52:00-04:00] Fixed date formatting functions to handle all date formats:
   - Added robust error handling to formatDate and formatDateTime functions
