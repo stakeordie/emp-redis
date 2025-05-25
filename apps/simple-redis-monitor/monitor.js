@@ -4136,6 +4136,9 @@ function showNotification(message, type = 'info') {
  * @param {string} source - Source of the message ('monitor' or 'client')
  */
 function handleServiceRequest(message, source) {
+    // [2025-05-25T10:30:00-04:00] Enhanced service request handling with better logging
+    console.log('[2025-05-25T10:30:00-04:00] Received service request message:', message);
+    
     // Log the service request
     const timestamp = new Date().toLocaleTimeString();
     const workerInfo = message.worker_id || 'Unknown worker';
@@ -4143,8 +4146,15 @@ function handleServiceRequest(message, source) {
     const serviceInfo = message.service || 'Unknown service';
     const requestType = message.request_type || 'Unknown request';
     
-    // Add log entry for the service request
-    addLogEntry(`Service request from ${workerInfo} for job ${jobInfo}: ${requestType} to ${serviceInfo}`, 'info');
+    // Extract endpoint information if available
+    let endpointInfo = '';
+    if (message.content && message.content.endpoint) {
+        endpointInfo = ` (${message.content.endpoint})`;
+    }
+    
+    // Add log entry for the service request with more details
+    addLogEntry(`Service request from ${workerInfo} for job ${jobInfo}: ${requestType}${endpointInfo} to ${serviceInfo}`, 'info');
+    console.log(`[2025-05-25T10:30:00-04:00] Service request details - Worker: ${workerInfo}, Job: ${jobInfo}, Type: ${requestType}, Service: ${serviceInfo}`);
     
     // Create a service request item if the container exists
     if (elements.serviceRequestsList) {
@@ -4154,15 +4164,21 @@ function handleServiceRequest(message, source) {
         requestItem.dataset.jobId = jobInfo;
         requestItem.dataset.timestamp = message.timestamp || Date.now();
         
-        // Create header with basic info
+        // Create header with basic info and endpoint if available
         const header = document.createElement('div');
         header.className = 'service-request-header';
+        
+        // Extract endpoint for display
+        const endpoint = message.content && message.content.endpoint ? 
+            `<span class="service-request-endpoint">${message.content.endpoint}</span>` : '';
+        
         header.innerHTML = `
             <div class="service-request-info">
                 <span class="service-request-timestamp">${timestamp}</span>
                 <span class="service-request-worker">${workerInfo}</span>
                 <span class="service-request-job">${jobInfo}</span>
                 <span class="service-request-type">${requestType}</span>
+                ${endpoint}
                 <span class="service-request-service">${serviceInfo}</span>
             </div>
             <div class="service-request-actions">
@@ -4174,8 +4190,17 @@ function handleServiceRequest(message, source) {
         const content = document.createElement('div');
         content.className = 'service-request-content hidden';
         
-        // Format the content as JSON
-        const formattedContent = JSON.stringify(message.content, null, 2);
+        // Format the content as JSON with better formatting
+        let formattedContent = 'No content available';
+        try {
+            if (message.content) {
+                formattedContent = JSON.stringify(message.content, null, 2);
+            }
+        } catch (error) {
+            console.error('[2025-05-25T10:30:00-04:00] Error formatting service request content:', error);
+            formattedContent = `Error formatting content: ${error.message}`;
+        }
+        
         content.innerHTML = `<pre class="service-request-json">${formattedContent}</pre>`;
         
         // Add event listener to view button
@@ -4191,6 +4216,7 @@ function handleServiceRequest(message, source) {
         
         // Add the request item to the list
         elements.serviceRequestsList.insertBefore(requestItem, elements.serviceRequestsList.firstChild);
+        console.log('[2025-05-25T10:30:00-04:00] Added service request item to list');
         
         // Show the container and hide the no requests message
         if (elements.serviceRequestsContainer) {
@@ -4208,6 +4234,8 @@ function handleServiceRequest(message, source) {
                 elements.serviceRequestsList.removeChild(requestItems[i]);
             }
         }
+    } else {
+        console.error('[2025-05-25T10:30:00-04:00] Service requests list element not found');
     }
 }
 

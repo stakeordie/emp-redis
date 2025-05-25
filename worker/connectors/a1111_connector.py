@@ -103,7 +103,7 @@ class A1111Connector(RESTSyncConnector):
         }
     
     async def broadcast_service_request(self, websocket, job_id: str, request_type: str, request_content: Dict[str, Any]) -> None:
-        """[2025-05-25T09:30:00-04:00] Broadcast service request details to clients and monitors
+        """[2025-05-25T10:25:00-04:00] Broadcast service request details to clients and monitors
         
         Args:
             websocket: The WebSocket connection to the Redis Hub
@@ -112,20 +112,25 @@ class A1111Connector(RESTSyncConnector):
             request_content: The content of the request
         """
         try:
-            # Create a message to broadcast
+            # Create a message to broadcast with all required fields
+            # The monitor.js expects these specific fields to be present
             message = {
-                "type": "service_request",
+                "type": "service_request",  # Must be exactly "service_request"
                 "worker_id": self.worker_id if hasattr(self, "worker_id") else "unknown",
                 "job_id": job_id,
-                "service": self.get_job_type(),
-                "request_type": request_type,
+                "service": self.get_job_type(),  # Should be "a1111"
+                "request_type": request_type,  # e.g., "a1111_txt2img"
                 "timestamp": time.time(),
-                "content": request_content
+                "content": request_content  # This will contain endpoint, method, url, and payload
             }
             
-            # Send the message to the Redis Hub for broadcasting
-            logger.info(f"[a1111_connector.py broadcast_service_request] Broadcasting {request_type} request for job {job_id}")
-            await websocket.send(json.dumps(message))
+            # Log the message structure for debugging
+            logger.info(f"[a1111_connector.py broadcast_service_request] Message structure: {list(message.keys())}")
+            
+            # Convert to JSON and send to the Redis Hub for broadcasting
+            message_json = json.dumps(message)
+            logger.info(f"[a1111_connector.py broadcast_service_request] Broadcasting {request_type} request for job {job_id} (size: {len(message_json)} bytes)")
+            await websocket.send(message_json)
             
             logger.info(f"[a1111_connector.py broadcast_service_request] Successfully broadcast {request_type} request")
         except Exception as e:
@@ -209,24 +214,34 @@ class A1111Connector(RESTSyncConnector):
                 **request_payload
             }
             
-            # [2025-05-25T10:10:00-04:00] Broadcast service request to clients and monitors
+            # [2025-05-25T10:20:00-04:00] Broadcast service request to clients and monitors
             # This allows visibility into what's being sent to the A1111 service
             try:
+                # Create a more detailed request content that includes the full payload
+                detailed_request = {
+                    "endpoint": endpoint,  # Explicitly include the endpoint (txt2img, img2img, etc.)
+                    "method": method.upper(),  # Use uppercase for method (POST, GET, etc.)
+                    "url": url,  # Include the full URL
+                    "payload": request_payload,  # Include the complete payload
+                    "job_id": job_id  # Include the job ID for reference
+                }
+                
+                # Log that we're about to broadcast
+                logger.info(f"[a1111_connector.py process_job] Broadcasting service request for job {job_id} to endpoint {endpoint}")
+                
+                # Send the broadcast with detailed information
                 await self.broadcast_service_request(
                     websocket,
                     job_id,
-                    f"a1111_{endpoint}",  # Use endpoint as part of the request type
-                    {
-                        "endpoint": endpoint,
-                        "method": method,
-                        "url": url,
-                        "payload": request_payload
-                    }
+                    f"a1111_{endpoint}",  # Use endpoint as part of the request type (a1111_txt2img, a1111_img2img, etc.)
+                    detailed_request
                 )
+                
                 logger.info(f"[a1111_connector.py process_job] Successfully broadcast service request for job {job_id}")
             except Exception as e:
                 # Log but don't fail the job if broadcasting fails
-                logger.warning(f"[a1111_connector.py process_job] Failed to broadcast service request: {str(e)}")
+                error_type = type(e).__name__
+                logger.warning(f"[a1111_connector.py process_job] Failed to broadcast service request: {error_type} - {str(e)}")
                 # Continue with the job processing
             
             # [2025-05-19T21:30:00-04:00] Implement progress polling for A1111 jobs
