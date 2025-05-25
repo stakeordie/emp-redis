@@ -78,8 +78,6 @@ class MessageHandler(MessageHandlerInterface):
         self._background_tasks.append(asyncio.create_task(self._monitor_status_update_task()))
         self._background_tasks.append(asyncio.create_task(self._start_redis_listener()))
 
-        # logger.info("Started all background tasks")
-
     async def stop_background_tasks(self) -> None:
         """
         Stop background tasks for the application.
@@ -98,8 +96,6 @@ class MessageHandler(MessageHandlerInterface):
 
         # Clear the task list
         self._background_tasks.clear()
-
-        # logger.info("Stopped all background tasks")
 
     async def handle_client_message(self, client_id: str,
                                   message_type: str,
@@ -214,10 +210,8 @@ class MessageHandler(MessageHandlerInterface):
         # Otherwise generate a new UUID
         if 'message_id' in message and message['message_id']:
             job_id = message['message_id']
-            logger.info(f"[message_handler.py handle_submit_job() {job_id}] Job Id set as message_id")
         else:
             job_id = f"job-{uuid.uuid4()}"
-            logger.info(f"[message_handler.py handle_submit_job() {job_id}] Job Id generated using UUID")
 
         # Extract data directly from the message dictionary
         # Using .get() with default values to handle missing keys
@@ -361,7 +355,6 @@ class MessageHandler(MessageHandlerInterface):
                 )
                 await self.connection_manager.send_to_client(client_id, ack_message)
 
-            # logger.info(f"Sent stats response to client {client_id}")
 
         except Exception as e:
             # logger.error(f"Error handling request_stats: {str(e)}")
@@ -547,8 +540,6 @@ class MessageHandler(MessageHandlerInterface):
         # This ensures type consistency and simplifies the message flow
         await self.connection_manager.forward_job_progress(message)
 
-        # logger.info(f"Job progress updated: {message.job_id}, progress: {message.progress}%")
-
     async def handle_complete_job(self, worker_id: str, message: CompleteJobMessage) -> None:
         """
         Handle job completion from a worker.
@@ -564,20 +555,16 @@ class MessageHandler(MessageHandlerInterface):
         # Log the result data if available
         if result:
             if isinstance(result, dict):
-                result_keys = list(result.keys())
-                logger.info(f"[2025-05-20T18:23:00-04:00] Result data received directly from worker for job {job_id}, keys: {result_keys}")
-                
+                result_keys = list(result.keys())                
                 # Check for base64 image data
                 base64_found = False
                 
                 # Look for images in different possible locations
                 if "images" in result:
                     image_count = len(result["images"]) if isinstance(result["images"], list) else "not a list"
-                    logger.info(f"[2025-05-20T18:23:00-04:00] Found {image_count} images in result.images")
                     base64_found = True
                 elif "output" in result and isinstance(result["output"], dict) and "images" in result["output"]:
                     image_count = len(result["output"]["images"]) if isinstance(result["output"]["images"], list) else "not a list"
-                    logger.info(f"[2025-05-20T18:23:00-04:00] Found {image_count} images in result.output.images")
                     base64_found = True
                 
                 # Look for base64 data directly
@@ -585,55 +572,23 @@ class MessageHandler(MessageHandlerInterface):
                     for key, value in result.items():
                         if isinstance(value, str) and len(value) > 100 and ",base64," in value:
                             base64_found = True
-                            logger.info(f"[2025-05-20T18:23:00-04:00] Found base64 image data in result.{key}")
                             break
-                
-                if not base64_found:
-                    logger.warning(f"[2025-05-20T18:23:00-04:00] No base64 image data found in result for job {job_id}")
-            else:
-                logger.warning(f"[2025-05-20T18:23:00-04:00] Result is not a dictionary for job {job_id}, type: {type(result).__name__}")
-        else:
-            logger.warning(f"[2025-05-20T18:23:00-04:00] No result data received from worker for job {job_id}")
         
         # [2025-05-20T18:46:00-04:00] Update job status in Redis with the full result data
-        # This ensures the result is available when the complete_job message is generated
-        logger.info(f"[REDIS-VERIFY] Storing full result data in Redis for job {job_id}")
-        
-        # Log the original result data for comparison
-        if result:
-            result_keys = list(result.keys()) if isinstance(result, dict) else "not a dict"
-            result_size = len(json.dumps(result)) if isinstance(result, dict) else 0
-            logger.info(f"[REDIS-VERIFY] ORIGINAL result for job {job_id}, keys: {result_keys}, size: {result_size} bytes")
-            
-            # Log the first few values to help with debugging
-            if isinstance(result, dict):
-                for key, value in list(result.items())[:3]:  # Show up to 3 key-value pairs
-                    value_preview = str(value)[:100] + "..." if isinstance(value, str) and len(value) > 100 else value
-                    logger.info(f"[REDIS-VERIFY] ORIGINAL result key: {key}, value: {value_preview}")
-        else:
-            logger.warning(f"[REDIS-VERIFY] ORIGINAL result for job {job_id} is None or empty")
-        
+        # This ensures the result is available when the complete_job message is generated        
+
         # [2025-05-20T21:34:00-04:00] Store the result in Redis and ensure it completes
         # Use asyncio.to_thread to run the synchronous complete_job method in a separate thread
         # This allows us to await its completion without changing the method itself
         try:
-            logger.info(f"[2025-05-20T21:34:00-04:00] Running complete_job in a separate thread for job {job_id}")
             storage_success = await asyncio.to_thread(
                 self.redis_service.complete_job,
                 job_id=job_id,
                 result=result  # Pass the full result data from the worker
             )
-            logger.info(f"[2025-05-20T21:34:00-04:00] Completed running complete_job in thread for job {job_id}")
         except Exception as e:
             logger.error(f"[2025-05-20T21:34:00-04:00] Error running complete_job in thread: {str(e)}")
-            logger.exception("Complete stack trace:")
             storage_success = False
-        
-        # [2025-05-20T21:18:00-04:00] Log the storage result
-        if storage_success:
-            logger.info(f"[2025-05-20T21:18:00-04:00] Successfully stored result for job {job_id} in Redis")
-        else:
-            logger.error(f"[2025-05-20T21:18:00-04:00] Failed to store result for job {job_id} in Redis")
         
         # [2025-05-20T23:25:00-04:00] Send the complete_job message directly after storing the result
         # Since we've removed the Redis publication, we need to send this message directly
@@ -648,17 +603,12 @@ class MessageHandler(MessageHandlerInterface):
                 )
                 
                 # Send the complete job message to all clients subscribed to this job
-                logger.info(f"[2025-05-20T23:25:00-04:00] Sending complete_job message directly for job {job_id}")
                 await self.connection_manager.forward_job_completion(job_id, complete_message)
-                logger.info(f"[2025-05-20T23:25:00-04:00] Successfully sent complete_job message for job {job_id}")
             except Exception as e:
                 logger.error(f"[2025-05-20T23:25:00-04:00] Error sending complete_job message: {str(e)}")
-                logger.exception("Complete stack trace:")
         else:
             logger.error(f"[2025-05-20T23:25:00-04:00] Not sending complete_job message due to storage failure for job {job_id}")
             
-        logger.info(f"[2025-05-20T23:25:00-04:00] Job completion processing finished for job {job_id}")
-
         
         # [2025-05-20T19:15:00-04:00] Verify the data was stored correctly by immediately querying Redis
         job_data = self.redis_service.get_job_status(job_id)
@@ -667,11 +617,9 @@ class MessageHandler(MessageHandlerInterface):
         if job_data and "result" in job_data:
             # Log the raw result data without trying to parse it
             stored_result = job_data["result"]
-            logger.info(f"[REDIS-VERIFY] Raw stored result type: {type(stored_result).__name__}")
             
             # Log the size of the stored result
             stored_size = len(stored_result) if isinstance(stored_result, (str, bytes)) else "unknown"
-            logger.info(f"[REDIS-VERIFY] Raw stored result size: {stored_size} bytes")
             
             # [2025-05-20T23:52:00-04:00] Log a preview of the raw result with proper type handling
             if isinstance(stored_result, bytes):
@@ -694,41 +642,28 @@ class MessageHandler(MessageHandlerInterface):
             else:
                 # Handle other types
                 preview = repr(stored_result)
-                
-            logger.info(f"[REDIS-VERIFY] Raw stored result preview: {preview}")
-            
+                            
             # [2025-05-20T19:15:00-04:00] Process the stored result based on its type
             processed_result = None
             try:
                 if isinstance(stored_result, dict):
                     # If it's already a dictionary, use it directly
-                    logger.info(f"[REDIS-VERIFY] Result is already a dictionary, no parsing needed")
                     processed_result = stored_result
                 elif isinstance(stored_result, bytes):
                     # If it's bytes, decode to string first
                     decoded = stored_result.decode('utf-8')
-                    logger.info(f"[REDIS-VERIFY] Decoded bytes to string, length: {len(decoded)}")
                     # Then parse the string as JSON
                     processed_result = json.loads(decoded)
-                    logger.info(f"[REDIS-VERIFY] Successfully parsed bytes as JSON")
                 elif isinstance(stored_result, str):
                     # If it's a string, parse it as JSON
                     processed_result = json.loads(stored_result)
-                    logger.info(f"[REDIS-VERIFY] Successfully parsed string as JSON")
                 else:
                     logger.warning(f"[REDIS-VERIFY] Unexpected result type: {type(stored_result).__name__}")
                     processed_result = stored_result
                 
-                # Log the processed result
-                if isinstance(processed_result, dict):
-                    logger.info(f"[REDIS-VERIFY] Processed result keys: {list(processed_result.keys())}")
-                else:
-                    logger.info(f"[REDIS-VERIFY] Processed result type: {type(processed_result).__name__}")
             except Exception as e:
                 logger.error(f"[REDIS-VERIFY] Error processing result: {str(e)}")
                 logger.error(f"[REDIS-VERIFY] Failed to process result for job {job_id}")
-                # Continue with the original stored result
-                processed_result = stored_result
         else:
             logger.error(f"[REDIS-VERIFY] Failed to retrieve result from Redis for job {job_id}")
             logger.error(f"[REDIS-VERIFY] Job data: {job_data}")
@@ -797,7 +732,7 @@ class MessageHandler(MessageHandlerInterface):
             # Send error to the client
             await self.connection_manager.send_to_client(client_id, error_message)
             
-            logger.warning(f"[message_handler.py handle_cancel_job()]: Failed to cancel job {job_id}")
+            logger.error(f"[message_handler.py handle_cancel_job()]: Failed to cancel job {job_id}")
     
     # [2025-05-19T18:27:00-04:00] Added method to handle force retry job requests
     async def handle_force_retry_job(self, client_id: str, job_id: str) -> None:
@@ -821,7 +756,7 @@ class MessageHandler(MessageHandlerInterface):
             # Job doesn't exist
             error_message = ErrorMessage(error=f"Failed to force retry job {job_id}. Job does not exist.")
             await self.connection_manager.send_to_client(client_id, error_message)
-            logger.warning(f"[message_handler.py handle_force_retry_job()]: Failed to force retry job {job_id} - job not found")
+            logger.error(f"[message_handler.py handle_force_retry_job()]: Failed to force retry job {job_id} - job not found")
             return
         
         # Clear the job's failure history using the connection manager's force_retry_job method
@@ -857,7 +792,6 @@ class MessageHandler(MessageHandlerInterface):
                 # Notify idle workers about the job
                 await self.connection_manager.notify_idle_workers(job_notification)
             
-            logger.info(f"[message_handler.py handle_force_retry_job()]: Successfully cleared failure history for job {job_id}")
         else:
             # No workers had failed this job
             response = ResponseJobStatusMessage(
@@ -868,9 +802,7 @@ class MessageHandler(MessageHandlerInterface):
             
             # Send response to the client
             await self.connection_manager.send_to_client(client_id, response)
-            
-            logger.info(f"[message_handler.py handle_force_retry_job()]: No failure history found for job {job_id}")
-    
+                
     async def handle_fail_job(self, worker_id: str, message: FailJobMessage) -> None:
         """
         Handle job failure message from a worker.
@@ -887,7 +819,7 @@ class MessageHandler(MessageHandlerInterface):
         error = message.error if hasattr(message, 'error') and message.error is not None else "Unknown error"
 
         # Log the failure
-        logger.info(f"[message_handler.py handle_fail_job()]: Job {job_id} failed on worker {worker_id} with error: {error}")
+        logger.error(f"[message_handler.py handle_fail_job()]: Job {job_id} failed on worker {worker_id} with error: {error}")
 
         # 2025-04-25-23:25 - Record the failed job in the ConnectionManager
         # This updates the in-memory tracking to prevent this worker from being notified about this job again
@@ -928,8 +860,6 @@ class MessageHandler(MessageHandlerInterface):
         # Pass the message object directly without .dict() conversion
         # This ensures type consistency across the application
         await self.connection_manager.broadcast_job_notification(message)
-
-        #logger.info(f"Job completed: {message.job_id} by worker: {worker_id}")
 
         # Broadcast pending jobs to idle workers
         await self.broadcast_pending_jobs_to_idle_workers()
@@ -1045,7 +975,6 @@ class MessageHandler(MessageHandlerInterface):
                 # After job is claimed, broadcast pending jobs to other idle workers
                 await self.broadcast_pending_jobs_to_idle_workers()
 
-                # logger.info(f"Job claimed: {message.job_id} by worker: {worker_id}")
             else:
                 logger.error(f"Job claimed but details not found: {message.job_id}")
         else:
@@ -1053,7 +982,7 @@ class MessageHandler(MessageHandlerInterface):
             error_message = ErrorMessage(error=f"Failed to claim job {message.job_id}")
             await self.connection_manager.send_to_worker(worker_id, error_message)
 
-            logger.warning(f"Failed job claim: {message.job_id} by worker: {worker_id}")
+            logger.error(f"Failed job claim: {message.job_id} by worker: {worker_id}")
 
     async def handle_monitor_message(self, monitor_id: str,
                                    message_type: str,
@@ -1193,9 +1122,6 @@ class MessageHandler(MessageHandlerInterface):
             # Track if any jobs were broadcast
             jobs_broadcast = False
 
-            # Log the current worker status dictionary
-            #logger.info(f"[JOB-MATCH] Current worker status: {self.connection_manager.worker_status}")
-
             # Step 1: Get idle workers and their capabilities
             idle_workers = []
             worker_job_types = {}
@@ -1217,7 +1143,6 @@ class MessageHandler(MessageHandlerInterface):
 
                         # Get supported job types
                         supported_job_types = capabilities_dict.get("supported_job_types", [])
-                        # logger.info(f"[message_handler.broadcast_pending_jobs_to_idle_workers] Worker {worker_id} supported job types: {supported_job_types}")
                     except ValidationError as e:
                         logger.error(f"[message_handler.py broadcast_pending_jobs_to_idle_workers] Error parsing capabilities for worker {worker_id}: {str(e)}")
                         # Fallback to a minimal capabilities object
@@ -1231,8 +1156,6 @@ class MessageHandler(MessageHandlerInterface):
 
                     # Ensure supported_job_types is always a list
                     if not isinstance(supported_job_types, list):
-                        logger.info(f"[message_handler.py broadcast_pending_jobs_to_idle_workers] NOT a list: {supported_job_types}")
-                        # Convert to list if it's not already
                         if supported_job_types:
                             supported_job_types = [supported_job_types]
                         else:
@@ -1241,23 +1164,18 @@ class MessageHandler(MessageHandlerInterface):
                     # Store supported job types for this worker
                     # This is a polling situation where we are checking all the workers capabilities over and over. (this is a loop, foreach worker record their capabilities)
                     worker_job_types[worker_id] = supported_job_types
-                    # logger.info(f"[message_handler.py broadcast_pending_jobs_to_idle_workers] Worker {worker_id} stored supported job types: {supported_job_types}")
 
             if not idle_workers:
-                #logger.info("[JOB-MATCH] No idle workers available for job assignment")
                 return False
 
             # Step 2: Collect all unique job types supported by idle workers
             all_supported_job_types = set()
             for job_types in worker_job_types.values():
-                # logger.info(f"[message_handler.py broadcast_pending_jobs_to_idle_workers] for job_types in worker_job_types.values(): {job_types}")
                 all_supported_job_types.update(job_types)
 
             if not all_supported_job_types:
-                #logger.warning("[JOB-MATCH] No job types supported by idle workers")
                 return False
 
-            #logger.info(f"[JOB-MATCH] Job types supported by idle workers: {all_supported_job_types}")
 
             # Step 3: Get pending jobs for each supported job type
             available_jobs = {}
@@ -1266,10 +1184,8 @@ class MessageHandler(MessageHandlerInterface):
                 jobs = self.redis_service.get_pending_jobs_by_type(job_type)
                 if jobs:
                     available_jobs[job_type] = jobs
-                    #logger.info(f"[JOB-MATCH] Found {len(jobs)} pending jobs of type {job_type}")
 
             if not available_jobs:
-                #logger.info("[JOB-MATCH] No pending jobs available for supported job types")
                 return False
 
             # Step 4: Match jobs to workers based on capabilities
@@ -1312,16 +1228,13 @@ class MessageHandler(MessageHandlerInterface):
                     # 2025-04-25-23:30 - Check if worker has previously failed this job
                     # This is the new in-memory approach to prevent reassigning failed jobs
                     if worker_id in self.connection_manager.worker_failed_jobs and job_id in self.connection_manager.worker_failed_jobs[worker_id]:
-                        logger.info(f"[JOB-MATCH] Worker {worker_id} previously failed job {job_id}, excluding from eligibility")
                         excluded_workers.append(worker_id)
                         continue
                         
                     # Worker is eligible
                     eligible_workers.append(worker_id)
-                    logger.info(f"[JOB-MATCH] Worker {worker_id} is eligible for job {job_id} of type {job_type}")
 
                 if not eligible_workers:
-                    #logger.info(f"[JOB-MATCH] No eligible workers for job {job_id} of type {job_type}")
                     continue
 
                 # Get the job request payload
@@ -1352,7 +1265,6 @@ class MessageHandler(MessageHandlerInterface):
                 selected_worker = eligible_workers[0]
 
                 # Send notification to the selected worker
-                #logger.info(f"[JOB-MATCH] Sending job {job_id} of type {job_type} to worker {selected_worker}")
                 try:
                     await self.connection_manager.send_to_worker(selected_worker, notification)
                     notified_workers.add(selected_worker)
@@ -1376,8 +1288,6 @@ class MessageHandler(MessageHandlerInterface):
 
                 # Ensure cleaned_jobs is a dict before using len() and items()
                 if cleaned_jobs and isinstance(cleaned_jobs, dict) and len(cleaned_jobs) > 0:
-                    # logger.info(f"Cleaned up {len(cleaned_jobs)} stale job claims")
-
                     # For each cleaned job, notify idle workers about it
                     for job_id, job_data in cleaned_jobs.items():
                         # Create job available notification
@@ -1436,12 +1346,9 @@ class MessageHandler(MessageHandlerInterface):
         """
         Start listening for Redis pub/sub messages
         """
-        # logger.info("Starting Redis pub/sub listener")
-
         # Connect to Redis async client
         try:
             await self.redis_service.connect_async()
-            # logger.info("Successfully connected to Redis async client")
         except Exception as e:
             logger.error(f"Failed to connect to Redis async client: {str(e)}")
             return
@@ -1454,62 +1361,45 @@ class MessageHandler(MessageHandlerInterface):
                 job_id = data.get("job_id")
                 message_type = data.get("type")
                 status = data.get("status")
-                
-                # [2025-05-20T20:55:00-04:00] Log all incoming job update messages
-                logger.info(f"[JOB-UPDATE] Received message: job_id={job_id}, type={message_type}, status={status}")
-                
+                                
                 if job_id:
                     # [2025-05-20T20:55:00-04:00] Check if this is a job completion message
                     if status == "completed" and message_type == "update_job_progress":
-                        logger.info(f"[JOB-COMPLETE] Detected job completion for job {job_id}")
                         
-                        # First, forward the original update_job_progress message
-                        logger.info(f"[JOB-COMPLETE] Forwarding original update_job_progress message for job {job_id}")
                         await self.connection_manager.send_job_update(job_id, data)
                         
                         # Get the result data from Redis after ensuring it's stored
-                        logger.info(f"[JOB-COMPLETE] Retrieving result data from Redis for job {job_id}")
                         job_data = self.redis_service.get_job_status(job_id)
-                        logger.info(f"[JOB-COMPLETE] Redis returned job_data: {job_data is not None}")
                         
                         result = {}
                         
                         if job_data and "result" in job_data:
                             stored_result = job_data["result"]
-                            logger.info(f"[JOB-COMPLETE] Retrieved result for job {job_id}, type: {type(stored_result).__name__}")
                             
                             # Process the result based on its type
                             try:
                                 if isinstance(stored_result, dict):
                                     # If it's already a dictionary, use it directly
-                                    logger.info(f"[JOB-COMPLETE] Result is already a dictionary")
                                     result = stored_result
                                 elif isinstance(stored_result, bytes):
                                     # If it's bytes, decode to string first
-                                    logger.info(f"[JOB-COMPLETE] Result is bytes, decoding to string")
                                     decoded = stored_result.decode('utf-8')
                                     # Then parse the string as JSON
                                     result = json.loads(decoded)
-                                    logger.info(f"[JOB-COMPLETE] Successfully parsed bytes as JSON")
                                 elif isinstance(stored_result, str):
                                     # If it's a string, parse it as JSON
-                                    logger.info(f"[JOB-COMPLETE] Result is string, parsing as JSON")
                                     result = json.loads(stored_result)
-                                    logger.info(f"[JOB-COMPLETE] Successfully parsed string as JSON")
                                 else:
-                                    logger.warning(f"[JOB-COMPLETE] Unexpected result type: {type(stored_result).__name__}")
+                                    logger.error(f"[JOB-COMPLETE] Unexpected result type: {type(stored_result).__name__}")
                                     result = stored_result
                                 
-                                # Log the result keys if it's a dictionary
-                                if isinstance(result, dict):
-                                    logger.info(f"[JOB-COMPLETE] Result keys: {list(result.keys())}")
                             except Exception as e:
                                 logger.error(f"[JOB-COMPLETE] Error processing result: {str(e)}")
                                 logger.exception("[JOB-COMPLETE] Complete stack trace:")
                         else:
-                            logger.warning(f"[JOB-COMPLETE] No result found in Redis for job {job_id}")
+                            logger.error(f"[JOB-COMPLETE] No result found in Redis for job {job_id}")
                             if job_data:
-                                logger.info(f"[JOB-COMPLETE] Available job_data keys: {list(job_data.keys())}")
+                                logger.error(f"[JOB-COMPLETE] Available job_data keys: {list(job_data.keys())}")
                         
                         # Create and send the complete_job message with the result data
                         complete_job_message = {
@@ -1523,12 +1413,10 @@ class MessageHandler(MessageHandlerInterface):
                         }
                         
                         # Send the complete_job message directly
-                        logger.info(f"[JOB-COMPLETE] Sending complete_job message for job {job_id}")
                         success = await self.connection_manager.send_job_update(job_id, complete_job_message)
-                        logger.info(f"[JOB-COMPLETE] Complete_job message sent successfully: {success}")
                     else:
                         # For non-completion messages, just forward them as before
-                        logger.info(f"[JOB-UPDATE] Forwarding non-completion message for job {job_id}")
+                        logger.error(f"[JOB-UPDATE] Forwarding non-completion message for job {job_id}")
                         await self.connection_manager.send_job_update(job_id, data)
             except Exception as e:
                 logger.error(f"Error handling Redis job update message: {str(e)}")
@@ -1545,8 +1433,6 @@ class MessageHandler(MessageHandlerInterface):
                     job_id = data.get("job_id")
                     job_type = data.get("job_type")
 
-                    logger.info(f"[JOB-NOTIFY] Received job notification for job {job_id} of type {job_type}")
-
                     if job_id and job_type:
                         # Create job available notification message
                         notification = {
@@ -1556,12 +1442,9 @@ class MessageHandler(MessageHandlerInterface):
                             "job_request_payload": data.get("job_request_payload")
                         }
 
-                        # Log the notification details
-                        logger.info(f"[JOB-NOTIFY] Created notification for job {job_id} of type {job_type}")
 
                         # Send notification to idle workers
                         worker_count = await self.connection_manager.notify_idle_workers(notification)
-                        logger.info(f"[JOB-NOTIFY] Notified {worker_count} idle workers about job {job_id}")
 
             except Exception as e:
                 logger.error(f"Error handling Redis job notification message: {str(e)}")
