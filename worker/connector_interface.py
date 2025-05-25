@@ -6,12 +6,18 @@ from typing import Dict, Any, Optional, Union
 class ConnectorInterface(ABC):
     """Interface for service connectors that handle specific job types"""
     
-    # Class attribute to identify the connector type
-    # This should be overridden by each connector implementation
-    # and should match the name used in the WORKER_CONNECTORS environment variable
-    # Updated: 2025-04-07T15:48:00-04:00
-    # [2025-05-25T21:05:00-04:00] Changed connector_name type to Optional[str] to allow string values in subclasses
-    connector_name: Optional[str] = None
+    # [2025-05-25T21:25:00-04:00] Removed connector_name and added connector_id as an abstract property
+    # Each connector implementation must provide its own connector_id that matches
+    # the name used in the WORKER_CONNECTORS environment variable
+    @property
+    @abstractmethod
+    def connector_id(self) -> str:
+        """Get the connector identifier used for loading and identification
+        
+        Returns:
+            str: The connector identifier string (e.g., "comfyui", "a1111")
+        """
+        pass
     
     @abstractmethod
     async def initialize(self) -> bool:

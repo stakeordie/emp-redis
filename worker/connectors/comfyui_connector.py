@@ -59,13 +59,16 @@ from core.utils.logger import logger
 class ComfyUIConnector(WebSocketConnector):
     """Connector for ComfyUI service"""
     
-    # [2025-05-25T21:15:00-04:00] Maintain type compatibility with base class
-    # Base class defines connector_name as None, so we need to keep it that way
-    connector_name = None
-    
-    # [2025-05-25T21:15:00-04:00] Added connector_id for identification in connector_loader.py
-    # This allows the connector_loader to find the connector class without type errors
-    connector_id = 'comfyui'
+    # [2025-05-25T21:35:00-04:00] Implemented connector_id property to replace connector_name
+    # This provides a cleaner way to identify connectors without type compatibility issues
+    @property
+    def connector_id(self) -> str:
+        """Get the connector identifier used for loading and identification
+        
+        Returns:
+            str: The connector identifier string 'comfyui'
+        """
+        return 'comfyui'
     
     # Version tracking
     # Updated: 2025-04-25T15:35:00-04:00 - Added improved connection error handling
@@ -206,9 +209,6 @@ class ComfyUIConnector(WebSocketConnector):
         # 2025-04-25-17:55 - Updated to better handle connection errors
         try:
             # Validate configuration
-            protocol = "wss" if self.use_ssl else "ws"
-            ws_url = f"{protocol}://{self.host}:{self.port}/ws"            
-            # Test the connection - will raise an exception if connection fails
             try:
                 await self.validate_connection()
                 # Clear any previous connection errors
@@ -309,7 +309,7 @@ class ComfyUIConnector(WebSocketConnector):
         # Updated: 2025-04-17-19:58 - Fixed to handle ComfyUI WebSocket protocol correctly
         if not self.connected or self.ws is None:
             logger.error(f"[comfyui_connector.py send_workflow] COMFYUI_STATUS: Cannot send workflow: not connected")
-            logger.debug(f"[comfyui_connector.py send_workflow] COMFYUI_STATUS: Connection state: connected={self.connected}, ws={self.ws}, ws_closed={self.ws.closed if self.ws else True}")
+            logger.error(f"[comfyui_connector.py send_workflow] COMFYUI_STATUS: Connection state: connected={self.connected}, ws={self.ws}, ws_closed={self.ws.closed if self.ws else True}")
             return None
             
         try:

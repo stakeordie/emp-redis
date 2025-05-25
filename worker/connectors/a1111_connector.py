@@ -36,15 +36,16 @@ class A1111Connector(RESTSyncConnector):
     # Version identifier to verify code deployment
     VERSION = "2025-04-17-14:10-improved-timeout-handling"
     
-    # Class attribute to identify the connector type
-    # This should match the name used in the WORKER_CONNECTORS environment variable
-    # [2025-05-25T21:15:00-04:00] Maintain type compatibility with base class
-    # Base class defines connector_name as None, so we need to keep it that way
-    connector_name = None
-    
-    # [2025-05-25T21:15:00-04:00] Added connector_id for identification in connector_loader.py
-    # This allows the connector_loader to find the connector class without type errors
-    connector_id = 'a1111'
+    # [2025-05-25T21:40:00-04:00] Implemented connector_id property to replace connector_name
+    # This provides a cleaner way to identify connectors without type compatibility issues
+    @property
+    def connector_id(self) -> str:
+        """Get the connector identifier used for loading and identification
+        
+        Returns:
+            str: The connector identifier string 'a1111'
+        """
+        return 'a1111'
     
     def __init__(self):
         """Initialize the A1111 connector"""

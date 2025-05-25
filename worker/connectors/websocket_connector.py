@@ -31,10 +31,20 @@ from core.utils.logger import logger
 class WebSocketConnector(ConnectorInterface):
     """Base class for connectors that use WebSockets to communicate with external services"""
     
-    # Base class is not directly usable by workers
-    # Updated: 2025-04-07T15:50:00-04:00
-    # [2025-05-25T20:55:00-04:00] Changed connector_name type to Optional[str] to allow string values in subclasses
-    connector_name: Optional[str] = None  # Set to None to indicate this is not directly usable
+    # [2025-05-25T21:30:00-04:00] Implemented connector_id property to replace connector_name
+    # This base class is not directly usable by workers
+    @property
+    def connector_id(self) -> str:
+        """Get the connector identifier used for loading and identification
+        
+        Returns:
+            str: The connector identifier string
+            
+        Raises:
+            NotImplementedError: This base class should not be used directly
+        """
+        # Base class is not directly usable
+        raise NotImplementedError("WebSocketConnector is a base class and should not be used directly")
     
     # Version identifier to verify code deployment
     VERSION = "2025-04-17-15:05-error-handling-fix"
