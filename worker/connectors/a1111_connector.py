@@ -82,6 +82,41 @@ class A1111Connector(RESTSyncConnector):
             "connection_timeout": self.connection_timeout
         }
     
+    async def health_check(self) -> bool:
+        """Check if the A1111 API is available
+        
+        Returns:
+            bool: True if the API is available, False otherwise
+        """
+        # [2025-05-25T22:40:00-04:00] Added detailed debug logging for A1111 health check
+        logger.info(f"[a1111_connector.py health_check DEBUG] Performing health check for A1111 API")
+        logger.info(f"[a1111_connector.py health_check DEBUG] Health check URL: {self.base_url}/healthz")
+        try:
+            async with self.session.get(f"{self.base_url}/healthz", headers=self._get_headers()) as response:
+                return response.status == 200
+        except Exception as e:
+            logger.error(f"[a1111_connector.py health_check] Health check failed: {str(e)}")
+            return False
+    
+    async def initialize(self) -> bool:
+        """Initialize the connector
+        
+        Returns:
+            bool: True if initialization was successful, False otherwise
+        """
+        # [2025-05-25T22:40:00-04:00] Added detailed debug logging for A1111 initialization
+        logger.info(f"[a1111_connector.py initialize DEBUG] Initializing A1111 connector")
+        logger.info(f"[a1111_connector.py initialize DEBUG] Configuration: base_url={self.base_url}, api_prefix={self.api_prefix}")
+        logger.info(f"[a1111_connector.py initialize DEBUG] Job type: {self.job_type}")
+        
+        # Perform health check
+        health_status = await self.health_check()
+        logger.info(f"[a1111_connector.py initialize DEBUG] Health check result: {health_status}")
+        
+        # Always return True for now to allow the connector to be used even if A1111 is not running
+        # This allows the worker to accept A1111 jobs and queue them until A1111 is available
+        return True
+    
     def get_job_type(self) -> str:
         """Get the job type that this connector handles
         
@@ -96,6 +131,8 @@ class A1111Connector(RESTSyncConnector):
         Returns:
             Dict[str, Any]: Capabilities dictionary to be merged with worker capabilities
         """
+        # [2025-05-25T22:40:00-04:00] Added detailed debug logging for A1111 capabilities
+        logger.info(f"[a1111_connector.py get_capabilities DEBUG] Getting A1111 capabilities")
         return {
             "a1111_version": self.VERSION,
             "supports_synchronous": True,
@@ -121,6 +158,10 @@ class A1111Connector(RESTSyncConnector):
         Returns:
             Dict[str, Any]: Job result
         """
+        # [2025-05-25T22:40:00-04:00] Added detailed debug logging for A1111 job processing
+        logger.info(f"[a1111_connector.py process_job DEBUG] Starting to process A1111 job: {job_id}")
+        logger.info(f"[a1111_connector.py process_job DEBUG] Job payload: {json.dumps(payload)[:500]}...")
+        logger.info(f"[a1111_connector.py process_job DEBUG] Connection status: base_url={self.base_url}, api_prefix={self.api_prefix}")
         # [2025-05-20T12:02:05-04:00] Add a flag to track job completion
         # This helps prevent sending progress updates after the job is completed
         job_completed = False

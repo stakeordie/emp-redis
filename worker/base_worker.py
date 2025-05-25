@@ -519,18 +519,35 @@ class BaseWorker:
                 logger.error(f"[base_worker.py handle_job_notification()]: Connectors not initialized yet")
                 return
                 
+            # [2025-05-25T22:37:00-04:00] Added detailed debug logging for job type matching
             # Check if we can handle this job type
-            if self.connectors is not None and job_type not in self.connectors:
-                logger.error(f"[base_worker.py handle_job_notification()]: Received job notification for unsupported job type: {job_type}")
-                return
+            if self.connectors is not None:
+                # Log available connectors and their types
+                connector_types = list(self.connectors.keys())
+                logger.info(f"[base_worker.py handle_job_notification() DEBUG] Available connectors: {connector_types}")
+                logger.info(f"[base_worker.py handle_job_notification() DEBUG] Received job notification with job_type: '{job_type}'")
+                
+                # Check if job_type is in our connectors
+                if job_type not in self.connectors:
+                    logger.error(f"[base_worker.py handle_job_notification()]: Received job notification for unsupported job type: '{job_type}'")
+                    logger.error(f"[base_worker.py handle_job_notification() DEBUG] Job type '{job_type}' not in available connectors: {connector_types}")
+                    return
+                else:
+                    logger.info(f"[base_worker.py handle_job_notification() DEBUG] Job type '{job_type}' is supported by this worker")
             
+            # [2025-05-25T22:37:00-04:00] Added detailed debug logging for job claiming
             # Claim the job using ClaimJobMessage class
             claim_message = ClaimJobMessage(
                 worker_id=self.worker_id,
                 job_id=job_id
             )
+            
+            # Log the claim message for debugging
+            claim_message_json = claim_message.model_dump_json()
+            logger.info(f"[base_worker.py handle_job_notification() DEBUG] Claiming job {job_id} of type '{job_type}' with message: {claim_message_json}")
                         
-            await websocket.send(claim_message.model_dump_json())
+            await websocket.send(claim_message_json)
+            logger.info(f"[base_worker.py handle_job_notification() DEBUG] Sent claim message for job {job_id}")
             
             # Note: We don't update worker state here - we'll wait for JOB_ASSIGNED message
             # This matches the behavior in main.bk.py
@@ -616,11 +633,18 @@ class BaseWorker:
                 self.current_job_id = None
                 return
             
+            # [2025-05-25T22:37:00-04:00] Added detailed debug logging for connector selection
             # Get the appropriate connector for this job type
+            logger.info(f"[base_worker.py handle_job_assigned() DEBUG] Looking for connector for job type: '{job_type}'")
+            logger.info(f"[base_worker.py handle_job_assigned() DEBUG] Available connectors: {list(self.connectors.keys())}")
+            
             connector = self.connectors.get(job_type)
             
             if connector is None:
-                logger.error(f"[base_worker.py handle_job_assigned()] No connector available for job type: {job_type}")
+                logger.error(f"[base_worker.py handle_job_assigned()] No connector available for job type: '{job_type}'")
+                logger.error(f"[base_worker.py handle_job_assigned() DEBUG] Connector types: {list(self.connectors.keys())}")
+            else:
+                logger.info(f"[base_worker.py handle_job_assigned() DEBUG] Found connector for job type '{job_type}': {type(connector).__name__}")
                 
                 # Send error progress update
                 await self.send_progress_update(
@@ -658,9 +682,16 @@ class BaseWorker:
                 return
             
             try:
-                # Process the job using the connector
-                # Send initial progress update
-                await self.send_progress_update(websocket, job_id, 0, "started", f"Starting {job_type} job")
+                # [2025-05-25T22:37:00-04:00] Added detailed debug logging for job processing
+                # Log job details for debugging
+                logger.info(f"[base_worker.py handle_job_assigned() DEBUG] Processing job {job_id} of type '{job_type}'")
+                logger.info(f"[base_worker.py handle_job_assigned() DEBUG] Job payload: {payload}")
+                
+                # Send starting progress update
+                await self.send_progress_update(
+                    websocket, job_id, 0, "processing", 
+                    f"Starting {job_type} job"
+                )
                 
                 # Updated: 2025-04-17T15:05:00-04:00 - Improved error handling for job completion
                 result = await connector.process_job(
