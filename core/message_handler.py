@@ -603,7 +603,19 @@ class MessageHandler(MessageHandlerInterface):
                 )
                 
                 # Send the complete job message to all clients subscribed to this job
-                await self.connection_manager.forward_job_completion(job_id, complete_message)
+                # [2025-05-25T15:00:00-04:00] Convert CompleteJobMessage to dict for forward_job_completion
+                if hasattr(complete_message, 'model_dump'):
+                    message_dict = complete_message.model_dump()
+                elif hasattr(complete_message, 'dict'):
+                    message_dict = complete_message.dict()
+                else:
+                    message_dict = {
+                        "job_id": job_id,
+                        "type": "complete_job",
+                        "worker_id": getattr(complete_message, 'worker_id', ""),
+                        "result": getattr(complete_message, 'result', None)
+                    }
+                await self.connection_manager.forward_job_completion(job_id, message_dict)
             except Exception as e:
                 logger.error(f"[2025-05-20T23:25:00-04:00] Error sending complete_job message: {str(e)}")
         else:
@@ -779,7 +791,10 @@ class MessageHandler(MessageHandlerInterface):
             # If the job is pending, trigger a job notification to workers
             if job_data.get("status") == "pending":
                 # Get the job details
-                job_type = job_data.get("type")
+                # [2025-05-25T15:00:00-04:00] Ensure job_type is a string as required by JobAvailableMessage
+                job_type = job_data.get("type", "")
+                if job_type is None:
+                    job_type = ""
                 priority = int(job_data.get("priority", 0))
                 
                 # Create a job notification message
