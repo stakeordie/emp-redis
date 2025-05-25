@@ -77,16 +77,6 @@ class RESTSyncConnector(ConnectorInterface):
         self.username = os.environ.get("WORKER_REST_USERNAME", os.environ.get("REST_USERNAME"))
         self.password = os.environ.get("WORKER_REST_PASSWORD", os.environ.get("REST_PASSWORD"))
         
-        # Log which variables we're using
-        logger.info(f"[rest_sync_connector.py __init__] Using environment variables:")
-        logger.info(f"[rest_sync_connector.py __init__] WORKER_REST_BASE_URL/REST_BASE_URL: {self.base_url}")
-        logger.info(f"[rest_sync_connector.py __init__] WORKER_REST_ENDPOINT/REST_ENDPOINT: {self.endpoint}")
-        logger.info(f"[rest_sync_connector.py __init__] WORKER_REST_USE_SSL/REST_USE_SSL: {self.use_ssl}")
-        logger.info(f"[rest_sync_connector.py __init__] WORKER_REST_TIMEOUT/REST_TIMEOUT: {self.timeout}")
-        logger.info(f"[rest_sync_connector.py __init__] WORKER_REST_CONNECTION_TIMEOUT: {self.connection_timeout}")
-        logger.info(f"[rest_sync_connector.py __init__] WORKER_REST_TOTAL_TIMEOUT: {self.total_timeout}")
-        logger.info(f"[rest_sync_connector.py __init__] WORKER_REST_JOB_TYPE/REST_JOB_TYPE: {self.job_type}")
-        
         # Connection status
         self.session = None
         self.connection_details = {
@@ -125,11 +115,9 @@ class RESTSyncConnector(ConnectorInterface):
                         if response.status == 200:
                             logger.info(f"[rest_sync_connector.py initialize] Successfully connected to REST API at {url}")
                         else:
-                            logger.warning(f"[rest_sync_connector.py initialize] Health check failed with status {response.status}")
+                            logger.error(f"[rest_sync_connector.py initialize] Health check failed with status {response.status}")
                 except Exception as e:
-                    logger.warning(f"[rest_sync_connector.py initialize] Health check failed: {str(e)}")
-            
-            logger.info(f"[rest_sync_connector.py initialize] REST sync connector initialized with URL: {self.base_url}{self.endpoint}")
+                    logger.error(f"[rest_sync_connector.py initialize] Health check failed: {str(e)}")
             return True
         except Exception as e:
             logger.error(f"[rest_sync_connector.py initialize] Initialization error: {str(e)}")
@@ -223,9 +211,7 @@ class RESTSyncConnector(ConnectorInterface):
         """
         try:
             # Set current job ID for tracking
-            self.current_job_id = job_id
-            logger.info(f"[rest_sync_connector.py process_job] Processing job {job_id}")
-            
+            self.current_job_id = job_id            
             # Reset connection error
             # Updated: 2025-04-17T14:21:00-04:00 - Reset connection error before processing
             self.connection_error = None
@@ -246,8 +232,6 @@ class RESTSyncConnector(ConnectorInterface):
             
             # Send request to REST API
             url = f"{self.base_url}{self.endpoint}"
-            logger.info(f"[rest_sync_connector.py process_job] Sending request to {url}")
-            logger.info(f"[rest_sync_connector.py process_job] Using timeout settings: connect={self.connection_timeout}s, read={self.timeout}s, total={self.total_timeout}s")
             await send_progress_update(job_id, 10, "processing", f"Sending request to REST API")
             
             # Use asyncio.wait_for to implement a more reliable timeout
@@ -282,9 +266,7 @@ class RESTSyncConnector(ConnectorInterface):
                     
                     # Parse response with timeout
                     # Updated: 2025-04-17T14:21:00-04:00 - Added timeout for response parsing
-                    result = await asyncio.wait_for(response.json(), timeout=self.timeout)
-                    logger.info(f"[rest_sync_connector.py process_job] Received successful response from REST API")
-                    
+                    result = await asyncio.wait_for(response.json(), timeout=self.timeout)                    
                     # Send completion update
                     await send_progress_update(job_id, 100, "completed", "Job completed successfully")
                     
@@ -332,12 +314,10 @@ class RESTSyncConnector(ConnectorInterface):
             }
         finally:
             # Clear current job ID when done
-            logger.info(f"[rest_sync_connector.py process_job] Completed job {job_id}")
             self.current_job_id = None
     
     async def shutdown(self) -> None:
         """Clean up resources when worker is shutting down"""
-        logger.info(f"[rest_sync_connector.py shutdown] Shutting down REST sync connector")
         if self.session:
             await self.session.close()
             self.session = None
