@@ -181,40 +181,48 @@ class A1111Connector(RESTSyncConnector):
                 **request_payload
             }
             
-            # [2025-05-25T10:35:00-04:00] Broadcast service request to clients and monitors using the same mechanism as progress updates
-            # This allows visibility into what's being sent to the A1111 service
+            # [2025-05-25T10:40:00-04:00] IMPORTANT: Create a custom message for service requests
+            # This uses the exact same format as progress updates but with a different type
             try:
-                # Create the service request message
+                # Log with a very distinctive message to ensure we can see it in the logs
+                logger.info(f"[a1111_connector.py process_job] [2025-05-25T10:40:00-04:00] BROADCASTING SERVICE REQUEST for job {job_id} to endpoint {endpoint}")
+                
+                # Create a message that exactly matches the format of progress updates
+                # but with a different type field
                 service_request_message = {
-                    "type": "service_request",  # Must be exactly "service_request"
-                    "worker_id": self.worker_id if hasattr(self, "worker_id") else "unknown",
-                    "job_id": job_id,
-                    "service": self.get_job_type(),  # Should be "a1111"
-                    "request_type": f"a1111_{endpoint}",  # e.g., "a1111_txt2img"
+                    "type": "service_request",  # This is the key difference from progress updates
                     "timestamp": time.time(),
+                    "job_id": job_id,
+                    "worker_id": self.worker_id if hasattr(self, "worker_id") else "unknown",
+                    "service": self.get_job_type(),
+                    "request_type": f"a1111_{endpoint}",
                     "content": {
-                        "endpoint": endpoint,  # Explicitly include the endpoint (txt2img, img2img, etc.)
-                        "method": method.upper(),  # Use uppercase for method (POST, GET, etc.)
-                        "url": url,  # Include the full URL
-                        "payload": request_payload,  # Include the complete payload
-                        "job_id": job_id  # Include the job ID for reference
+                        "endpoint": endpoint,
+                        "method": method.upper(),
+                        "url": url,
+                        "payload": request_payload
                     }
                 }
                 
-                # Log that we're about to broadcast
-                logger.info(f"[a1111_connector.py process_job] Broadcasting service request for job {job_id} to endpoint {endpoint}")
-                
-                # Send the service request message directly using the websocket
-                # This uses the same mechanism as progress updates
+                # Convert to JSON for sending
                 message_json = json.dumps(service_request_message)
-                logger.info(f"[a1111_connector.py process_job] Sending service request message (size: {len(message_json)} bytes)")
+                message_size = len(message_json)
+                
+                # Log the message details
+                logger.info(f"[a1111_connector.py process_job] [2025-05-25T10:40:00-04:00] Sending service request message (size: {message_size} bytes)")
+                logger.info(f"[a1111_connector.py process_job] [2025-05-25T10:40:00-04:00] Message structure: {list(service_request_message.keys())}")
+                
+                # Send the message directly using the websocket
+                # This is exactly how progress updates are sent
                 await websocket.send(message_json)
                 
-                logger.info(f"[a1111_connector.py process_job] Successfully broadcast service request for job {job_id}")
+                # Log success
+                logger.info(f"[a1111_connector.py process_job] [2025-05-25T10:40:00-04:00] Successfully sent service request message for job {job_id}")
+                
             except Exception as e:
                 # Log but don't fail the job if broadcasting fails
                 error_type = type(e).__name__
-                logger.warning(f"[a1111_connector.py process_job] Failed to broadcast service request: {error_type} - {str(e)}")
+                logger.error(f"[a1111_connector.py process_job] [2025-05-25T10:40:00-04:00] FAILED to send service request: {error_type} - {str(e)}")
                 # Continue with the job processing
             
             # [2025-05-19T21:30:00-04:00] Implement progress polling for A1111 jobs
