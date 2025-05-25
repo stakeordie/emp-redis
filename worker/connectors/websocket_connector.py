@@ -18,48 +18,12 @@ MAX_WS_MESSAGE_SIZE_BYTES = MAX_WS_MESSAGE_SIZE_MB * 1024 * 1024
 # Standard import approach - works in both Docker and local environments
 # when the package structure is properly set up
 # Updated: 2025-04-17T14:15:00-04:00 - Simplified import logic to avoid duplicate imports
-try:
-    # For when the module is imported as part of the worker package
-    from worker.connector_interface import ConnectorInterface
-except ImportError:
-    try:
-        # For when the module is imported directly or in Docker
-        # where the worker directory is in the Python path
-        from connector_interface import ConnectorInterface
-    except ImportError:
-        try:
-            # Last resort - absolute imports
-            from ..connector_interface import ConnectorInterface
-        except ImportError:
-            # If all else fails, define a minimal interface for type checking
-            # This won't be used at runtime but helps with static analysis
-            from abc import ABC, abstractmethod
-            from typing import Dict, Any, Optional, Callable
-            
-            class ConnectorInterface(ABC):
-                """Minimal interface definition for type checking"""
-                connector_name = None
-                
-                @abstractmethod
-                async def initialize(self) -> bool: pass
-                
-                @abstractmethod
-                def get_job_type(self) -> str: pass
-                
-                @abstractmethod
-                def get_capabilities(self) -> Dict[str, Any]: pass
-                
-                @abstractmethod
-                def get_connection_status(self) -> Dict[str, Any]: pass
-                
-                @abstractmethod
-                def is_processing_job(self, job_id: str) -> bool: pass
-                
-                @abstractmethod
-                async def process_job(self, websocket, job_id: str, payload: Dict[str, Any], send_progress_update) -> Dict[str, Any]: pass
-                
-                @abstractmethod
-                async def shutdown(self) -> None: pass
+# [2025-05-25T16:50:00-04:00] Simplified import structure to avoid redefinition errors
+# Import the ConnectorInterface directly from the most likely location
+from worker.connector_interface import ConnectorInterface
+
+# If the import fails at runtime, we'll get an ImportError, but this is better than
+# having multiple definitions of ConnectorInterface which causes type errors
 
 # Import logger - this should be available in all environments
 from core.utils.logger import logger
@@ -188,17 +152,21 @@ class WebSocketConnector(ConnectorInterface):
                 logger.debug(f"[connectors/websocket_connector.py connect()] WEBSOCKET_STATUS: WebSocket connection details: {self.ws}")
                 
                 # Set up event handlers for the WebSocket if available
-                if hasattr(self.ws, 'on_close'):
-                    logger.debug(f"[connectors/websocket_connector.py connect()] WEBSOCKET_STATUS: Setting up on_close event handler")
-                    self.ws.on_close = self._on_ws_close
+                # [2025-05-25T16:55:00-04:00] Added null check for self.ws to prevent type errors
+                if self.ws is not None:
+                    if hasattr(self.ws, 'on_close'):
+                        logger.debug(f"[connectors/websocket_connector.py connect()] WEBSOCKET_STATUS: Setting up on_close event handler")
+                        self.ws.on_close = self._on_ws_close
+                    else:
+                        logger.warning(f"[connectors/websocket_connector.py connect()] WEBSOCKET_STATUS: WebSocket does not support on_close event handler")
+                        
+                    if hasattr(self.ws, 'on_error'):
+                        logger.debug(f"[connectors/websocket_connector.py connect()] WEBSOCKET_STATUS: Setting up on_error event handler")
+                        self.ws.on_error = self._on_ws_error
+                    else:
+                        logger.warning(f"[connectors/websocket_connector.py connect()] WEBSOCKET_STATUS: WebSocket does not support on_error event handler")
                 else:
-                    logger.warning(f"[connectors/websocket_connector.py connect()] WEBSOCKET_STATUS: WebSocket does not support on_close event handler")
-                    
-                if hasattr(self.ws, 'on_error'):
-                    logger.debug(f"[connectors/websocket_connector.py connect()] WEBSOCKET_STATUS: Setting up on_error event handler")
-                    self.ws.on_error = self._on_ws_error
-                else:
-                    logger.warning(f"[connectors/websocket_connector.py connect()] WEBSOCKET_STATUS: WebSocket does not support on_error event handler")
+                    logger.warning(f"[connectors/websocket_connector.py connect()] WEBSOCKET_STATUS: Cannot set event handlers: WebSocket connection is None")
                 
                 # Mark as connected and return success
                 self.connected = True
@@ -316,8 +284,10 @@ class WebSocketConnector(ConnectorInterface):
             ValueError: If ws_url is not set and method is not overridden by subclass
         """
         # 2025-04-17-19:48 - Added default implementation of _get_connection_url method
+        # [2025-05-25T16:55:00-04:00] Fixed return type to ensure it always returns a string
         if hasattr(self, 'ws_url') and self.ws_url is not None:
-            return self.ws_url
+            # Ensure we return a string to match the declared return type
+            return str(self.ws_url)
         else:
             raise ValueError("WebSocket URL not set. Either set self.ws_url directly or override _get_connection_url() in subclass.")
     

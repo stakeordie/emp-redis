@@ -19,6 +19,13 @@ All notable changes to the EMP Redis project will be documented in this file.
   - Helps with debugging and understanding what's being requested from services
 
 ### Changed
+- [2025-05-25T17:00:00-04:00] Fixed type errors in WebSocketConnector base class:
+  - Simplified ConnectorInterface import structure to avoid redefinition errors
+  - Added null checks for WebSocket connection before accessing attributes
+  - Ensured _get_connection_url always returns a string to match declared return type
+  - Added detailed comments with timestamps for traceability
+  - Improved error handling with better logging for edge cases
+
 - [2025-05-25T16:40:00-04:00] Fixed type errors in ComfyUI connector:
   - Simplified WebSocketConnector import structure to fix type compatibility
   - Changed connector_name to None to match base class type
