@@ -56,34 +56,36 @@ except ImportError as e:
 
 # Now import WebSocketConnector - this should be loaded by the connector_loader first
 WebSocketConnector = None
+# [2025-05-25T15:40:00-04:00] Simplified import structure to fix inheritance issues
 try:
-    # First try relative import from same package
-    from .websocket_connector import WebSocketConnector as RelativeWebSocketConnector
-    WebSocketConnector = RelativeWebSocketConnector
+    # Try relative import first (preferred method)
+    from .websocket_connector import WebSocketConnector
     logger.info(f"[comfyui_connector.py] Successfully imported WebSocketConnector via relative import")
 except ImportError as e:
     # Fall back to worker package import
     try:
-        from worker.connectors.websocket_connector import WebSocketConnector as WorkerWebSocketConnector
-        WebSocketConnector = WorkerWebSocketConnector
+        from worker.connectors.websocket_connector import WebSocketConnector
         logger.info(f"[comfyui_connector.py] Successfully imported WebSocketConnector via worker package import")
     except ImportError as e2:
-        # [2025-05-25T15:30:00-04:00] Fixed import path for WebSocketConnector
+        # Last attempt with absolute import
         try:
-            # Import from the same directory
-            from .websocket_connector import WebSocketConnector
-            logger.info(f"[comfyui_connector.py] Successfully imported WebSocketConnector from local directory")
+            import sys
+            import os
+            # Add the connectors directory to the path if needed
+            connectors_dir = os.path.dirname(os.path.abspath(__file__))
+            if connectors_dir not in sys.path:
+                sys.path.insert(0, connectors_dir)
+            # Now try a direct import
+            from websocket_connector import WebSocketConnector
+            logger.info(f"[comfyui_connector.py] Successfully imported WebSocketConnector via absolute import")
         except ImportError as e3:
             logger.error(f"[comfyui_connector.py] Failed to import WebSocketConnector: {e3}")
             raise ImportError(f"Could not import WebSocketConnector. Make sure it's loaded first: {e3}")
 
-# Import logger - this should be available in all environments
 from core.utils.logger import logger
 
-# [2025-05-25T15:30:00-04:00] Added type annotation import for proper inheritance
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from .websocket_connector import WebSocketConnector
+# [2025-05-25T15:40:00-04:00] WebSocketConnector is already imported above
+# No need for a duplicate import here
 
 class ComfyUIConnector(WebSocketConnector):
     """Connector for ComfyUI service"""
