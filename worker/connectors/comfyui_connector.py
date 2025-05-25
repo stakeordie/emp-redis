@@ -158,14 +158,16 @@ class ComfyUIConnector(WebSocketConnector):
                 # Try to connect to the WebSocket endpoint
                 headers = self._get_connection_headers()
                 
-                async with session.ws_connect(
+                # [2025-05-25T22:30:00-04:00] Fixed timeout handling to be compatible with all aiohttp versions
+                # Some aiohttp versions don't have ClientWSTimeout, so we use the standard timeout approach
+                ws_connect_task = session.ws_connect(
                     ws_url, 
                     headers=headers,
-                    # [2025-05-25T16:30:00-04:00] Fixed timeout parameter type
-                    # ClientWSTimeout expects a float, not a ClientTimeout object
-                    timeout=aiohttp.ClientWSTimeout(3.0),
                     max_msg_size=MAX_WS_MESSAGE_SIZE_BYTES  # Use standardized message size limit
-                ) as ws:
+                )
+                
+                # Use asyncio.wait_for for timeout handling instead of ClientWSTimeout
+                async with await asyncio.wait_for(ws_connect_task, timeout=3.0) as ws:
                     # Successfully connected, now close it
                     await ws.close()
 

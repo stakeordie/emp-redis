@@ -4,13 +4,12 @@ import os
 import asyncio
 from typing import Dict, Any, Optional, Union, Callable
 
-# Try direct imports first (for Docker container)
-try:
-    from connector_interface import ConnectorInterface
-except ImportError:
-    # Fall back to package imports (for local development)
-    from worker.connector_interface import ConnectorInterface
+# [2025-05-25T22:27:00-04:00] Improved import approach for ConnectorInterface
+# This ensures consistent type checking and inheritance
 from core.utils.logger import logger
+
+# Use the same import approach as other connectors for consistency
+from worker.connector_interface import ConnectorInterface
 
 class SimulationConnector(ConnectorInterface):
     """Connector for simulating job processing"""
