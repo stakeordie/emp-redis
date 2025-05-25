@@ -2249,6 +2249,47 @@ async function checkJobStatusFromUI() {
         // Check job status
         const jobStatus = await checkJobStatus(jobId);
         
+        // [2025-05-25T09:15:00-04:00] Store job data in state for access in job details modal
+        // This ensures the payload is available when viewing job details
+        if (jobStatus && jobStatus.job_id) {
+            // Store or update the job in state
+            if (!state.jobs[jobStatus.job_id]) {
+                state.jobs[jobStatus.job_id] = {
+                    id: jobStatus.job_id,
+                    status: jobStatus.status,
+                    job_type: jobStatus.job_type || jobStatus.type,
+                    worker_id: jobStatus.worker_id,
+                    client_id: jobStatus.client_id,
+                    priority: jobStatus.priority,
+                    progress: jobStatus.progress,
+                    createdAt: jobStatus.created_at,
+                    updated_at: jobStatus.updated_at,
+                    // Store the payload data
+                    payload: jobStatus.payload,
+                    result: jobStatus.result,
+                    error: jobStatus.error,
+                    source_update: 'rest_api'
+                };
+                console.log(`[2025-05-25T09:15:00-04:00] Created job state for ${jobStatus.job_id} from REST API with payload:`, jobStatus.payload);
+            } else {
+                // Update existing job, preserving payload if it exists
+                const existingJob = state.jobs[jobStatus.job_id];
+                state.jobs[jobStatus.job_id] = {
+                    ...existingJob,
+                    status: jobStatus.status,
+                    worker_id: jobStatus.worker_id,
+                    progress: jobStatus.progress,
+                    updated_at: jobStatus.updated_at,
+                    // Preserve existing payload or use the new one
+                    payload: jobStatus.payload || existingJob.payload,
+                    result: jobStatus.result || existingJob.result,
+                    error: jobStatus.error || existingJob.error,
+                    source_update: 'rest_api'
+                };
+                console.log(`[2025-05-25T09:15:00-04:00] Updated job state for ${jobStatus.job_id} from REST API with payload:`, jobStatus.payload || existingJob.payload);
+            }
+        }
+        
         // [2025-05-20T13:41:23-04:00] Format the job status response for better readability
         // Make a copy of the job status to modify for display
         const displayJobStatus = {...jobStatus};
@@ -2397,6 +2438,24 @@ async function submitJobViaRest() {
             } else {
                 // For asynchronous requests, we just get a job ID
                 const jobId = responseData.job_id;
+                
+                // [2025-05-25T09:20:00-04:00] Store job data in state for access in job details modal
+                // This ensures the payload is available when viewing job details
+                if (jobId) {
+                    // Store the job in state
+                    state.jobs[jobId] = {
+                        id: jobId,
+                        status: 'pending',
+                        job_type: jobType,
+                        priority: priority,
+                        // Store the payload data
+                        payload: payload,
+                        createdAt: Date.now(),
+                        updated_at: Date.now(),
+                        source_update: 'rest_api_submit'
+                    };
+                    console.log(`[2025-05-25T09:20:00-04:00] Created job state for ${jobId} from REST API submission with payload:`, payload);
+                }
                 
                 // [2025-05-20T13:27:02-04:00] Auto-fill the job status ID field
                 if (elements.jobStatusId && jobId) {

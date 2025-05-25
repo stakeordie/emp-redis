@@ -20,6 +20,13 @@ All notable changes to the EMP Redis project will be documented in this file.
   - Reorganized UI elements to prioritize worker status information
 
 ### Fixed
+- [2025-05-25T09:25:00-04:00] Fixed empty payloads in job details view for REST API jobs:
+  - Added payload preservation for jobs submitted via REST API
+  - Updated job status checking to properly store payload data from REST API responses
+  - Fixed issue where REST API job payloads weren't showing in job details modal
+  - Added debugging logs to track REST API payload data flow
+  - Ensured payload data is preserved throughout the job lifecycle
+
 - [2025-05-24T23:50:00-04:00] Fixed empty payloads in job details view:
   - Added payload preservation throughout the job lifecycle
   - Updated job handling code to properly store and display payload data
