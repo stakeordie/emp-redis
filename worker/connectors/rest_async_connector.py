@@ -77,18 +77,7 @@ class RESTAsyncConnector(ConnectorInterface, ABC):
         self.api_key = os.environ.get("WORKER_REST_ASYNC_API_KEY", os.environ.get("REST_ASYNC_API_KEY"))
         self.username = os.environ.get("WORKER_REST_ASYNC_USERNAME", os.environ.get("REST_ASYNC_USERNAME"))
         self.password = os.environ.get("WORKER_REST_ASYNC_PASSWORD", os.environ.get("REST_ASYNC_PASSWORD"))
-        
-        # Log which variables we're using
-        logger.info(f"[rest_async_connector.py __init__] Using environment variables:")
-        logger.info(f"[rest_async_connector.py __init__] WORKER_REST_ASYNC_BASE_URL/REST_ASYNC_BASE_URL: {self.base_url}")
-        logger.info(f"[rest_async_connector.py __init__] WORKER_REST_ASYNC_SUBMIT_ENDPOINT/REST_ASYNC_SUBMIT_ENDPOINT: {self.submit_endpoint}")
-        logger.info(f"[rest_async_connector.py __init__] WORKER_REST_ASYNC_STATUS_ENDPOINT/REST_ASYNC_STATUS_ENDPOINT: {self.status_endpoint}")
-        logger.info(f"[rest_async_connector.py __init__] WORKER_REST_ASYNC_RESULT_ENDPOINT/REST_ASYNC_RESULT_ENDPOINT: {self.result_endpoint}")
-        logger.info(f"[rest_async_connector.py __init__] WORKER_REST_ASYNC_USE_SSL/REST_ASYNC_USE_SSL: {self.use_ssl}")
-        logger.info(f"[rest_async_connector.py __init__] WORKER_REST_ASYNC_TIMEOUT/REST_ASYNC_TIMEOUT: {self.timeout}")
-        logger.info(f"[rest_async_connector.py __init__] WORKER_REST_ASYNC_POLL_INTERVAL/REST_ASYNC_POLL_INTERVAL: {self.poll_interval}")
-        logger.info(f"[rest_async_connector.py __init__] WORKER_REST_ASYNC_JOB_TYPE/REST_ASYNC_JOB_TYPE: {self.job_type}")
-        
+          
         # Connection status
         self.session = None
         self.connection_details = {
@@ -125,11 +114,9 @@ class RESTAsyncConnector(ConnectorInterface, ABC):
                         if response.status == 200:
                             logger.info(f"[rest_async_connector.py initialize] Successfully connected to REST API at {url}")
                         else:
-                            logger.warning(f"[rest_async_connector.py initialize] Health check failed with status {response.status}")
+                            logger.error(f"[rest_async_connector.py initialize] Health check failed with status {response.status}")
                 except Exception as e:
-                    logger.warning(f"[rest_async_connector.py initialize] Health check failed: {str(e)}")
-            
-            logger.info(f"[rest_async_connector.py initialize] REST async connector initialized with URL: {self.base_url}")
+                    logger.error(f"[rest_async_connector.py initialize] Health check failed: {str(e)}")      
             return True
         except Exception as e:
             logger.error(f"[rest_async_connector.py initialize] Initialization error: {str(e)}")
@@ -326,9 +313,7 @@ class RESTAsyncConnector(ConnectorInterface, ABC):
         }
         
         # Send request to REST API
-        url = f"{self.base_url}{self.get_submit_endpoint()}"
-        logger.info(f"[rest_async_connector.py submit_job] Submitting job to {url}")
-        
+        url = f"{self.base_url}{self.get_submit_endpoint()}"        
         try:
             if self.session is None:
                 self.session = aiohttp.ClientSession()
@@ -352,9 +337,7 @@ class RESTAsyncConnector(ConnectorInterface, ABC):
                 external_job_id = self.parse_job_id_from_response(result)
                 if not external_job_id:
                     logger.error(f"[rest_async_connector.py submit_job] No job_id in response: {result}")
-                    return None  # Explicitly return None to match Optional[str] return type
-                
-                logger.info(f"[rest_async_connector.py submit_job] Job submitted successfully, external job ID: {external_job_id}")
+                    return None  # Explicitly return None to match Optional[str] return type        
                 return external_job_id
         except Exception as e:
             logger.error(f"[rest_async_connector.py submit_job] Error submitting job: {str(e)}")
@@ -369,9 +352,7 @@ class RESTAsyncConnector(ConnectorInterface, ABC):
         Returns:
             Dict[str, Any]: The job status
         """
-        url = f"{self.base_url}{self.get_status_endpoint(external_job_id)}"
-        logger.debug(f"[rest_async_connector.py check_job_status] Checking job status at {url}")
-        
+        url = f"{self.base_url}{self.get_status_endpoint(external_job_id)}"        
         try:
             if self.session is None:
                 self.session = aiohttp.ClientSession()
@@ -391,7 +372,6 @@ class RESTAsyncConnector(ConnectorInterface, ABC):
                 
                 # Parse response
                 response_data = await response.json()
-                logger.debug(f"[rest_async_connector.py check_job_status] Job status: {response_data}")
                 return self.parse_status_from_response(response_data)
         except Exception as e:
             logger.error(f"[rest_async_connector.py check_job_status] Error checking job status: {str(e)}")
@@ -408,9 +388,7 @@ class RESTAsyncConnector(ConnectorInterface, ABC):
         Returns:
             Dict[str, Any]: The job result
         """
-        url = f"{self.base_url}{self.get_result_endpoint(external_job_id)}"
-        logger.info(f"[rest_async_connector.py get_job_result] Getting job result from {url}")
-        
+        url = f"{self.base_url}{self.get_result_endpoint(external_job_id)}"        
         try:
             if self.session is None:
                 self.session = aiohttp.ClientSession()
@@ -430,7 +408,6 @@ class RESTAsyncConnector(ConnectorInterface, ABC):
                 
                 # Parse response
                 response_data = await response.json()
-                logger.info(f"[rest_async_connector.py get_job_result] Job result retrieved successfully")
                 return self.parse_result_from_response(response_data)
         except Exception as e:
             logger.error(f"[rest_async_connector.py get_job_result] Error getting job result: {str(e)}")
@@ -452,9 +429,7 @@ class RESTAsyncConnector(ConnectorInterface, ABC):
         """
         try:
             # Set current job ID for tracking
-            self.current_job_id = job_id
-            logger.info(f"[rest_async_connector.py process_job] Processing job {job_id}")
-            
+            self.current_job_id = job_id            
             # Create session if it doesn't exist
             if self.session is None:
                 self.session = aiohttp.ClientSession()
@@ -498,7 +473,6 @@ class RESTAsyncConnector(ConnectorInterface, ABC):
                 
                 # Handle different status values
                 if status == "completed":
-                    logger.info(f"[rest_async_connector.py process_job] Job completed")
                     await send_progress_update(job_id, 90, "finalizing", "Job completed, retrieving results")
                     break
                 elif status == "failed":
@@ -529,10 +503,6 @@ class RESTAsyncConnector(ConnectorInterface, ABC):
                     # Send heartbeat every 5 polling intervals
                     if int(elapsed_time / self.poll_interval) % 5 == 0:
                         await send_progress_update(job_id, -1, "heartbeat", f"Job processing, elapsed time: {elapsed_time:.1f}s")
-                else:
-                    # Unknown status, just wait
-                    logger.info(f"[rest_async_connector.py process_job] Job status: {status}")
-                
                 # Wait before polling again
                 await asyncio.sleep(self.poll_interval)
             
@@ -565,13 +535,11 @@ class RESTAsyncConnector(ConnectorInterface, ABC):
             }
         finally:
             # Clear tracking variables
-            logger.info(f"[rest_async_connector.py process_job] Completed job {job_id}")
             self.current_job_id = None
             self.external_job_id = None
     
     async def shutdown(self) -> None:
         """Clean up resources when worker is shutting down"""
-        logger.info(f"[rest_async_connector.py shutdown] Shutting down REST async connector")
         if self.session:
             await self.session.close()
             self.session = None
