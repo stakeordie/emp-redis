@@ -3241,8 +3241,8 @@ function updateUI() {
                     <div class="action-buttons-container">
                         <button class="btn-cancel" onclick="cancelJob('${job.id}')">Cancel</button>
                         ${failureCount > 0 ? `<button class="btn-force-retry" onclick="forceRetryJob('${job.id}')">Force Retry</button>` : ''}
-                        <!-- [2025-05-24T12:44:00-04:00] Changed to use onclick for consistency with other buttons -->
-                        <button class="action-btn" onclick="showJobDetails('${job.id}')" title="View details">⋯</button>
+                        <!-- [2025-05-25T09:35:00-04:00] Changed to use data attributes for event delegation -->
+                        <button class="action-btn" data-action="view-details" data-job-id="${job.id}" title="View details">⋯</button>
                     </div>
                 </td>
             `;
@@ -3352,8 +3352,8 @@ function updateUI() {
                             </div>
                         </div>
                     ` : ''}
-                    <!-- [2025-05-24T12:45:00-04:00] Changed to use onclick for consistency with other buttons -->
-                    <button class="action-btn" onclick="showJobDetails('${job.id}')" title="View details">⋯</button>
+                    <!-- [2025-05-25T09:40:00-04:00] Changed to use data attributes for event delegation -->
+                    <button class="action-btn" data-action="view-details" data-job-id="${job.id}" title="View details">⋯</button>
                 </td>
             `;
             
@@ -4211,8 +4211,53 @@ function handleServiceRequest(message, source) {
     }
 }
 
+/**
+ * [2025-05-25T09:30:00-04:00] Set up event delegation for job action buttons
+ * This fixes the issue where job detail buttons need to be clicked twice
+ */
+function setupJobActionEventDelegation() {
+    // Add event delegation for job queue table
+    if (elements.jobsTableBody) {
+        elements.jobsTableBody.addEventListener('click', function(event) {
+            // Find the closest action button that was clicked
+            const actionBtn = event.target.closest('.action-btn');
+            if (actionBtn && actionBtn.getAttribute('data-action') === 'view-details') {
+                // Get the job ID from the data attribute
+                const jobId = actionBtn.getAttribute('data-job-id');
+                if (jobId) {
+                    // Call the showJobDetails function directly
+                    showJobDetails(jobId);
+                    // Prevent the default action and stop propagation
+                    event.preventDefault();
+                    event.stopPropagation();
+                }
+            }
+        });
+    }
+    
+    // Add event delegation for finished jobs table
+    if (elements.finishedJobsTableBody) {
+        elements.finishedJobsTableBody.addEventListener('click', function(event) {
+            // Find the closest action button that was clicked
+            const actionBtn = event.target.closest('.action-btn');
+            if (actionBtn && actionBtn.getAttribute('data-action') === 'view-details') {
+                // Get the job ID from the data attribute
+                const jobId = actionBtn.getAttribute('data-job-id');
+                if (jobId) {
+                    // Call the showJobDetails function directly
+                    showJobDetails(jobId);
+                    // Prevent the default action and stop propagation
+                    event.preventDefault();
+                    event.stopPropagation();
+                }
+            }
+        });
+    }
+}
+
 // Initialize the application when the DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
     init();
+    setupJobActionEventDelegation();
     // Removed setupPeriodicRefresh() as we're using server push instead
 });

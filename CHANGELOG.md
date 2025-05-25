@@ -5,6 +5,13 @@ All notable changes to the EMP Redis project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- [2025-05-25T10:15:00-04:00] Extended service request broadcasting to A1111 connector:
+  - A1111 connector now broadcasts requests sent to the A1111 service
+  - Added broadcast_service_request method to A1111 connector
+  - Includes endpoint, method, URL, and payload information in broadcasts
+  - Enables visibility into what's being sent to the A1111 service
+  - Helps with debugging and understanding A1111 service requests
+
 - [2025-05-24T14:00:00-04:00] Added service request broadcasting feature:
   - Workers now broadcast their communications with end services (like ComfyUI)
   - Added new Service Requests section to monitor interface to display these communications
@@ -20,6 +27,13 @@ All notable changes to the EMP Redis project will be documented in this file.
   - Reorganized UI elements to prioritize worker status information
 
 ### Fixed
+- [2025-05-25T09:45:00-04:00] Fixed issue requiring double-click on job details buttons:
+  - Implemented event delegation for job action buttons
+  - Replaced inline onclick handlers with data attributes
+  - Added proper event listeners for job queue and finished jobs tables
+  - Improved event handling to prevent event propagation issues
+  - Enhanced UI responsiveness for job detail actions
+
 - [2025-05-25T09:25:00-04:00] Fixed empty payloads in job details view for REST API jobs:
   - Added payload preservation for jobs submitted via REST API
   - Updated job status checking to properly store payload data from REST API responses
