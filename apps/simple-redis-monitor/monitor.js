@@ -255,6 +255,11 @@ const elements = {
     restResponseModalContent: document.getElementById('rest-response-modal-content'),
     restResponseModalClose: document.getElementById('rest-response-modal-close'),
     restResponseModalCopy: document.getElementById('rest-response-modal-copy'),
+  
+    // [2025-05-24T13:45:00-04:00] Added service request elements
+    serviceRequestsContainer: document.getElementById('service-requests-container'),
+    serviceRequestsList: document.getElementById('service-requests-list'),
+    noServiceRequestsMessage: document.getElementById('no-service-requests-message'),
     // [2025-05-20T11:34:47-04:00] Added synchronous option elements
     restSyncCheckbox: document.getElementById('rest-sync-checkbox'),
     restTimeout: document.getElementById('rest-timeout'),
@@ -946,7 +951,7 @@ function processMessage(data, source) {
                         
                         // Update subscription status
                         if (elements.subscriptionStatus) {
-                            elements.subscriptionStatus.textContent = 'Not subscribed';
+                            elements.subscriptionStatus.textContent = 'Not Subscribed';
                         }
                         
                         // Update button states
@@ -960,6 +965,12 @@ function processMessage(data, source) {
                         // Update connection UI
                         updateConnectionUI();
                     }
+                    break;
+                    
+                // [2025-05-24T13:45:00-04:00] Added support for service request messages
+                case 'service_request':
+                    // Handle service request messages from workers
+                    handleServiceRequest(message, source);
                     break;
                 case 'job_notification':
                     // Worker received a job notification
@@ -4042,6 +4053,88 @@ function showNotification(message, type = 'info') {
             container.removeChild(notification);
         }, 300);
     }, 3000);
+}
+
+/**
+ * [2025-05-24T13:50:00-04:00] Handle service request messages
+ * This function displays service requests from workers in the monitor
+ * @param {Object} message - The service request message
+ * @param {string} source - Source of the message ('monitor' or 'client')
+ */
+function handleServiceRequest(message, source) {
+    // Log the service request
+    const timestamp = new Date().toLocaleTimeString();
+    const workerInfo = message.worker_id || 'Unknown worker';
+    const jobInfo = message.job_id || 'Unknown job';
+    const serviceInfo = message.service || 'Unknown service';
+    const requestType = message.request_type || 'Unknown request';
+    
+    // Add log entry for the service request
+    addLogEntry(`Service request from ${workerInfo} for job ${jobInfo}: ${requestType} to ${serviceInfo}`, 'info');
+    
+    // Create a service request item if the container exists
+    if (elements.serviceRequestsList) {
+        // Create a new service request item
+        const requestItem = document.createElement('div');
+        requestItem.className = 'service-request-item';
+        requestItem.dataset.jobId = jobInfo;
+        requestItem.dataset.timestamp = message.timestamp || Date.now();
+        
+        // Create header with basic info
+        const header = document.createElement('div');
+        header.className = 'service-request-header';
+        header.innerHTML = `
+            <div class="service-request-info">
+                <span class="service-request-timestamp">${timestamp}</span>
+                <span class="service-request-worker">${workerInfo}</span>
+                <span class="service-request-job">${jobInfo}</span>
+                <span class="service-request-type">${requestType}</span>
+                <span class="service-request-service">${serviceInfo}</span>
+            </div>
+            <div class="service-request-actions">
+                <button class="btn-view-request">View Request</button>
+            </div>
+        `;
+        
+        // Create content container (initially hidden)
+        const content = document.createElement('div');
+        content.className = 'service-request-content hidden';
+        
+        // Format the content as JSON
+        const formattedContent = JSON.stringify(message.content, null, 2);
+        content.innerHTML = `<pre class="service-request-json">${formattedContent}</pre>`;
+        
+        // Add event listener to view button
+        requestItem.appendChild(header);
+        requestItem.appendChild(content);
+        
+        // Add click handler for the view button
+        const viewButton = header.querySelector('.btn-view-request');
+        viewButton.addEventListener('click', () => {
+            content.classList.toggle('hidden');
+            viewButton.textContent = content.classList.contains('hidden') ? 'View Request' : 'Hide Request';
+        });
+        
+        // Add the request item to the list
+        elements.serviceRequestsList.insertBefore(requestItem, elements.serviceRequestsList.firstChild);
+        
+        // Show the container and hide the no requests message
+        if (elements.serviceRequestsContainer) {
+            elements.serviceRequestsContainer.classList.remove('hidden');
+        }
+        if (elements.noServiceRequestsMessage) {
+            elements.noServiceRequestsMessage.classList.add('hidden');
+        }
+        
+        // Limit the number of displayed requests to prevent performance issues
+        const maxRequests = 50;
+        const requestItems = elements.serviceRequestsList.querySelectorAll('.service-request-item');
+        if (requestItems.length > maxRequests) {
+            for (let i = maxRequests; i < requestItems.length; i++) {
+                elements.serviceRequestsList.removeChild(requestItems[i]);
+            }
+        }
+    }
 }
 
 // Initialize the application when the DOM is loaded

@@ -4,8 +4,15 @@ All notable changes to the EMP Redis project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- [2025-05-24T14:00:00-04:00] Added service request broadcasting feature:
+  - Workers now broadcast their communications with end services (like ComfyUI)
+  - Added new Service Requests section to monitor interface to display these communications
+  - Allows viewing the exact content of requests being sent to services
+  - Helps with debugging and understanding what's being requested from services
+
 ### Changed
-- [2025-05-24T13:18:00-04:00] Improved UI layout and scrolling behavior:
+- [2025-05-24T13:12:00-04:00] Improved UI layout and scrolling behavior:
   - Created vertical layout with Connected Workers, Job Queue, and Finished Jobs stacked vertically
   - Added fixed heights with scrolling for all sections to prevent layout shifts
   - Implemented consistent scrolling behavior across all sections

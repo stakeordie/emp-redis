@@ -331,6 +331,37 @@ class ComfyUIConnector(WebSocketConnector):
         result: Dict[str, Any] = super().get_connection_status()
         return result
     
+    async def broadcast_service_request(self, websocket, job_id: str, request_type: str, request_content: Dict[str, Any]) -> None:
+        """Broadcast service request details to clients and monitors
+        
+        Args:
+            websocket: The WebSocket connection to the Redis Hub
+            job_id: The ID of the job being processed
+            request_type: The type of request (e.g., "comfyui_workflow")
+            request_content: The content of the request
+        """
+        try:
+            # Create a message to broadcast
+            message = {
+                "type": "service_request",
+                "worker_id": self.worker_id if hasattr(self, "worker_id") else "unknown",
+                "job_id": job_id,
+                "service": self.get_job_type(),
+                "request_type": request_type,
+                "timestamp": time.time(),
+                "content": request_content
+            }
+            
+            # Send the message to the Redis Hub for broadcasting
+            logger.info(f"[comfyui_connector.py broadcast_service_request] Broadcasting {request_type} request for job {job_id}")
+            await websocket.send(json.dumps(message))
+            
+            logger.info(f"[comfyui_connector.py broadcast_service_request] Successfully broadcast {request_type} request")
+        except Exception as e:
+            error_type = type(e).__name__
+            logger.error(f"[comfyui_connector.py broadcast_service_request] Error broadcasting request: {error_type} - {str(e)}")
+            # Don't raise the exception - this is a non-critical feature
+    
     async def send_workflow(self, workflow_data: Dict[str, Any]) -> Optional[str]:
         """Send workflow data to ComfyUI
         
@@ -711,6 +742,10 @@ class ComfyUIConnector(WebSocketConnector):
             
             # Log connection state before sending workflow
             logger.info(f"[comfyui_connector.py _process_service_job] COMFYUI_STATUS: Connection state before sending: connected={self.connected}, ws_closed={self.ws.closed if self.ws else True}")
+            
+            # [2025-05-24T13:40:00-04:00] Broadcast the workflow request content to clients and monitors
+            # This allows monitoring of what's being sent to ComfyUI
+            await self.broadcast_service_request(websocket, job_id, "comfyui_workflow", payload)
             
             # Send workflow to ComfyUI with a short timeout
             # 2025-04-25-17:55 - Updated to use a shorter timeout (5 seconds) for sending workflows
