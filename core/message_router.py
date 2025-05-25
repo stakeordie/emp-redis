@@ -37,7 +37,7 @@ class MessageRouter(MessageRouterInterface):
         """
         # Extract the message type
         if not isinstance(message, dict) or "type" not in message:
-            logger.warning(f"Invalid message format from {connection_id}: {message}")
+            logger.error(f"Invalid message format from {connection_id}: {message}")
             return {"type": "error", "error": "Invalid message format"}
         
         # We know type exists in message because of the check above
@@ -50,7 +50,7 @@ class MessageRouter(MessageRouterInterface):
         
         # If no handler is registered, return an error
         if handler is None:
-            logger.warning(f"No handler registered for message type: {message_type}")
+            logger.error(f"No handler registered for message type: {message_type}")
             return {"type": "error", "error": f"Unsupported message type: {message_type}"}
         
         try:
@@ -72,8 +72,7 @@ class MessageRouter(MessageRouterInterface):
         """
         # Store the handler in the handlers dictionary
         self._handlers[message_type] = handler
-        logger.info(f"Registered handler for message type: {message_type}")
-    
+            
     def get_route(self, message_type: str) -> Optional[Callable[[WebSocket, Dict[str, Any], str], Awaitable[Optional[Dict[str, Any]]]]]:
         """
         Get the route (handler function) for a specific message type.

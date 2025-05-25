@@ -620,7 +620,7 @@ class MessageModels(MessageModelsInterface):
                     message_type
                 )
             case _:
-                logger.warning(f"Unknown message type: {message_type}")
+                logger.error(f"Unknown message type: {message_type}")
                 return None
     
     def create_error_message(self, error: str, details: Optional[Dict[str, Any]] = None) -> BaseMessage:
@@ -977,7 +977,6 @@ class MessageModels(MessageModelsInterface):
         Returns:
             JobNotificationsSubscribedMessage: Job notifications subscribed message model
         """
-        #logger.debug(f"[MessageModels] Creating job notifications subscribed message for worker {worker_id}")
         return JobNotificationsSubscribedMessage(
             type=MessageType.JOB_NOTIFICATIONS_SUBSCRIBED,
             worker_id=worker_id,
