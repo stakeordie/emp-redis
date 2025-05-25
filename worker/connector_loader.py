@@ -228,7 +228,7 @@ async def load_connectors() -> Dict[str, ConnectorInterface]:
                 error_msg = f"Failed to import {module_name} using any method"
                 logger.error(f"[connector_loader.py load_connectors()] {error_msg}")
                 raise ImportError(error_msg)
-            logger.error(f"[connector_loader.py load_connectors()] Successfully imported module: {module.__name__}")
+            logger.debug(f"[connector_loader.py load_connectors()] Successfully imported module: {module.__name__}")
             
             # Store the loaded module for dependency resolution
             loaded_modules[connector_name] = module
@@ -239,7 +239,7 @@ async def load_connectors() -> Dict[str, ConnectorInterface]:
             
             # Log all classes in the module for debugging
             class_list = [name for name, obj in module.__dict__.items() if isinstance(obj, type)]
-            logger.info(f"[connector_loader.py load_connectors() DEBUG] Classes in {module.__name__}: {class_list}")
+            logger.debug(f"[connector_loader.py load_connectors() DEBUG] Classes in {module.__name__}: {class_list}")
             
             for cls_name, cls in module.__dict__.items():
                 if not isinstance(cls, type):
@@ -250,14 +250,14 @@ async def load_connectors() -> Dict[str, ConnectorInterface]:
                     is_connector = issubclass(cls, ConnectorInterface)
                     if not is_connector:
                         continue
-                    logger.info(f"[connector_loader.py load_connectors() DEBUG] Found ConnectorInterface subclass: {cls_name}")
+                    logger.debug(f"[connector_loader.py load_connectors() DEBUG] Found ConnectorInterface subclass: {cls_name}")
                 except TypeError:
                     # This happens for non-class objects
                     continue
                     
                 # Skip abstract base classes
                 if cls == ConnectorInterface or cls.__name__ == 'WebSocketConnector':
-                    logger.info(f"[connector_loader.py load_connectors() DEBUG] Skipping abstract class: {cls_name}")
+                    logger.debug(f"[connector_loader.py load_connectors() DEBUG] Skipping abstract class: {cls_name}")
                     continue
                     
                 # [2025-05-25T22:10:00-04:00] Completely redesigned connector_id checking
@@ -274,26 +274,26 @@ async def load_connectors() -> Dict[str, ConnectorInterface]:
                         # Get the connector_id value
                         try:
                             connector_id_value = instance.connector_id
-                            logger.info(f"[connector_loader.py load_connectors() DEBUG] Class {cls_name} has connector_id='{connector_id_value}'")
+                            logger.debug(f"[connector_loader.py load_connectors() DEBUG] Class {cls_name} has connector_id='{connector_id_value}'")
                             
                             # Check if it matches the requested connector name
                             if connector_id_value == connector_name:
                                 connector_class = cls
-                                logger.info(f"[connector_loader.py load_connectors()] Found connector class {cls_name} with connector_id='{connector_name}'")
+                                logger.debug(f"[connector_loader.py load_connectors()] Found connector class {cls_name} with connector_id='{connector_name}'")
                                 break
                             else:
-                                logger.info(f"[connector_loader.py load_connectors() DEBUG] Class {cls_name} connector_id='{connector_id_value}' doesn't match '{connector_name}'")
+                                logger.error(f"[connector_loader.py load_connectors() DEBUG] Class {cls_name} connector_id='{connector_id_value}' doesn't match '{connector_name}'")
                         except Exception as prop_error:
                             logger.error(f"[connector_loader.py load_connectors() ERROR] Error accessing connector_id property on {cls_name}: {prop_error}")
                     else:
-                        logger.info(f"[connector_loader.py load_connectors() DEBUG] Class {cls_name} has no connector_id property")
+                        logger.debug(f"[connector_loader.py load_connectors() DEBUG] Class {cls_name} has no connector_id property")
 
                 except Exception as e:
                     # Fall back to checking connector_name attribute
                     try:
                         if hasattr(cls, 'connector_name') and cls.connector_name == connector_name:
                             connector_class = cls
-                            logger.info(f"[connector_loader.py load_connectors()] Found connector class {cls_name} with connector_name='{connector_name}'")
+                            logger.debug(f"[connector_loader.py load_connectors()] Found connector class {cls_name} with connector_name='{connector_name}'")
                             break
                     except Exception as nested_e:
                         logger.error(f"[connector_loader.py load_connectors()] Error checking class {cls_name}: {e}, {nested_e}")
@@ -305,7 +305,7 @@ async def load_connectors() -> Dict[str, ConnectorInterface]:
                 try:
                     class_info = [f"{cls_name}: is ConnectorInterface subclass={issubclass(cls, ConnectorInterface) if isinstance(cls, type) else False}" 
                                  for cls_name, cls in module.__dict__.items() if isinstance(cls, type)]
-                    logger.error(f"[connector_loader.py load_connectors() DEBUG] Available classes in {module.__name__}: {class_info}")
+                    logger.debug(f"[connector_loader.py load_connectors() DEBUG] Available classes in {module.__name__}: {class_info}")
                 except Exception as e:
                     logger.error(f"[connector_loader.py load_connectors() DEBUG] Error getting class info: {e}")
                 continue
