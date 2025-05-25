@@ -40,49 +40,43 @@ async def main():
         # Load environment variables from .env file
         load_dotenv()   
         
-        # Print environment information
-        log_environment_info()
-        
-        # Setup logging
-        log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
         setup_logging()
         
-        logger.info("[worker_main.py main] Starting EmProps Redis Worker")
         
         # Import BaseWorker from the worker package
         # This works because worker_main.py is outside the worker directory
-        logger.info("[worker_main.py main] Importing BaseWorker from worker package")
         worker_base = None
         
         try:
             # First attempt: import from worker package
-            logger.info("[worker_main.py main] Attempting to import BaseWorker from worker package")
             from worker import BaseWorker
             worker_base = BaseWorker
-            logger.info("[worker_main.py main] Successfully imported BaseWorker from worker package")
         except ImportError as e:
             logger.error(f"[worker_main.py main] Failed to import BaseWorker from worker package: {str(e)}")
             
             # Second attempt: Try emp-redis-worker specific import for Docker environment
             try:
-                logger.info("[worker_main.py main] Attempting emp-redis-worker specific import")
                 # Using importlib to avoid lint errors about missing modules
                 import importlib
                 emp_worker_module = importlib.import_module("emp_redis_worker.worker")
                 worker_base = getattr(emp_worker_module, "BaseWorker")
-                logger.info("[worker_main.py main] Successfully imported from emp_redis_worker.worker")
             except (ImportError, AttributeError) as e2:
+                log_environment_info()
                 error_msg = f"Failed to import BaseWorker: {str(e2)}"
                 logger.error(f"[worker_main.py main] {error_msg}")
                 raise ImportError(error_msg)
         
-        # Create and start worker
-        logger.info("[worker_main.py main] Creating worker instance")
+        # [2025-05-25T18:20:00-04:00] Added null check to prevent "None not callable" error
+        if worker_base is None or not callable(worker_base):
+            log_environment_info()
+            error_msg = f"worker_base is not callable: {type(worker_base)}"
+            logger.error(f"[worker_main.py main] {error_msg}")
+            raise TypeError(error_msg)
+            
         worker = worker_base()
         await worker.async_init()
         
         # Start the worker
-        logger.info("[worker_main.py main] Worker initialized, starting main loop")
         worker_task = asyncio.create_task(worker.start())
         
         # Wait for worker to finish
@@ -91,6 +85,7 @@ async def main():
     except KeyboardInterrupt:
         logger.info("[worker_main.py main] Worker stopped by user")
     except Exception as e:
+        log_environment_info()
         logger.error(f"[worker_main.py main] Error starting worker: {str(e)}")
         logger.error(traceback.format_exc())
     finally:

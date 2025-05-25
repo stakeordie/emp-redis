@@ -19,6 +19,14 @@ All notable changes to the EMP Redis project will be documented in this file.
   - Helps with debugging and understanding what's being requested from services
 
 ### Changed
+- [2025-05-25T18:45:00-04:00] Fixed remaining type errors in worker_main.py and apps/comfy-worker/scripts/a1111/docker/config.py:
+  - Added null checks for worker_base in worker_main.py to prevent "None not callable" errors
+  - Fixed Dict and Any imports in config.py
+  - Added proper type casting for JSON data in config.py
+  - Added string type conversion for replacement values in replace_if_invalid function
+  - Added detailed error messages and logging for better debugging
+  - Ensured all functions return the correct types as declared in their signatures
+
 - [2025-05-25T18:15:00-04:00] Fixed "None not callable" errors in worker.py and base_worker.py:
   - Added explicit null checks before calling BaseWorker constructor
   - Added type checks to ensure BaseWorker is callable before instantiation
