@@ -40,7 +40,7 @@ async def main():
         load_dotenv()   
         
         # Print environment information
-        log_environment_info()
+        # log_environment_info()
         
         # Setup logging
         log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
@@ -58,42 +58,49 @@ async def main():
         
         # Approach 1: Try importing from worker package (best practice)
         try:
-            logger.info("[worker.py main] Attempting to import BaseWorker from worker package")
             from worker import BaseWorker as WorkerBaseWorker
             BaseWorker = WorkerBaseWorker
-            logger.info("[worker.py main] Successfully imported BaseWorker from worker package")
             import_success = True
         except ImportError as e:
-            logger.info(f"[worker.py main] Failed to import BaseWorker from worker package: {str(e)}")
+            log_environment_info()
+            logger.error(f"[worker.py main] Failed to import BaseWorker from worker package: {str(e)}")
         
         # Approach 2: Try direct import
         if not import_success:
+            
             try:
-                logger.info("[worker.py main] Attempting direct import of BaseWorker")
                 from base_worker import BaseWorker as DirectBaseWorker
                 BaseWorker = DirectBaseWorker
-                logger.info("[worker.py main] Successfully imported BaseWorker directly")
                 import_success = True
-            except ImportError as e2:
-                logger.info(f"[worker.py main] Failed direct import of BaseWorker: {str(e2)}")
+            except ImportError as e2:   
+                log_environment_info()
+                logger.error(f"[worker.py main] Failed direct import of BaseWorker: {str(e2)}")
         
         # Approach 3: Try emp-redis-worker specific import
         if not import_success:
+            
             try:
-                logger.info("[worker.py main] Attempting emp-redis-worker specific import of BaseWorker")
                 from emp_redis_worker.worker import BaseWorker as EmpBaseWorker
                 BaseWorker = EmpBaseWorker
-                logger.info("[worker.py main] Successfully imported BaseWorker from emp_redis_worker.worker")
                 import_success = True
             except ImportError as e3:
-                logger.info(f"[worker.py main] Failed emp-redis-worker import of BaseWorker: {str(e3)}")
+                log_environment_info()
+                logger.error(f"[worker.py main] Failed emp-redis-worker import of BaseWorker: {str(e3)}")
         
         # Check if any import approach succeeded
-        if not import_success:
+        if not import_success or BaseWorker is None:
+            log_environment_info()
             error_msg = "Failed to import BaseWorker using any approach"
             logger.error(f"[worker.py main] {error_msg}")
             raise ImportError(error_msg)
         
+        # [2025-05-25T18:00:00-04:00] Added explicit type check to prevent "None not callable" error
+        if not callable(BaseWorker):
+            log_environment_info()
+            error_msg = f"BaseWorker is not callable: {type(BaseWorker)}"
+            logger.error(f"[worker.py main] {error_msg}")
+            raise TypeError(error_msg)
+            
         # Create and start worker
         worker = BaseWorker() ## base_worker.py
 
@@ -106,6 +113,7 @@ async def main():
     except KeyboardInterrupt:
         logger.info("[worker.py main] Worker stopped by user")
     except Exception as e:
+        log_environment_info()
         logger.error(f"[worker.py main] Error starting worker: {str(e)}")
         logger.error(traceback.format_exc())
     finally:

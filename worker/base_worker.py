@@ -178,12 +178,25 @@ class BaseWorker:
 
     async def async_init(self):
         """Asynchronous initialization of worker components"""
+        # [2025-05-25T18:10:00-04:00] Added null checks to prevent "None not callable" errors
+        # Check if load_connectors is callable
+        if load_connectors is None or not callable(load_connectors):
+            error_msg = f"load_connectors is not callable: {type(load_connectors)}"
+            logger.error(f"[base_worker.py async_init()] {error_msg}")
+            raise TypeError(error_msg)
+            
         # Load connectors
         self.connectors = await load_connectors()   # Load connectors           
         
         # Initialize connectors
         logger.info(f"[base_worker.py async_init()] Initializing connectors...{self.connectors}")
         
+        # Check if get_worker_capabilities is callable
+        if get_worker_capabilities is None or not callable(get_worker_capabilities):
+            error_msg = f"get_worker_capabilities is not callable: {type(get_worker_capabilities)}"
+            logger.error(f"[base_worker.py async_init()] {error_msg}")
+            raise TypeError(error_msg)
+            
         # Worker capabilities
         self.capabilities = await get_worker_capabilities(self.connectors)
         

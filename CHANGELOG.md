@@ -19,6 +19,21 @@ All notable changes to the EMP Redis project will be documented in this file.
   - Helps with debugging and understanding what's being requested from services
 
 ### Changed
+- [2025-05-25T18:15:00-04:00] Fixed "None not callable" errors in worker.py and base_worker.py:
+  - Added explicit null checks before calling BaseWorker constructor
+  - Added type checks to ensure BaseWorker is callable before instantiation
+  - Added null checks for load_connectors and get_worker_capabilities functions
+  - Improved error messages with detailed information about the type errors
+  - Added timestamps to all error logs for better traceability
+
+- [2025-05-25T17:50:00-04:00] Fixed type errors in connector_loader.py:
+  - Simplified ConnectorInterface import structure to avoid redefinition errors
+  - Added proper null checks for ModuleSpec to prevent attribute access errors
+  - Added type annotation for CONNECTOR_DEPENDENCIES dictionary
+  - Fixed "Cannot assign to a type" errors by using intermediate variables
+  - Added null checks for connector_capabilities to prevent iteration errors
+  - Added detailed comments with timestamps for traceability
+
 - [2025-05-25T17:00:00-04:00] Fixed type errors in WebSocketConnector base class:
   - Simplified ConnectorInterface import structure to avoid redefinition errors
   - Added null checks for WebSocket connection before accessing attributes
