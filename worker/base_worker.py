@@ -2,13 +2,16 @@
 # Base worker for the EmProps Redis Worker
 import os
 import sys
-import asyncio
 import json
-import uuid
-import websockets
+import asyncio
+import traceback
+import logging
+import time
+import hashlib
 from typing import Dict, List, Any, Optional, Union, cast, TypeVar, Generic
 from enum import Enum, auto
 from dotenv import load_dotenv
+import time
 
 # [2025-05-25T21:45:00-04:00] Updated import path to match actual deployment package structure
 # The deployment environment has message_models.py in core/ not in core/core_types/
@@ -135,6 +138,11 @@ class BaseWorker:
         
         # Log the worker ID for debugging
         print(f"Initializing worker with ID: {self.worker_id} (loaded via dotenv)")
+        
+        # [2025-05-26T18:40:00-04:00] Added storage for chunked messages
+        # This dictionary will store partial chunks until all chunks of a message are received
+        # Format: {message_id: {"chunks": {chunk_id: chunk_data}, "total_chunks": N, "message_hash": hash, "original_type": type, "job_id": job_id, "received_at": timestamp}}  
+        self.chunked_messages = {}
 
         # Load GLOBAL settings directly from environment (set by container)
         # Support both namespaced (WORKER_*) and non-namespaced versions for backward compatibility
@@ -178,9 +186,14 @@ class BaseWorker:
         self.connectors = None
         self.capabilities = None
         
-        # Worker state
-        self.status = WorkerStatus.IDLE
+        # Initialize worker state
+        self.status = WorkerStatus.INITIALIZING
         self.current_job_id = None
+        
+        # [2025-05-26T18:30:00-04:00] Added storage for chunked messages
+        # This dictionary will store partial chunks until all chunks of a message are received
+        # Format: {message_id: {"chunks": {chunk_id: chunk_data}, "total_chunks": N, "original_type": type, "job_id": job_id}}
+        self.chunked_messages = {}
 
     async def async_init(self):
         """Asynchronous initialization of worker components"""
@@ -395,6 +408,131 @@ class BaseWorker:
             import traceback
             logger.error(f"[base_worker.py send_progress_update()]: Stack trace: {traceback.format_exc()}")
     
+    async def _cleanup_stale_chunks(self):
+        """Clean up stale chunked messages that haven't been completed
+        
+        This method removes any chunked messages that have been partially received
+        but haven't been completed within a timeout period (5 minutes).
+        """
+        # [2025-05-26T18:50:00-04:00] Added cleanup for stale chunked messages
+        try:
+            current_time = time.time()
+            stale_timeout = 300  # 5 minutes in seconds
+            stale_message_ids = []
+            
+            # Find stale messages
+            for message_id, message_data in self.chunked_messages.items():
+                received_at = message_data.get("received_at", 0)
+                if current_time - received_at > stale_timeout:
+                    stale_message_ids.append(message_id)
+            
+            # Remove stale messages
+            for message_id in stale_message_ids:
+                logger.warning(f"[2025-05-26T18:50:00-04:00] [base_worker.py] Removing stale chunked message {message_id} (incomplete after {stale_timeout} seconds)")
+                del self.chunked_messages[message_id]
+                
+            # Log cleanup results
+            if stale_message_ids:
+                logger.debug(f"[2025-05-26T18:50:00-04:00] [base_worker.py] Cleaned up {len(stale_message_ids)} stale chunked messages")
+        except Exception as e:
+            logger.error(f"[2025-05-26T18:50:00-04:00] [base_worker.py _cleanup_stale_chunks()] Error cleaning up stale chunks: {str(e)}")
+    
+    async def _periodic_chunk_cleanup(self):
+        """Run the stale chunk cleanup periodically
+        
+        This method runs in the background and periodically cleans up stale chunked messages.
+        """
+        # [2025-05-26T18:55:00-04:00] Added periodic cleanup of stale chunked messages
+        try:
+            while True:
+                # Wait for 60 seconds
+                await asyncio.sleep(60)
+                
+                # Run the cleanup
+                await self._cleanup_stale_chunks()
+        except Exception as e:
+            logger.error(f"[2025-05-26T18:55:00-04:00] [base_worker.py _periodic_chunk_cleanup()] Error in periodic cleanup: {str(e)}")
+            logger.error(f"[2025-05-26T18:55:00-04:00] [base_worker.py _periodic_chunk_cleanup()] Stack trace: {traceback.format_exc()}")
+    
+    async def _handle_chunked_message(self, websocket, chunk_data):
+        """Handle a chunked message from the Redis Hub
+        
+        This method processes individual chunks of a large message, stores them,
+        and reassembles the complete message when all chunks have been received.
+        
+        Args:
+            websocket: The WebSocket connection to the Redis Hub
+            chunk_data: The chunk data as a dictionary
+        """
+        try:
+            # Extract chunk metadata
+            message_id = chunk_data.get("message_id")
+            chunk_id = chunk_data.get("chunk_id")
+            total_chunks = chunk_data.get("total_chunks")
+            original_type = chunk_data.get("original_type")
+            job_id = chunk_data.get("job_id")
+            chunk_content = chunk_data.get("chunk_data")
+            
+            # Validate chunk metadata
+            if not all([message_id, isinstance(chunk_id, int), isinstance(total_chunks, int), original_type, chunk_content]):
+                logger.error(f"[2025-05-26T18:45:00-04:00] [base_worker.py _handle_chunked_message()] Invalid chunk metadata: {chunk_data}")
+                return
+            
+            # Log chunk receipt
+            logger.debug(f"[2025-05-26T18:45:00-04:00] [base_worker.py] Received chunk {chunk_id+1}/{total_chunks} for message {message_id}")
+            
+            # Initialize storage for this message if it doesn't exist
+            if message_id not in self.chunked_messages:
+                self.chunked_messages[message_id] = {
+                    "chunks": {},
+                    "total_chunks": total_chunks,
+                    "original_type": original_type,
+                    "job_id": job_id,
+                    "received_at": time.time()
+                }
+            
+            # Store the chunk
+            self.chunked_messages[message_id]["chunks"][chunk_id] = chunk_content
+            
+            # Check if we have all chunks
+            received_chunks = len(self.chunked_messages[message_id]["chunks"])
+            if received_chunks == total_chunks:
+                # All chunks received, reassemble the message
+                logger.debug(f"[2025-05-26T18:45:00-04:00] [base_worker.py] All {total_chunks} chunks received for message {message_id}, reassembling")
+                
+                # Sort chunks by chunk_id and concatenate
+                sorted_chunks = [self.chunked_messages[message_id]["chunks"][i] for i in range(total_chunks)]
+                complete_message = "".join(sorted_chunks)
+                
+                # Process the reassembled message
+                logger.debug(f"[2025-05-26T18:45:00-04:00] [base_worker.py] Processing reassembled message of type {original_type}")
+                
+                # Parse the complete message
+                try:
+                    # Parse the message using MessageModels
+                    message_data = json.loads(complete_message)
+                    message_obj = self.message_models.parse_message(message_data)
+                    
+                    if not message_obj:
+                        logger.error(f"[2025-05-26T18:45:00-04:00] [base_worker.py] Invalid reassembled message format: {complete_message[:300]}...")
+                    else:
+                        # Process the message based on its type
+                        await self.handle_message(websocket, complete_message)
+                        
+                except json.JSONDecodeError as e:
+                    logger.error(f"[2025-05-26T18:45:00-04:00] [base_worker.py] Error parsing reassembled message: {str(e)}")
+                    logger.error(f"[2025-05-26T18:45:00-04:00] [base_worker.py] Message sample: {complete_message[:500]}...")
+                
+                # Clean up the chunks to free memory
+                del self.chunked_messages[message_id]
+            else:
+                # Still waiting for more chunks
+                logger.debug(f"[2025-05-26T18:45:00-04:00] [base_worker.py] Waiting for more chunks: {received_chunks}/{total_chunks} for message {message_id}")
+        
+        except Exception as e:
+            logger.error(f"[2025-05-26T18:40:00-04:00] [base_worker.py] Error handling chunked message: {str(e)}")
+            logger.error(f"[2025-05-26T18:40:00-04:00] [base_worker.py] Stack trace: {traceback.format_exc()}")
+    
     async def handle_message(self, websocket, message):
         """Handle incoming message from Redis Hub
         
@@ -418,6 +556,15 @@ class BaseWorker:
             
             # Parse the message using MessageModels
             message_data = json.loads(message)
+            
+            # [2025-05-26T18:40:00-04:00] Added handling for chunked messages
+            # Check if this is a chunked message
+            if isinstance(message_data, dict) and message_data.get("type") == "chunked_message":
+                # This is a chunked message, process it
+                await self._handle_chunked_message(websocket, message_data)
+                return
+                
+            # Regular message processing continues
             message_obj = self.message_models.parse_message(message_data)
             
             if not message_obj:
@@ -520,7 +667,7 @@ class BaseWorker:
             job_type = 'unknown'
             priority = 0
             last_failed_worker = None
-                       
+                   
             # Try different ways to access message data
             if isinstance(message_obj, dict):
                 # It's a dictionary
@@ -534,7 +681,7 @@ class BaseWorker:
                 job_type = getattr(message_obj, 'job_type', 'unknown')
                 priority = getattr(message_obj, 'priority', 0)
                 last_failed_worker = getattr(message_obj, 'last_failed_worker', None)
-            
+        
             # Log job notification with timestamp for tracking
             logger.debug(f"[base_worker.py handle_job_notification()]: Processing job notification. Job ID: {job_id}, Job Type: {job_type}, Priority: {priority}")
             
@@ -670,31 +817,53 @@ class BaseWorker:
             await websocket.send(claim_message_json)
             logger.debug(f"[base_worker.py handle_job_notification() DEBUG] Sent claim message for job {job_id}")
             
-            # Note: We don't update worker state here - we'll wait for JOB_ASSIGNED message
-            # This matches the behavior in main.bk.py
-        except Exception as e:
-            logger.error(f"[base_worker.py handle_job_notification()]: Error handling job notification: {str(e)}")
     
-    async def handle_job_assigned(self, websocket, message_obj):
-        """Handle job assigned message from Redis Hub
+    Args:
+        websocket: The websocket connection
+        message_obj: The message object
+    """
+    try:
+        # [2025-05-26T01:15:00-04:00] Enhanced debug logging for job notification handling
+        logger.debug(f"[2025-05-26T01:15:00-04:00] Received job notification: {message_obj}")
         
-        Args:
-            websocket: The WebSocket connection to the Redis Hub
-            message_obj: The job assigned message object
-        """
-        # [2025-05-25T18:45:00-04:00] Completely rewritten method to fix syntax errors
-        # and ensure proper A1111 job processing
-        
-        # Variables to track job info
-        job_id = None
-        job_type = None
-        payload = None
-        connector = None
-        
-        try:
-            # Enhanced debug logging for job assignment
-            logger.debug(f"[2025-05-25T18:45:00-04:00] Received job assignment message: {message_obj}")
+        # First check if worker is idle before proceeding
+        if self.status != WorkerStatus.IDLE:
+            logger.debug(f"[2025-05-26T01:15:00-04:00] Ignoring job notification - worker is busy. Status: {self.status}")
+            return
             
+        # Extract job details safely with fallbacks
+        job_id = None
+        job_type = 'unknown'
+        priority = 0
+        last_failed_worker = None
+                   
+        # Try different ways to access message data
+        if isinstance(message_obj, dict):
+            # It's a dictionary
+            job_id = message_obj.get('job_id')
+            job_type = message_obj.get('job_type', 'unknown')
+            priority = message_obj.get('priority', 0)
+            last_failed_worker = message_obj.get('last_failed_worker')
+        elif hasattr(message_obj, 'job_id'):
+            # It has direct attributes (like a Pydantic model)
+            job_id = message_obj.job_id
+            job_type = getattr(message_obj, 'job_type', 'unknown')
+            priority = getattr(message_obj, 'priority', 0)
+            last_failed_worker = getattr(message_obj, 'last_failed_worker', None)
+        
+        # Log job notification with timestamp for tracking
+        logger.debug(f"[base_worker.py handle_job_notification()]: Processing job notification. Job ID: {job_id}, Job Type: {job_type}, Priority: {priority}")
+        
+        # Check if job ID is present
+        if not job_id:
+            # Try one more approach - direct attribute access if the object has a string representation with job_id
+            if hasattr(message_obj, '__str__'):
+                msg_str = str(message_obj)
+                if 'job_id' in msg_str:
+                    import re
+                    job_id_match = re.search(r"job_id='([^']+)'|job_id=\"([^\"]+)\"", msg_str)
+                    if job_id_match:
+                        job_id = job_id_match.group(1) or job_id_match.group(2)
             # Extract job details safely with fallbacks
             if isinstance(message_obj, dict):
                 # It's a dictionary
@@ -995,6 +1164,13 @@ class BaseWorker:
     async def run(self):
         """Run the worker"""
         try:
+            # Initialize worker components
+            await self.async_init()
+            
+            # [2025-05-26T18:40:00-04:00] Set up periodic cleanup of stale chunked messages
+            # Run cleanup every minute
+            cleanup_task = asyncio.create_task(self._periodic_chunk_cleanup())
+            
             # Connect to Redis Hub
             logger.debug(f"Connecting to Redis Hub at {self.redis_ws_url}")
             async with websockets.connect(self.redis_ws_url) as websocket:
@@ -1010,7 +1186,7 @@ class BaseWorker:
                 
                 # Note: WebSocket monitoring has been removed in favor of job-specific heartbeats
                 # Each connector now handles its own connection lifecycle and sends heartbeats during active jobs
-                connector_ws_monitor_tasks: list[asyncio.Task] = []  # Keep empty list for compatibility
+                connector_ws_monitor_tasks = []  # Keep empty list for compatibility
 
                 # Process messages
                 async for message in websocket:

@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 # Core WebSocket connection manager for the queue system
 import json
+import uuid
+import logging
 import asyncio
-import time
-import os
-from typing import Dict, Set, List, Any, Optional, Callable
+import hashlib
+import websockets
+from typing import Dict, List, Any, Optional, Union, Callable, Awaitable, Tuple, cast
+from websockets.exceptions import ConnectionClosed, ConnectionClosedError
+import traceback
 from fastapi import WebSocket, FastAPI, Query
 from fastapi.websockets import WebSocketDisconnect
 from websockets.exceptions import ConnectionClosedError
@@ -710,37 +714,101 @@ class ConnectionManager(ConnectionManagerInterface):
             logger.error(f"[connection_manager.py send_to_client()] Error sending message: {str(e)}")
             return False
     
-    async def send_to_worker(self, worker_id: str, message: BaseMessage) -> bool:
-        """Send a message to a specific worker"""
-        # Check worker connection status
-        if worker_id not in self.worker_connections:
+    async def _chunk_message(self, message_text: str, msg_type: str, msg_id: str, worker_id: str) -> List[Dict[str, Any]]:
+        """Split a large message into chunks with hash-based identification
+        
+        Args:
+            message_text: The full message text to chunk
+            msg_type: The original message type
+            msg_id: The original message ID
+            worker_id: The worker ID (for logging)
+            
+        Returns:
+            List of chunk metadata dictionaries
+        """
+        # [2025-05-26T18:35:00-04:00] Implemented hash-based chunking for large messages
+        try:
+            # Define the chunk size (1MB per chunk is a safe size for WebSocket)
+            CHUNK_SIZE = 1000000  # 1MB
+            
+            # Get message size
+            msg_size = len(message_text)
+            
+            # Calculate the number of chunks needed
+            num_chunks = (msg_size + CHUNK_SIZE - 1) // CHUNK_SIZE  # Ceiling division
+            
+            # Calculate a hash of the message for verification
+            message_hash = hashlib.md5(message_text.encode('utf-8')).hexdigest()
+            
+            # Generate a unique message ID based on the hash and timestamp
+            chunk_message_id = f"{message_hash[:8]}-{str(uuid.uuid4())[:8]}"
+            
+            logger.warning(f"[2025-05-26T18:35:00-04:00] [connection_manager.py] Chunking message: {msg_size} bytes into {num_chunks} chunks. Hash: {message_hash[:8]}")
+            
+            # Prepare chunks
+            chunks = []
+            
+            # Split the message into chunks
+            for i in range(num_chunks):
+                # Calculate the start and end positions for this chunk
+                start = i * CHUNK_SIZE
+                end = min((i + 1) * CHUNK_SIZE, msg_size)
+                
+                # Extract the chunk
+                chunk = message_text[start:end]
+                
+                # Create a chunk message with metadata
+                chunk_metadata = {
+                    "type": "chunked_message",
+                    "chunk_id": i,
+                    "total_chunks": num_chunks,
+                    "message_id": chunk_message_id,
+                    "message_hash": message_hash,
+                    "original_type": msg_type,
+                    "job_id": msg_id,
+                    "chunk_data": chunk
+                }
+                
+                chunks.append(chunk_metadata)
+                
+            return chunks
+        except Exception as e:
+            logger.error(f"[2025-05-26T18:35:00-04:00] [connection_manager.py] Error chunking message: {str(e)}")
+            logger.error(traceback.format_exc())
+            return []
+    
+    async def send_to_worker(self, worker_id: str, message: Union[Dict[str, Any], BaseMessage, str]) -> bool:
+        """Send message to worker
+        
+        Args:
+            worker_id: The worker ID to send the message to
+            message: The message to send
+            
+        Returns:
+            True if the message was sent successfully, False otherwise
+        """
+        # Get the worker's WebSocket connection
+        websocket = self.get_worker_connection(worker_id)
+        if not websocket:
+            logger.error(f"[connection_manager.py send_to_worker()] Worker {worker_id} not connected")
             return False
         
-        # Get WebSocket connection
-        websocket = self.worker_connections[worker_id]
-        
         try:
-            # Serialize the message appropriately
-            message_text = None
-            message_type = type(message).__name__
-            
-            if hasattr(message, "model_dump_json"):
-                # Handle newer Pydantic v2 models
-                message_text = message.model_dump_json()
-            elif hasattr(message, "json"):
-                # Handle older Pydantic models
-                message_text = message.json()
-            elif isinstance(message, dict):
+            # Convert message to string if it's a dict or BaseMessage
+            if isinstance(message, dict):
                 message_text = json.dumps(message)
+            elif isinstance(message, BaseMessage):
+                message_text = message.json()
             else:
-                message_text = str(message)
-                
-            # Extract message details for logging
+                message_text = message
+            
+            # Extract message type and ID for logging
             msg_type = "unknown"
             msg_id = "unknown"
             job_type = None
             last_failed_worker = None
             
+            # Try to extract message type and ID from different message formats
             if isinstance(message, dict):
                 if "type" in message:
                     msg_type = message["type"]
@@ -773,20 +841,40 @@ class ConnectionManager(ConnectionManagerInterface):
             # [2025-05-23T09:15:46-04:00] Enhanced message size logging to debug WebSocket size issues
             msg_size = len(message_text)
             
-            # [2025-05-26T18:15:00-04:00] Increased message size limit for WebSocket communications
-            # Only log a warning for extremely large messages (over 10MB) for monitoring purposes
-            # This allows large service request messages with base64-encoded images to be sent without truncation
-            if msg_size > 10000000:  # 10MB warning threshold
-                logger.warning(f"[2025-05-26T18:15:00-04:00] [connection_manager.py send_to_worker()] Very large message being sent: {msg_size} bytes. This may cause performance issues but will be allowed.")
-                
-            # Log the message size for debugging
-            logger.debug(f"[2025-05-26T18:15:00-04:00] [connection_manager.py send_to_worker()] Sending message of size {msg_size} bytes to worker {worker_id}")
+            # Define the chunk size (1MB per chunk is a safe size for WebSocket)
+            CHUNK_SIZE = 1000000  # 1MB
             
-            # No hard limit on message size - let the WebSocket protocol handle it
-            # This allows large A1111 job payloads with base64-encoded images to be sent
+            # Check if the message is large enough to require chunking
+            if msg_size > CHUNK_SIZE:
+                # Use the chunking function to split the message
+                chunks = await self._chunk_message(message_text, msg_type, msg_id, worker_id)
                 
-            # Actually send the message
-            await websocket.send_text(message_text)
+                if not chunks:
+                    logger.error(f"[2025-05-26T18:35:00-04:00] [connection_manager.py] Failed to chunk message for worker {worker_id}")
+                    return False
+                
+                # Send each chunk
+                for i, chunk in enumerate(chunks):
+                    # Convert the chunk message to JSON
+                    chunk_json = json.dumps(chunk)
+                    
+                    # Log the chunk being sent
+                    logger.debug(f"[2025-05-26T18:35:00-04:00] [connection_manager.py] Sending chunk {i+1}/{len(chunks)} for message {chunk['message_id']} to worker {worker_id}")
+                    
+                    # Send the chunk
+                    await websocket.send_text(chunk_json)
+                    
+                    # Add a small delay between chunks to prevent overwhelming the worker
+                    await asyncio.sleep(0.05)
+                
+                # Log completion of chunked message sending
+                logger.debug(f"[2025-05-26T18:35:00-04:00] [connection_manager.py] Completed sending all {len(chunks)} chunks for message {chunks[0]['message_id']} to worker {worker_id}")
+            else:
+                # Message is small enough to send in one piece
+                logger.debug(f"[2025-05-26T18:35:00-04:00] [connection_manager.py] Sending message of size {msg_size} bytes to worker {worker_id}")
+                
+                # Actually send the message
+                await websocket.send_text(message_text)
             
             # [2025-05-25T14:35:00-04:00] Added missing return statement for successful path
             return True
