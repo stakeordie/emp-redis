@@ -11,6 +11,13 @@ All notable changes to the EMP Redis project will be documented in this file.
   - Added parsing support in MessageModels.parse_message
   - Ensures proper handling of service requests from A1111 connector
   - Fixed issue with service request messages not being properly recognized
+
+- [2025-05-26T16:22:00-04:00] Added service_request message handler to message_handler.py:
+  - Added dedicated case for handling service_request messages in handle_worker_message
+  - Implemented proper message conversion and validation
+  - Added forwarding to monitors via broadcast_to_monitors
+  - Added conditional debug logging controlled by DEBUG_LOGS environment variable
+  - Fixed "Unsupported message type: service_request" errors
 - [2025-05-25T10:15:00-04:00] Extended service request broadcasting to A1111 connector:
   - A1111 connector now broadcasts requests sent to the A1111 service
   - Added broadcast_service_request method to A1111 connector
