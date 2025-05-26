@@ -5,6 +5,12 @@ All notable changes to the EMP Redis project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- [2025-05-26T16:25:00-04:00] Added ServiceRequestMessage class and message type:
+  - Defined SERVICE_REQUEST message type in MessageType enum
+  - Created ServiceRequestMessage class with proper fields
+  - Added parsing support in MessageModels.parse_message
+  - Ensures proper handling of service requests from A1111 connector
+  - Fixed issue with service request messages not being properly recognized
 - [2025-05-25T10:15:00-04:00] Extended service request broadcasting to A1111 connector:
   - A1111 connector now broadcasts requests sent to the A1111 service
   - Added broadcast_service_request method to A1111 connector
