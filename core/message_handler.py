@@ -494,6 +494,7 @@ class MessageHandler(MessageHandlerInterface):
             message: Worker registration message
         """
         # Register worker in ConnectionManager (in-memory)
+        logger.debug(f"[2025-05-26T00:15:00-04:00] [message_handler.py] Registering worker {worker_id} with capabilities: {message.capabilities}")
         success = self.connection_manager.register_worker(worker_id, message.capabilities)
         
         if success:
@@ -1185,11 +1186,15 @@ class MessageHandler(MessageHandlerInterface):
 
             # Step 2: Collect all unique job types supported by idle workers
             all_supported_job_types = set()
-            for job_types in worker_job_types.values():
+            for worker_id, job_types in worker_job_types.items():
                 all_supported_job_types.update(job_types)
+                logger.debug(f"[2025-05-26T00:10:00-04:00] [message_handler.py] Worker {worker_id} supports job types: {job_types}")
 
             if not all_supported_job_types:
+                logger.debug(f"[2025-05-26T00:10:00-04:00] [message_handler.py] No job types supported by idle workers")
                 return False
+            
+            logger.debug(f"[2025-05-26T00:10:00-04:00] [message_handler.py] All supported job types across idle workers: {all_supported_job_types}")
 
 
             # Step 3: Get pending jobs for each supported job type
@@ -1197,10 +1202,12 @@ class MessageHandler(MessageHandlerInterface):
             for job_type in all_supported_job_types:
                 # Get pending jobs of this type
                 jobs = self.redis_service.get_pending_jobs_by_type(job_type)
+                logger.debug(f"[2025-05-26T00:10:00-04:00] [message_handler.py] Found {len(jobs) if jobs else 0} pending jobs for job type: {job_type}")
                 if jobs:
                     available_jobs[job_type] = jobs
 
             if not available_jobs:
+                logger.debug(f"[2025-05-26T00:10:00-04:00] [message_handler.py] No pending jobs available for any supported job types")
                 return False
 
             # Step 4: Match jobs to workers based on capabilities
@@ -1231,6 +1238,8 @@ class MessageHandler(MessageHandlerInterface):
                 eligible_workers = []
                 excluded_workers = []
                 
+                logger.debug(f"[2025-05-26T00:10:00-04:00] [message_handler.py] Matching job {job_id} of type '{job_type}' to eligible workers")
+                
                 for worker_id in idle_workers:
                     # Skip workers that have already been notified in this cycle
                     if worker_id in notified_workers:
@@ -1238,6 +1247,7 @@ class MessageHandler(MessageHandlerInterface):
                         
                     # Skip workers that don't support this job type
                     if job_type not in worker_job_types.get(worker_id, []):
+                        logger.debug(f"[2025-05-26T00:10:00-04:00] [message_handler.py] Worker {worker_id} does not support job type '{job_type}', supported types: {worker_job_types.get(worker_id, [])}")
                         continue
                         
                     # 2025-04-25-23:30 - Check if worker has previously failed this job
@@ -1250,6 +1260,7 @@ class MessageHandler(MessageHandlerInterface):
                     eligible_workers.append(worker_id)
 
                 if not eligible_workers:
+                    logger.debug(f"[2025-05-26T00:10:00-04:00] [message_handler.py] No eligible workers found for job {job_id} of type '{job_type}'")
                     continue
 
                 # Get the job request payload
@@ -1281,9 +1292,11 @@ class MessageHandler(MessageHandlerInterface):
 
                 # Send notification to the selected worker
                 try:
+                    logger.debug(f"[2025-05-26T00:10:00-04:00] [message_handler.py] Sending job {job_id} of type '{job_type}' to worker {selected_worker}")
                     await self.connection_manager.send_to_worker(selected_worker, notification)
                     notified_workers.add(selected_worker)
                     jobs_broadcast = True
+                    logger.debug(f"[2025-05-26T00:10:00-04:00] [message_handler.py] Successfully sent job {job_id} to worker {selected_worker}")
                 except Exception as e:
                     logger.error(f"[JOB-MATCH] Error sending notification to worker {selected_worker}: {str(e)}")
             return jobs_broadcast
