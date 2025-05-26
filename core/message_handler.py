@@ -378,11 +378,23 @@ class MessageHandler(MessageHandlerInterface):
             message_data: Message data
             websocket: WebSocket connection
         """
+        # [2025-05-26T16:30:00-04:00] Added detailed logging to track message flow
+        # Always log the message type to help debug issues
+        logger.debug(f"[2025-05-26T16:30:00-04:00] [message_handler.py] Received message type '{message_type}' from worker {worker_id}")
+        
+        # Log detailed information for service_request messages
+        if message_type == "service_request":
+            logger.debug(f"[2025-05-26T16:30:00-04:00] [message_handler.py] SERVICE REQUEST MESSAGE RECEIVED: {message_data}")
+        
         # Parse message using the models
         message_obj = self.message_models.parse_message(message_data)
-
-        # logger.debug(f"[HANDLING-WORKER-MESSAGE] From worker {worker_id}: {message_obj}")
-
+        
+        # Log the result of message parsing
+        if message_type == "service_request":
+            if message_obj:
+                logger.debug(f"[2025-05-26T16:30:00-04:00] [message_handler.py] Successfully parsed service_request message")
+            else:
+                logger.error(f"[2025-05-26T16:30:00-04:00] [message_handler.py] FAILED to parse service_request message")
 
         if not message_obj:
             # logger.error(f"Invalid message received from worker {worker_id}")
@@ -485,30 +497,35 @@ class MessageHandler(MessageHandlerInterface):
                 # This allows monitors to see API calls made by connectors
                 from core.message_models import ServiceRequestMessage
                 
-                # Only show debug logs when explicitly enabled
-                if os.environ.get('DEBUG_LOGS', 'FALSE').upper() == 'TRUE':
-                    logger.debug(f"[2025-05-26T16:22:00-04:00] [message_handler.py] Received service_request message from worker {worker_id}")
+                # [2025-05-26T16:35:00-04:00] Always log service_request messages for debugging
+                logger.debug(f"[2025-05-26T16:35:00-04:00] [message_handler.py] SERVICE REQUEST CASE HANDLER REACHED for worker {worker_id}")
+                logger.debug(f"[2025-05-26T16:35:00-04:00] [message_handler.py] Message object type: {type(message_obj).__name__}")
                 
                 try:
                     # Ensure we have a properly typed message object
                     if not isinstance(message_obj, ServiceRequestMessage):
+                        logger.error(f"[2025-05-26T16:35:00-04:00] [message_handler.py] Converting message to ServiceRequestMessage")
+                        logger.error(f"[2025-05-26T16:35:00-04:00] [message_handler.py] Message keys: {message_obj.model_dump().keys() if hasattr(message_obj, 'model_dump') else 'No model_dump method'}")
                         service_request_message = ServiceRequestMessage(**message_obj.model_dump())
                     else:
+                        logger.error(f"[2025-05-26T16:35:00-04:00] [message_handler.py] Message is already a ServiceRequestMessage")
                         service_request_message = message_obj
-                        
+                    
+                    logger.error(f"[2025-05-26T16:35:00-04:00] [message_handler.py] Broadcasting service_request to monitors")
                     # Forward the service request message to monitors
                     # This uses the same mechanism as progress updates
                     await self.connection_manager.broadcast_to_monitors(service_request_message)
                     
-                    # Only show debug logs when explicitly enabled
-                    if os.environ.get('DEBUG_LOGS', 'FALSE').upper() == 'TRUE':
-                        logger.debug(f"[2025-05-26T16:22:00-04:00] [message_handler.py] Forwarded service_request to monitors: {service_request_message.request_type}")
+                    logger.debug(f"[2025-05-26T16:35:00-04:00] [message_handler.py] Successfully forwarded service_request to monitors: {service_request_message.request_type}")
                     
                 except Exception as e:
                     # Send error back to worker
                     error_message = ErrorMessage(error=f"Error processing ServiceRequestMessage: {str(e)}")
                     await self.connection_manager.send_to_worker(worker_id, error_message)
-                    logger.error(f"[2025-05-26T16:22:00-04:00] [message_handler.py] Error processing service_request: {str(e)}")
+                    logger.error(f"[2025-05-26T16:35:00-04:00] [message_handler.py] ERROR processing service_request: {str(e)}")
+                    # Log the full exception traceback
+                    import traceback
+                    logger.error(f"[2025-05-26T16:35:00-04:00] [message_handler.py] Exception traceback: {traceback.format_exc()}")
             # The subscribe_job_notifications case has been removed
             # This functionality is now handled by the register_worker message
             case _:
