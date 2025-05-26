@@ -53,8 +53,7 @@ class A1111Connector(RESTSyncConnector):
         # The parent constructor will set job_type to 'rest'
         super().__init__()
         
-        # Log the job type for debugging
-        logger.debug(f"[a1111_connector.py __init__()] Initializing A1111 connector with job_type='{self.job_type}'")
+        # Initialize with parent constructor
         
         # Base URL for the A1111 API
         self.base_url = os.environ.get("WORKER_A1111_URL", "http://localhost:7860")
@@ -69,20 +68,14 @@ class A1111Connector(RESTSyncConnector):
         if env_job_type:
             # Only use environment variable if it matches connector_id
             if env_job_type == self.connector_id:
-                logger.debug(f"[a1111_connector.py __init__()] Environment variable WORKER_A1111_JOB_TYPE='{env_job_type}' matches connector_id")
                 self.job_type = env_job_type
             else:
-                logger.error(f"[a1111_connector.py __init__()] WARNING: Environment variable WORKER_A1111_JOB_TYPE='{env_job_type}' doesn't match connector_id='{self.connector_id}'")
-                logger.error(f"[a1111_connector.py __init__()] Forcing job_type to '{self.connector_id}' for proper job assignment")
+                logger.error(f"[a1111_connector.py] Environment variable WORKER_A1111_JOB_TYPE='{env_job_type}' doesn't match connector_id='{self.connector_id}'. Using connector_id.")
                 self.job_type = self.connector_id
-        
-        # Verify job_type after initialization
-        logger.debug(f"[a1111_connector.py __init__()] A1111 connector initialized with job_type='{self.job_type}', connector_id='{self.connector_id}'")
         
         # Ensure job_type matches connector_id for consistency
         if self.job_type != self.connector_id:
-            logger.error(f"[a1111_connector.py __init__()] WARNING: job_type='{self.job_type}' doesn't match connector_id='{self.connector_id}'")
-            logger.error(f"[a1111_connector.py __init__()] This may cause job assignment issues!")
+            logger.error(f"[a1111_connector.py] WARNING: job_type='{self.job_type}' doesn't match connector_id='{self.connector_id}'. This may cause job assignment issues!")
         
         # Override REST API connection settings with A1111-specific ones
         self.host = os.environ.get("WORKER_A1111_HOST", "localhost")
@@ -99,16 +92,12 @@ class A1111Connector(RESTSyncConnector):
         if env_job_type:
             # Only use environment variable if it matches connector_id
             if env_job_type == self.connector_id:
-                logger.debug(f"[2025-05-25T23:53:00-04:00] Environment variable A1111_JOB_TYPE='{env_job_type}' matches connector_id")
                 self.job_type = env_job_type
             else:
-                logger.error(f"[2025-05-25T23:53:00-04:00] Environment job type '{env_job_type}' doesn't match connector_id '{self.connector_id}'")
-                logger.error(f"[2025-05-25T23:53:00-04:00] Forcing job_type to match connector_id '{self.connector_id}' for proper job assignment")
+                logger.error(f"[a1111_connector.py] Environment job type '{env_job_type}' doesn't match connector_id '{self.connector_id}'. Using connector_id.")
                 # CRITICAL: Always use connector_id for job_type
                 self.job_type = self.connector_id
             
-        logger.debug(f"[2025-05-26T00:15:00-04:00] A1111Connector initialized with job_type='{self.job_type}' and connector_id='{self.connector_id}'")
-        
         # Authentication settings - use ComfyUI environment variables
         self.username = os.environ.get("WORKER_COMFYUI_USERNAME", os.environ.get("COMFYUI_USERNAME"))
         self.password = os.environ.get("WORKER_COMFYUI_PASSWORD", os.environ.get("COMFYUI_PASSWORD"))

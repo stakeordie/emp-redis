@@ -430,14 +430,11 @@ class BaseWorker:
                 case MessageType.CONNECTION_ESTABLISHED:
                     logger.debug(f"[base_worker.py handle_message()]: Connection established: {getattr(message_obj, 'message', '')}")
                 case MessageType.JOB_AVAILABLE:
-                    # [2025-05-26T00:15:00-04:00] Uncommented and enhanced JOB_AVAILABLE handling
-                    logger.debug(f"[2025-05-26T00:15:00-04:00] [base_worker.py] Received JOB_AVAILABLE message: {message_obj}")
                     # Ensure we have a JobAvailableMessage or compatible dict
                     if hasattr(message_obj, 'job_id') and hasattr(message_obj, 'job_type'):
-                        logger.debug(f"[2025-05-26T00:15:00-04:00] [base_worker.py] Processing job notification for job {message_obj.job_id} of type {message_obj.job_type}")
                         await self.handle_job_notification(websocket, cast(Any, message_obj))
                     else:
-                        logger.warning(f"[2025-05-26T00:15:00-04:00] [base_worker.py] Received JOB_AVAILABLE message with invalid format: {message_obj}")
+                        logger.warning(f"[base_worker.py handle_message()]: Received JOB_AVAILABLE message with invalid format")
                 case MessageType.JOB_ASSIGNED:
                     await self.handle_job_assigned(websocket, cast(Any, message_obj))
                 
@@ -518,7 +515,7 @@ class BaseWorker:
                 logger.debug(f"[2025-05-26T01:15:00-04:00] Ignoring job notification - worker is busy. Status: {self.status}")
                 return
                 
-            # [2025-05-26T00:20:00-04:00] Enhanced job detail extraction to handle different message object types
+            # Extract job details safely with fallbacks
             job_id = None
             job_type = 'unknown'
             priority = 0
@@ -537,36 +534,29 @@ class BaseWorker:
                 job_type = getattr(message_obj, 'job_type', 'unknown')
                 priority = getattr(message_obj, 'priority', 0)
                 last_failed_worker = getattr(message_obj, 'last_failed_worker', None)
-                
-            # Debug log the message object type
-            logger.debug(f"[2025-05-26T00:20:00-04:00] [base_worker.py] Message object type: {type(message_obj)}")
             
             # Log job notification with timestamp for tracking
-            logger.debug(f"[2025-05-26T00:20:00-04:00] [base_worker.py] Processing job notification. Job ID: {job_id}, Job Type: {job_type}, Priority: {priority}")
+            logger.debug(f"[base_worker.py handle_job_notification()]: Processing job notification. Job ID: {job_id}, Job Type: {job_type}, Priority: {priority}")
             
             # Check if job ID is present
             if not job_id:
-                logger.error(f"[2025-05-26T00:20:00-04:00] [base_worker.py] Missing job ID in job notification message: {message_obj}")
                 # Try one more approach - direct attribute access if the object has a string representation with job_id
                 if hasattr(message_obj, '__str__'):
                     msg_str = str(message_obj)
                     if 'job_id' in msg_str:
-                        logger.debug(f"[2025-05-26T00:20:00-04:00] [base_worker.py] Attempting to extract job_id from string representation")
                         import re
                         job_id_match = re.search(r"job_id='([^']+)'|job_id=\"([^\"]+)\"", msg_str)
                         if job_id_match:
                             job_id = job_id_match.group(1) or job_id_match.group(2)
-                            logger.debug(f"[2025-05-26T00:20:00-04:00] [base_worker.py] Extracted job_id from string: {job_id}")
                             
                             # Also try to extract job_type
                             job_type_match = re.search(r"job_type='([^']+)'|job_type=\"([^\"]+)\"", msg_str)
                             if job_type_match:
                                 job_type = job_type_match.group(1) or job_type_match.group(2)
-                                logger.debug(f"[2025-05-26T00:20:00-04:00] [base_worker.py] Extracted job_type from string: {job_type}")
                 
                 # If still no job_id, return
                 if not job_id:
-                    logger.error(f"[2025-05-26T00:20:00-04:00] [base_worker.py] Failed to extract job_id using all methods")
+                    logger.error(f"[base_worker.py handle_job_notification()]: Failed to extract job_id from message")
                     return
             
             # [2025-05-25T20:45:00-04:00] Enhanced debug logging for connector matching
