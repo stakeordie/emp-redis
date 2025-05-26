@@ -50,7 +50,12 @@ class RESTSyncConnector(ConnectorInterface):
     VERSION = "2025-04-17-14:20-improved-timeout-handling"
     
     def __init__(self):
-        """Initialize the REST synchronous connector"""
+        """Initialize the REST synchronous connector
+        
+        This is an abstract base class initialization. Concrete subclasses must:
+        1. Call super().__init__() to initialize base settings
+        2. Set self.job_type to match their connector_id
+        """
         # REST API connection settings (support both namespaced and non-namespaced)
         self.base_url = os.environ.get("WORKER_REST_BASE_URL", os.environ.get("REST_BASE_URL", "http://localhost:8000"))
         self.endpoint = os.environ.get("WORKER_REST_ENDPOINT", os.environ.get("REST_ENDPOINT", "/api/process"))
@@ -70,7 +75,11 @@ class RESTSyncConnector(ConnectorInterface):
             sock_read=self.timeout
         )
         
-        self.job_type = os.environ.get("WORKER_REST_JOB_TYPE", os.environ.get("REST_JOB_TYPE", "rest"))
+        # [2025-05-25T23:55:00-04:00] CRITICAL FIX: Initialize job_type as empty string
+        # Base class should not set a default job_type as it's an abstract class
+        # Each concrete connector class MUST set its own job_type matching its connector_id
+        # This empty string will cause an error if get_job_type() is called without being overridden
+        self.job_type: str = ""
         
         # Authentication settings
         self.api_key = os.environ.get("WORKER_REST_API_KEY", os.environ.get("REST_API_KEY"))
@@ -149,8 +158,26 @@ class RESTSyncConnector(ConnectorInterface):
         """Get the job type that this connector handles
         
         Returns:
-            str: The job type string
+            str: The job type string that should match connector_id
+            
+        Raises:
+            NotImplementedError: If job_type is empty (base class shouldn't be used directly)
         """
+        # [2025-05-25T23:55:00-04:00] CRITICAL FIX: Prevent base class from being used directly
+        # Each concrete connector MUST set its own job_type matching its connector_id
+        if not self.job_type:  # Check for empty string
+            # This will happen if a concrete subclass doesn't set job_type
+            raise NotImplementedError(
+                "RESTSyncConnector is a base class and should not be used directly. "
+                "Concrete connector classes must set job_type to match connector_id."
+            )
+            
+        # [2025-05-25T23:55:00-04:00] Ensure job_type is a string to satisfy type checking
+        if not isinstance(self.job_type, str):
+            # Convert to string if somehow it's not a string
+            self.job_type = str(self.job_type)
+            logger.warning(f"[rest_sync_connector.py] job_type was not a string, converted to: '{self.job_type}'")
+            
         return self.job_type
     
     def get_capabilities(self) -> Dict[str, Any]:
