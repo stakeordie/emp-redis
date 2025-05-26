@@ -668,6 +668,8 @@ class ConnectionManager(ConnectionManagerInterface):
             else:
                 message_text = str(message)
             
+            # No message size limit for client communications
+            
             # Send the original message
             await websocket.send_text(message_text)            
             # [2025-05-20T19:23:00-04:00] Check message type - we no longer need to send complete_job messages here
@@ -773,12 +775,12 @@ class ConnectionManager(ConnectionManagerInterface):
             # [2025-05-23T09:15:46-04:00] Enhanced message size logging to debug WebSocket size issues
             msg_size = len(message_text)
             
-            # Always log message size            
-            # [2025-05-23T09:15:46-04:00] Added message size limit check to prevent WebSocket errors
-            # WebSocket protocol typically has a message size limit around 1MB
-            if msg_size > 1000000:  # 1MB limit
-                logger.error(f"[connection_manager.py send_to_worker()] Message too large to send: {msg_size} bytes. Skipping to prevent WebSocket disconnection.")
-                return False
+            # [2025-05-26T17:25:00-04:00] Increased message size limit to handle larger payloads
+            # Remove the limit entirely for hub to worker communications
+            # This allows large service request messages to be sent without truncation
+            # Only log a warning for extremely large messages (over 10MB) for monitoring purposes
+            if msg_size > 10000000:  # 10MB warning threshold
+                logger.warning(f"[connection_manager.py send_to_worker()] Very large message being sent: {msg_size} bytes. This may cause performance issues.")
                 
             # Actually send the message
             await websocket.send_text(message_text)
@@ -1642,6 +1644,8 @@ class ConnectionManager(ConnectionManagerInterface):
                 # Fallback to string representation
                 print(f"WARNING: Message type {type(message)} has no json method")
                 message_text = str(message)
+            
+            # No message size limit for monitor communications
             
             # Send the serialized message
             await websocket.send_text(message_text)
