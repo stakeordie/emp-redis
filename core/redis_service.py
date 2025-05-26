@@ -708,6 +708,20 @@ class RedisService(RedisServiceInterface):
             # Add position to job data with explicit type
             job_data["position"] = position
         
+        # [2025-05-26T00:25:00-04:00] Add retry_count as failures to the job status response
+        if "retry_count" in job_data:
+            try:
+                # Convert retry_count to int and add as failures
+                retry_count = int(job_data["retry_count"])
+                job_data["failures"] = retry_count
+                logger.debug(f"[2025-05-26T00:25:00-04:00] [redis_service.py] Added failure count {retry_count} to job status for job {job_id}")
+            except (ValueError, TypeError) as e:
+                logger.error(f"[2025-05-26T00:25:00-04:00] [redis_service.py] Error converting retry_count to int for job {job_id}: {str(e)}")
+                job_data["failures"] = 0
+        else:
+            # If retry_count is not present, set failures to 0
+            job_data["failures"] = 0
+            
         return job_data
     
     def register_worker(self, worker_id: str, capabilities: Optional[Dict[str, Any]] = None) -> bool:

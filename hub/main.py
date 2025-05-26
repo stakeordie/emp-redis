@@ -123,6 +123,7 @@ class JobStatusResponse(BaseModel):
     error: Optional[str] = None
     position_description: Optional[str] = None
     payload: Optional[Dict[str, Any]] = None  # [2025-05-24T11:45:00-04:00] Added to include job payload in response
+    failures: Optional[int] = None  # [2025-05-26T00:25:00-04:00] Added to track job failure count
     
     @validator('display_position', always=True)
     def set_display_position(cls, v, values):
