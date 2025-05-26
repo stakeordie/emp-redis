@@ -480,8 +480,8 @@ class BaseWorker:
                 #     original_id = getattr(message_obj, 'original_id', None)
                 #     original_type = getattr(message_obj, 'original_type', None)
                 #     logger.debug(f"[base_worker.py handle_message()]: Received ACK from server for {original_type} message with ID {original_id}")
-                # case _:
-                #     logger.debug(f"[base_worker.py handle_message()]: Received unhandled message type: {message_type}")
+                case _:
+                    logger.debug(f"[base_worker.py handle_message()]: Received unhandled message type: {message_type}")
         except json.JSONDecodeError:
             logger.error(f"[base_worker.py handle_message()]: Invalid JSON: {message[:100]}...")
         except Exception as e:
