@@ -19,6 +19,14 @@ All notable changes to the EMP Redis project will be documented in this file.
   - Helps with debugging and understanding what's being requested from services
 
 ### Changed
+- [2025-05-25T23:55:00-04:00] Fixed RESTSyncConnector to remove default 'rest' job type:
+  - Removed 'rest' as default job_type in the base connector class
+  - Improved type safety with proper string annotations
+  - Added comprehensive documentation for concrete subclasses
+  - Enhanced error messages to guide proper implementation
+  - Ensured job_type must match connector_id for proper job assignment
+  - Fixed root cause of A1111 connector job assignment issues
+
 - [2025-05-25T21:55:00-04:00] Fixed A1111 connector job type mismatch causing job assignment issues:
   - Ensured job_type always matches connector_id in A1111Connector
   - Modified get_job_type() to always return connector_id
