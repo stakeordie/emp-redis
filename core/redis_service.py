@@ -201,6 +201,8 @@ class RedisService(RedisServiceInterface):
 
     # Job operations
     def add_job(self, job_id: str, job_type: str, priority: int, job_request_payload: Union[Dict[str, Any], str], client_id: Optional[str] = None) -> Dict[str, Any]:
+        # [2025-05-26T00:30:00-04:00] Add detailed debug logging for job type tracking
+        logger.debug(f"[2025-05-26T00:30:00-04:00] [redis_service.py] Adding job {job_id} with job_type: '{job_type}'")
         """Add a job to the queue
         
         Args:
@@ -252,6 +254,9 @@ class RedisService(RedisServiceInterface):
             "created_at": str(time.time()),
         }
         
+        # [2025-05-26T00:30:00-04:00] Log job data for debugging
+        logger.debug(f"[2025-05-26T00:30:00-04:00] [redis_service.py] Job data for {job_id}: job_type='{job_type}', priority={priority}, status='pending'")
+        
         if client_id:
             job_data["client_id"] = client_id
             
@@ -287,6 +292,7 @@ class RedisService(RedisServiceInterface):
 
         
         # Notify idle workers about the new job
+        logger.debug(f"[2025-05-26T00:30:00-04:00] [redis_service.py] Notifying idle workers about new job {job_id} of type '{job_type}'")
         self.notify_idle_workers_of_job(job_id, job_type, job_request_payload=job_request_payload_json)
         
 
@@ -1203,8 +1209,11 @@ class RedisService(RedisServiceInterface):
         try:
             result_jobs = []
             
+            logger.debug(f"[2025-05-26T00:25:00-04:00] [redis_service.py] Searching for pending jobs of type: {job_type}")
+            
             # Get all jobs from priority queue
             priority_jobs = self.client.zrange(PRIORITY_QUEUE, 0, -1, withscores=True, desc=True)
+            logger.debug(f"[2025-05-26T00:25:00-04:00] [redis_service.py] Found {len(priority_jobs)} total jobs in priority queue")
             
             # Check each job to see if it's pending and of the right type
             for job_id, composite_score in priority_jobs:
@@ -1218,6 +1227,9 @@ class RedisService(RedisServiceInterface):
                 status, current_job_type = pipe.execute()
                 
                 
+                # Log job type comparison for debugging
+                logger.debug(f"[2025-05-26T00:25:00-04:00] [redis_service.py] Job {job_id_str} - status: {status}, job_type: {current_job_type}, looking for type: {job_type}")
+                
                 if status == "pending" and current_job_type == job_type: #AI HELP NEEDS FIXING
                     # Get all job data
                     job_data = self.client.hgetall(job_key)
@@ -1225,7 +1237,12 @@ class RedisService(RedisServiceInterface):
                         job_dict: Dict[str, Any] = job_data
                         job_dict["id"] = job_id_str  # Add the job ID to the dict
                         result_jobs.append(job_dict)
+                        logger.debug(f"[2025-05-26T00:25:00-04:00] [redis_service.py] ✅ Matched job {job_id_str} of type {current_job_type}")
+                else:
+                    if status == "pending":
+                        logger.debug(f"[2025-05-26T00:25:00-04:00] [redis_service.py] ❌ Job type mismatch: {current_job_type} ≠ {job_type} for job {job_id_str}")
                             
+            logger.debug(f"[2025-05-26T00:25:00-04:00] [redis_service.py] Found {len(result_jobs)} pending jobs of type {job_type}")
             return result_jobs
             
         except Exception as e:

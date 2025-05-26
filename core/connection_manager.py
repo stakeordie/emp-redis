@@ -1723,7 +1723,12 @@ class ConnectionManager(ConnectionManagerInterface):
             
             # Store worker capabilities
             if capabilities:
+                logger.debug(f"[2025-05-26T00:20:00-04:00] [connection_manager.py] Storing capabilities for worker {worker_id}: {capabilities}")
                 self.worker_capabilities[worker_id] = capabilities
+                
+                # Extract and log supported job types for debugging
+                supported_job_types = capabilities.get('supported_job_types', [])
+                logger.debug(f"[2025-05-26T00:20:00-04:00] [connection_manager.py] Worker {worker_id} supports job types: {supported_job_types}")
             
             # Initialize worker info
             self.worker_info[worker_id] = {
@@ -1740,6 +1745,10 @@ class ConnectionManager(ConnectionManagerInterface):
             self.worker_status[worker_id] = "idle"
             self.worker_last_heartbeat[worker_id] = current_time
             
+            logger.debug(f"[2025-05-26T00:20:00-04:00] [connection_manager.py] Successfully registered worker {worker_id} with status 'idle'")
+            
+            # Log successful registration
+            logger.debug(f"[2025-05-26T00:20:00-04:00] [connection_manager.py] Worker registration complete for {worker_id}")
             return True
             
         except Exception as e:
