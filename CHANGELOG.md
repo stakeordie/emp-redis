@@ -5,6 +5,15 @@ All notable changes to the EMP Redis project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- [2025-05-26T19:30:00-04:00] Implemented robust chunked message handling system:
+  - Added hash-based chunking mechanism for large WebSocket messages
+  - Implemented chunk storage and reassembly in BaseWorker
+  - Added periodic cleanup of stale chunked messages
+  - Synchronized chunk format between ConnectionManager and BaseWorker
+  - Ensured data integrity through hash verification
+  - Fixed WebSocket message size limitations for large payloads
+  - Added detailed logging for chunk processing and debugging
+
 - [2025-05-26T18:15:00-04:00] Fixed WebSocket message size issues for A1111 connector:
   - Increased message size limit from 1MB to 10MB for WebSocket communications
   - Added base64 image stripping in service request messages to reduce message size
