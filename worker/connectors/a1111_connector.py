@@ -49,9 +49,9 @@ class A1111Connector(RESTSyncConnector):
     
     def __init__(self):
         """Initialize the A1111 connector"""
-        # [2025-05-25T20:40:00-04:00] Set job_type BEFORE calling super().__init__()
-        # This ensures the job type is set before any initialization happens
-        self.job_type = 'a1111'  # Explicitly set to match connector_id
+        # [2025-05-25T23:53:00-04:00] Call parent constructor first
+        # The parent constructor will set job_type to 'rest'
+        super().__init__()
         
         # Log the job type for debugging
         logger.debug(f"[a1111_connector.py __init__()] Initializing A1111 connector with job_type='{self.job_type}'")
@@ -59,18 +59,22 @@ class A1111Connector(RESTSyncConnector):
         # Base URL for the A1111 API
         self.base_url = os.environ.get("WORKER_A1111_URL", "http://localhost:7860")
         
-        # [2025-05-25T21:55:00-04:00] Ensure job_type matches connector_id
+        # [2025-05-25T23:53:00-04:00] CRITICAL FIX: Force job_type to match connector_id
+        # This must happen AFTER super().__init__() which sets job_type to 'rest'
         # This is critical for job assignment to work correctly
         self.job_type = self.connector_id
         
         # Check if job type is overridden by environment variable
         env_job_type = os.environ.get("WORKER_A1111_JOB_TYPE", None)
         if env_job_type:
-            logger.debug(f"[a1111_connector.py __init__()] WARNING: Environment variable WORKER_A1111_JOB_TYPE='{env_job_type}' overrides default job_type='{self.job_type}'")
-            self.job_type = env_job_type
-            
-        # Call parent constructor after setting job_type
-        super().__init__()
+            # Only use environment variable if it matches connector_id
+            if env_job_type == self.connector_id:
+                logger.debug(f"[a1111_connector.py __init__()] Environment variable WORKER_A1111_JOB_TYPE='{env_job_type}' matches connector_id")
+                self.job_type = env_job_type
+            else:
+                logger.error(f"[a1111_connector.py __init__()] WARNING: Environment variable WORKER_A1111_JOB_TYPE='{env_job_type}' doesn't match connector_id='{self.connector_id}'")
+                logger.error(f"[a1111_connector.py __init__()] Forcing job_type to '{self.connector_id}' for proper job assignment")
+                self.job_type = self.connector_id
         
         # Verify job_type after initialization
         logger.debug(f"[a1111_connector.py __init__()] A1111 connector initialized with job_type='{self.job_type}', connector_id='{self.connector_id}'")
@@ -86,20 +90,22 @@ class A1111Connector(RESTSyncConnector):
         self.base_url = f"http://{self.host}:{self.port}"
         self.api_prefix = "/sdapi/v1"
         
-        # [2025-05-25T21:55:00-04:00] Reset job_type to match connector_id
+        # [2025-05-25T23:53:00-04:00] CRITICAL FIX: Force job_type to match connector_id
         # This is critical for job assignment to work correctly
         self.job_type = self.connector_id
         
         # Check if job_type is overridden by environment variables
         env_job_type = os.environ.get("WORKER_A1111_JOB_TYPE", os.environ.get("A1111_JOB_TYPE", None))
         if env_job_type:
-            # Log a warning if the environment job type doesn't match connector_id
-            if env_job_type != self.connector_id:
-                logger.error(f"[2025-05-25T21:55:00-04:00] Environment job type '{env_job_type}' doesn't match connector_id '{self.connector_id}'. This may cause job matching issues.")
-                logger.error(f"[2025-05-25T21:55:00-04:00] Forcing job_type to match connector_id '{self.connector_id}' for proper job assignment.")
-            else:
-                # Only set job_type from environment if it matches connector_id
+            # Only use environment variable if it matches connector_id
+            if env_job_type == self.connector_id:
+                logger.debug(f"[2025-05-25T23:53:00-04:00] Environment variable A1111_JOB_TYPE='{env_job_type}' matches connector_id")
                 self.job_type = env_job_type
+            else:
+                logger.error(f"[2025-05-25T23:53:00-04:00] Environment job type '{env_job_type}' doesn't match connector_id '{self.connector_id}'")
+                logger.error(f"[2025-05-25T23:53:00-04:00] Forcing job_type to match connector_id '{self.connector_id}' for proper job assignment")
+                # CRITICAL: Always use connector_id for job_type
+                self.job_type = self.connector_id
             
         logger.debug(f"[2025-05-26T00:15:00-04:00] A1111Connector initialized with job_type='{self.job_type}' and connector_id='{self.connector_id}'")
         
