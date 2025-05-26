@@ -712,8 +712,12 @@ class ConnectionManager(ConnectionManagerInterface):
     
     async def send_to_worker(self, worker_id: str, message: BaseMessage) -> bool:
         """Send a message to a specific worker"""
+        # [2025-05-26T00:15:00-04:00] Add detailed debug logging for message delivery tracking
+        logger.debug(f"[2025-05-26T00:15:00-04:00] [connection_manager.py] Attempting to send message to worker {worker_id}")
+        
         # Check worker connection status
         if worker_id not in self.worker_connections:
+            logger.debug(f"[2025-05-26T00:15:00-04:00] [connection_manager.py] ❌ Worker {worker_id} not connected - message delivery failed")
             return False
         
         # Get WebSocket connection
@@ -781,21 +785,24 @@ class ConnectionManager(ConnectionManagerInterface):
                 return False
                 
             # Actually send the message
+            logger.debug(f"[2025-05-26T00:15:00-04:00] [connection_manager.py] Sending message to worker {worker_id}: {log_details}, size={msg_size} bytes")
             await websocket.send_text(message_text)
             
             # [2025-05-25T14:35:00-04:00] Added missing return statement for successful path
+            logger.debug(f"[2025-05-26T00:15:00-04:00] [connection_manager.py] ✅ Successfully sent message to worker {worker_id}")
             return True
             
         except RuntimeError as e:
             error_msg = str(e)
             if "WebSocket is not connected" in error_msg or "Connection is closed" in error_msg:
+                logger.debug(f"[2025-05-26T00:15:00-04:00] [connection_manager.py] ❌ WebSocket connection closed for worker {worker_id} - disconnecting worker")
                 await self.disconnect_worker(worker_id)
             else:
-                logger.error(f"[WORKER-MSG] Runtime error sending to worker {worker_id}: {error_msg}")
+                logger.error(f"[2025-05-26T00:15:00-04:00] [connection_manager.py] ❌ Runtime error sending to worker {worker_id}: {error_msg}")
             return False
                 
         except Exception as e:
-            logger.error(f"[WORKER-MSG] Error sending to worker {worker_id}: {str(e)}")
+            logger.error(f"[2025-05-26T00:15:00-04:00] [connection_manager.py] ❌ Error sending to worker {worker_id}: {str(e)}")
             return False
     
     async def broadcast_to_clients(self, message: Any) -> int:
