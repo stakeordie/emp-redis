@@ -201,11 +201,48 @@ class A1111Connector(RESTSyncConnector):
             # This allows the worker to accept A1111 jobs and queue them until A1111 is available
             return True
         except Exception as e:
-            logger.error(f"[2025-05-25T21:50:00-04:00] Error initializing A1111 connector: {str(e)}")
-            # Still return True to allow the connector to be used
-            # The health check will fail when jobs are assigned if A1111 is not available
-            return True
+            logger.error(f"[a1111_connector.py initialize] Error initializing A1111 connector: {str(e)}")
+            return False
     
+    # [2025-05-26T18:10:00-04:00] Add method to strip base64 images from payloads
+    def _strip_base64_images(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Strip base64-encoded images from the payload to reduce message size
+        
+        Args:
+            payload: The original payload that may contain base64-encoded images
+            
+        Returns:
+            Dict[str, Any]: A copy of the payload with base64 images replaced by placeholders
+        """
+        # Make a deep copy of the payload to avoid modifying the original
+        import copy
+        stripped_payload = copy.deepcopy(payload)
+        
+        # Check for init_images in the payload (used in img2img)
+        if "init_images" in stripped_payload and isinstance(stripped_payload["init_images"], list):
+            # Replace each base64 image with a placeholder
+            for i, image in enumerate(stripped_payload["init_images"]):
+                if isinstance(image, str) and len(image) > 1000:  # Likely a base64 image
+                    image_size = len(image)
+                    stripped_payload["init_images"][i] = f"<BASE64_IMAGE_{i}_{image_size}_bytes>"
+                    logger.debug(f"[2025-05-26T18:10:00-04:00] [a1111_connector.py] Stripped base64 image of {image_size} bytes from init_images[{i}]")
+        
+        # Check for image_variable in the payload (another way to specify images)
+        if "image_variable" in stripped_payload and stripped_payload["image_variable"] in stripped_payload:
+            image_var = stripped_payload["image_variable"]
+            if isinstance(stripped_payload[image_var], str) and len(stripped_payload[image_var]) > 1000:
+                image_size = len(stripped_payload[image_var])
+                stripped_payload[image_var] = f"<BASE64_IMAGE_{image_var}_{image_size}_bytes>"
+                logger.debug(f"[2025-05-26T18:10:00-04:00] [a1111_connector.py] Stripped base64 image of {image_size} bytes from {image_var}")
+        
+        # Check for mask in the payload (used in inpainting)
+        if "mask" in stripped_payload and isinstance(stripped_payload["mask"], str) and len(stripped_payload["mask"]) > 1000:
+            mask_size = len(stripped_payload["mask"])
+            stripped_payload["mask"] = f"<BASE64_MASK_{mask_size}_bytes>"
+            logger.debug(f"[2025-05-26T18:10:00-04:00] [a1111_connector.py] Stripped base64 mask of {mask_size} bytes")
+        
+        return stripped_payload
+        
     def get_job_type(self) -> str:
         """Get the job type that this connector handles
         
@@ -321,6 +358,10 @@ class A1111Connector(RESTSyncConnector):
                 # Log with a very distinctive message to ensure we can see it in the logs
                 logger.debug(f"[a1111_connector.py process_job] [2025-05-25T11:15:00-04:00] BROADCASTING SERVICE REQUEST for job {job_id} to endpoint {endpoint}")
                 
+                # [2025-05-26T18:10:00-04:00] Strip large base64 images from the payload for the service request message
+                # This prevents the service request message from becoming too large
+                stripped_payload = self._strip_base64_images(request_payload)
+                
                 # Create a message that will be sent directly to the websocket
                 # This bypasses the Hub's message routing and goes directly to the monitor
                 service_request_message = {
@@ -334,7 +375,7 @@ class A1111Connector(RESTSyncConnector):
                         "endpoint": endpoint,
                         "method": method.upper(),
                         "url": url,
-                        "payload": request_payload
+                        "payload": stripped_payload
                     }
                 }
                 

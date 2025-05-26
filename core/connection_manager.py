@@ -773,12 +773,17 @@ class ConnectionManager(ConnectionManagerInterface):
             # [2025-05-23T09:15:46-04:00] Enhanced message size logging to debug WebSocket size issues
             msg_size = len(message_text)
             
-            # Always log message size            
-            # [2025-05-23T09:15:46-04:00] Added message size limit check to prevent WebSocket errors
-            # WebSocket protocol typically has a message size limit around 1MB
-            if msg_size > 1000000:  # 1MB limit
-                logger.error(f"[connection_manager.py send_to_worker()] Message too large to send: {msg_size} bytes. Skipping to prevent WebSocket disconnection.")
-                return False
+            # [2025-05-26T18:15:00-04:00] Increased message size limit for WebSocket communications
+            # Only log a warning for extremely large messages (over 10MB) for monitoring purposes
+            # This allows large service request messages with base64-encoded images to be sent without truncation
+            if msg_size > 10000000:  # 10MB warning threshold
+                logger.warning(f"[2025-05-26T18:15:00-04:00] [connection_manager.py send_to_worker()] Very large message being sent: {msg_size} bytes. This may cause performance issues but will be allowed.")
+                
+            # Log the message size for debugging
+            logger.debug(f"[2025-05-26T18:15:00-04:00] [connection_manager.py send_to_worker()] Sending message of size {msg_size} bytes to worker {worker_id}")
+            
+            # No hard limit on message size - let the WebSocket protocol handle it
+            # This allows large A1111 job payloads with base64-encoded images to be sent
                 
             # Actually send the message
             await websocket.send_text(message_text)
