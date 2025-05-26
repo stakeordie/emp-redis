@@ -5,6 +5,14 @@ All notable changes to the EMP Redis project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- [2025-05-26T17:55:00-04:00] Improved WebSocket connection handling:
+  - Added connection state tracking to prevent duplicate close attempts
+  - Added checks to prevent sending messages to closing connections
+  - Fixed "Cannot call 'send' once a close message has been sent" errors
+  - Fixed "Unexpected ASGI message 'websocket.close'" errors
+  - Improved error logging with timestamps and file information
+  - Added proper cleanup in finally blocks to prevent connection leaks
+
 - [2025-05-26T17:25:00-04:00] Removed WebSocket message size limits:
   - Removed hard size limits for all WebSocket communications
   - Added warning logs for messages over 10MB for monitoring purposes
