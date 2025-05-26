@@ -461,16 +461,19 @@ class BaseWorker:
             logger.error(f"[base_worker.py handle_message()]: Error handling message: {str(e)}")
 
     async def handle_job_notification(self, websocket, message_obj):
-        """Handle job notification message from Redis Hub
+        """Handle job notification message from the Redis Hub
         
         Args:
-            websocket: The WebSocket connection to the Redis Hub
-            message_obj: The job notification message object
+            websocket: The websocket connection
+            message_obj: The message object
         """
         try:
+            # [2025-05-26T01:15:00-04:00] Enhanced debug logging for job notification handling
+            logger.info(f"[2025-05-26T01:15:00-04:00] Received job notification: {message_obj}")
+            
             # First check if worker is idle before proceeding
             if self.status != WorkerStatus.IDLE:
-                logger.info(f"[base_worker.py handle_job_notification()]: Ignoring job notification - worker is busy")
+                logger.info(f"[2025-05-26T01:15:00-04:00] Ignoring job notification - worker is busy. Status: {self.status}")
                 return
                 
             # Extract job details safely with fallbacks
@@ -486,6 +489,32 @@ class BaseWorker:
                 job_type = message_obj.get('job_type', 'unknown')
                 priority = message_obj.get('priority', 0)
                 last_failed_worker = message_obj.get('last_failed_worker')
+            
+            # Log job notification with timestamp for tracking
+            logger.info(f"[2025-05-26T01:15:00-04:00] Processing job notification. Job ID: {job_id}, Job Type: {job_type}, Priority: {priority}")
+            
+            # Check if job ID is present
+            if not job_id:
+                logger.error(f"[2025-05-26T01:15:00-04:00] Missing job ID in job notification message: {message_obj}")
+                return
+            
+            # [2025-05-26T01:15:00-04:00] Enhanced debug logging for connector matching
+            available_connectors = list(self.connectors.keys())
+            logger.info(f"[2025-05-26T01:15:00-04:00] Checking if job type '{job_type}' is in available connectors: {available_connectors}")
+            
+            # Check each connector's job_type and connector_id for debugging
+            for connector_key, connector in self.connectors.items():
+                try:
+                    connector_id = connector.connector_id if hasattr(connector, 'connector_id') else 'unknown'
+                    connector_job_type = connector.get_job_type() if hasattr(connector, 'get_job_type') else 'unknown'
+                    logger.info(f"[2025-05-26T01:15:00-04:00] Connector key='{connector_key}', connector_id='{connector_id}', job_type='{connector_job_type}'")
+                except Exception as e:
+                    logger.error(f"[2025-05-26T01:15:00-04:00] Error getting connector info: {e}")
+            
+            # Check if job type is supported
+            if job_type not in self.connectors:
+                logger.warning(f"[2025-05-26T01:15:00-04:00] Unsupported job type: '{job_type}'. Available connectors: {available_connectors}")
+                return
             elif hasattr(message_obj, 'job_id'):
                 # It has direct attributes
                 job_id = message_obj.job_id
@@ -560,13 +589,26 @@ class BaseWorker:
         Args:
             websocket: The WebSocket connection to the Redis Hub
             message_obj: The job assigned message object
-        """        
+        """
+        # [2025-05-25T18:45:00-04:00] Completely rewritten method to fix syntax errors
+        # and ensure proper A1111 job processing
+        
+        # Variables to track job info
+        job_id = None
+        job_type = None
+        payload = None
+        connector = None
+        
         try:
+            # Enhanced debug logging for job assignment
+            logger.info(f"[2025-05-25T18:45:00-04:00] Received job assignment message: {message_obj}")
+            
             # Extract job details safely with fallbacks
             if isinstance(message_obj, dict):
-                job_id = message_obj.get("job_id")
-                job_type = message_obj.get("job_type", "unknown")
-                payload = message_obj.get("params", {})
+                # It's a dictionary
+                job_id = message_obj.get('job_id')
+                job_type = message_obj.get('job_type')
+                payload = message_obj.get('params', {})
             else:
                 # Using explicit try/except to handle attribute access safely
                 try:
@@ -575,20 +617,48 @@ class BaseWorker:
                     job_id = None
                     
                 try:
-                    job_type = message_obj.job_type if hasattr(message_obj, "job_type") else "unknown"
+                    job_type = message_obj.job_type if hasattr(message_obj, "job_type") else None
                 except (AttributeError, TypeError):
-                    job_type = "unknown"
+                    job_type = None
                     
                 try:
                     payload = message_obj.params if hasattr(message_obj, "params") else {}
                 except (AttributeError, TypeError):
                     payload = {}
             
-            # Ensure job_id is not None
-            if job_id is None:
-                logger.error(f"[base_worker.py handle_job_assigned()]: Cannot process job: missing job_id")
+            # Log job assignment with timestamp for tracking
+            logger.info(f"[2025-05-25T18:45:00-04:00] Processing job assignment. Job ID: {job_id}, Job Type: {job_type}")
+            
+            # Check if job ID is present
+            if not job_id:
+                logger.error(f"[2025-05-25T18:45:00-04:00] Missing job ID in job assigned message: {message_obj}")
                 return
-                        
+            
+            # Check if job type is present
+            if not job_type:
+                logger.error(f"[2025-05-25T18:45:00-04:00] Missing job type in job assigned message: {message_obj}")
+                return
+            
+            # Enhanced debug logging for connector matching
+            available_connectors = list(self.connectors.keys())
+            logger.info(f"[2025-05-25T18:45:00-04:00] Checking if job type '{job_type}' is in available connectors: {available_connectors}")
+            
+            # Check each connector's job_type and connector_id for debugging
+            for connector_key, connector_instance in self.connectors.items():
+                try:
+                    connector_id = connector_instance.connector_id if hasattr(connector_instance, 'connector_id') else 'unknown'
+                    connector_job_type = connector_instance.get_job_type() if hasattr(connector_instance, 'get_job_type') else 'unknown'
+                    logger.info(f"[2025-05-25T18:45:00-04:00] Connector key='{connector_key}', connector_id='{connector_id}', job_type='{connector_job_type}'")
+                except Exception as e:
+                    logger.error(f"[2025-05-25T18:45:00-04:00] Error getting connector info: {e}")
+            
+            # Check if job type is supported
+            if job_type not in self.connectors:
+                error_msg = f"Unsupported job type: {job_type}"
+                logger.error(f"[2025-05-25T18:45:00-04:00] {error_msg}. Available connectors: {available_connectors}")
+                await self.send_job_failed(websocket, job_id, error_msg)
+                return
+            
             # Update worker state
             self.status = WorkerStatus.BUSY
             self.current_job_id = job_id
@@ -600,164 +670,117 @@ class BaseWorker:
                 capabilities={"job_id": job_id}
             )
             await websocket.send(busy_status.model_dump_json())
+            logger.info(f"[2025-05-25T18:45:00-04:00] Sent busy status update for job {job_id}")
             
             # Check if connectors are initialized
             if self.connectors is None:
-                logger.error(f"[base_worker.py handle_job_assigned()] Connectors not initialized yet")
+                error_msg = "Worker connectors not initialized"
+                logger.error(f"[2025-05-25T18:45:00-04:00] {error_msg}")
                 
                 # Send error progress update
                 await self.send_progress_update(
-                    websocket, job_id, 0, "error", 
-                    "Worker connectors not initialized"
+                    websocket, job_id, 0, "error", error_msg
                 )
                 
-                # Send job failure message using FailJobMessage
-                # Updated: 2025-04-17T15:15:00-04:00 - Using FailJobMessage with detailed logging
-                job_id_str = str(job_id) if job_id is not None else "unknown_job"
-                fail_message = FailJobMessage(
-                    job_id=job_id_str,
-                    worker_id=self.worker_id,
-                    error="Worker connectors not initialized"
-                )
-                
-                # Add detailed logging to verify the message is being sent
-                fail_message_json = fail_message.model_dump_json()
-                logger.error(f"[base_worker.py handle_job_assigned()]: SENDING FAIL_JOB MESSAGE: {fail_message_json}")
-                
-                # Send the message
-                await websocket.send(fail_message_json)
-                logger.error(f"[base_worker.py handle_job_assigned()]: Sent FailJobMessage for job {job_id_str} to be requeued")
-                
-                # Reset worker state
-                self.status = WorkerStatus.IDLE
-                self.current_job_id = None
+                # Send job failure message
+                await self.send_job_failed(websocket, job_id, error_msg)
                 return
             
-            # [2025-05-25T22:37:00-04:00] Added detailed debug logging for connector selection
             # Get the appropriate connector for this job type
-            logger.info(f"[base_worker.py handle_job_assigned() DEBUG] Looking for connector for job type: '{job_type}'")
-            logger.info(f"[base_worker.py handle_job_assigned() DEBUG] Available connectors: {list(self.connectors.keys())}")
-            
+            logger.info(f"[2025-05-25T18:45:00-04:00] Looking for connector for job type: '{job_type}'")
             connector = self.connectors.get(job_type)
             
             if connector is None:
-                logger.error(f"[base_worker.py handle_job_assigned()] No connector available for job type: '{job_type}'")
-                logger.error(f"[base_worker.py handle_job_assigned() DEBUG] Connector types: {list(self.connectors.keys())}")
-            else:
-                logger.info(f"[base_worker.py handle_job_assigned() DEBUG] Found connector for job type '{job_type}': {type(connector).__name__}")
+                error_msg = f"No connector available for job type: '{job_type}'"
+                logger.error(f"[2025-05-25T18:45:00-04:00] {error_msg}. Available connectors: {list(self.connectors.keys())}")
                 
                 # Send error progress update
                 await self.send_progress_update(
-                    websocket, job_id, 0, "error", 
-                    f"No connector available for job type: {job_type}"
+                    websocket, job_id, 0, "error", error_msg
                 )
                 
-                # Send job failure message using FailJobMessage
-                # Updated: 2025-04-17T15:15:00-04:00 - Using FailJobMessage with detailed logging
-                job_id_str = str(job_id) if job_id is not None else "unknown_job"
-                fail_message = FailJobMessage(
-                    job_id=job_id_str,
-                    worker_id=self.worker_id,
-                    error=f"No connector available for job type: {job_type}"
-                )
-                
-                # Add detailed logging to verify the message is being sent
-                fail_message_json = fail_message.model_dump_json()
-                logger.error(f"[base_worker.py handle_job_assigned()]: SENDING FAIL_JOB MESSAGE: {fail_message_json}")
-                
-                # Send the message
-                await websocket.send(fail_message_json)
-                logger.error(f"[base_worker.py handle_job_assigned()]: Sent FailJobMessage for job {job_id_str} to be requeued")
-                
-                # Reset worker state
-                self.status = WorkerStatus.IDLE
-                self.current_job_id = None
-                
-                # Update status back to idle
-                idle_status = WorkerStatusMessage(
-                    worker_id=self.worker_id,
-                    status="idle"
-                )
-                await websocket.send(idle_status.model_dump_json())
+                # Send job failure message
+                await self.send_job_failed(websocket, job_id, error_msg)
                 return
+                
+            # Log the connector that will be used
+            logger.info(f"[2025-05-25T18:45:00-04:00] Using connector {type(connector).__name__} for job type '{job_type}'")
             
+            # Log the job parameters
             try:
-                # [2025-05-25T22:37:00-04:00] Added detailed debug logging for job processing
-                # Log job details for debugging
-                logger.info(f"[base_worker.py handle_job_assigned() DEBUG] Processing job {job_id} of type '{job_type}'")
-                logger.info(f"[base_worker.py handle_job_assigned() DEBUG] Job payload: {payload}")
+                logger.info(f"[2025-05-25T18:45:00-04:00] Job parameters: {payload}")
+            except Exception as e:
+                logger.error(f"[2025-05-25T18:45:00-04:00] Error logging job parameters: {e}")
                 
-                # Send starting progress update
-                await self.send_progress_update(
-                    websocket, job_id, 0, "processing", 
-                    f"Starting {job_type} job"
-                )
+            # Send started progress update
+            await self.send_progress_update(
+                websocket, job_id, 0, "started", 
+                f"Starting job with {type(connector).__name__}"
+            )
+            
+            # Process the job with the connector
+            try:
+                # Process the job with the connector
+                logger.info(f"[2025-05-25T18:45:00-04:00] Processing job {job_id} with connector {type(connector).__name__}")
                 
-                # Updated: 2025-04-17T15:05:00-04:00 - Improved error handling for job completion
+                # Call the process_job method on the connector
                 result = await connector.process_job(
                     websocket, job_id, payload, 
                     lambda job_id, progress, status, message: self.send_progress_update(websocket, job_id, progress, status, message)
                 )
                 
                 # Check if the result indicates a failure
-                is_failed = False
                 if isinstance(result, dict) and result.get("status") == "failed":
-                    is_failed = True
                     error_msg = result.get("error", "Unknown error")
-                    logger.error(f"[base_worker.py handle_job_assigned()]: Job {job_id} failed: {error_msg}")
+                    logger.error(f"[2025-05-25T18:45:00-04:00] Job {job_id} failed: {error_msg}")
                     
-                    # Send error progress update if not already sent
+                    # Send error progress update
                     await self.send_progress_update(websocket, job_id, 0, "error", f"Job failed: {error_msg}")
                     
-                    # Updated: 2025-04-17T15:23:00-04:00 - Using FailJobMessage for failed jobs
-                    # Send job failure message using FailJobMessage
+                    # Send job failure message
                     job_id_str = str(job_id) if job_id is not None else "unknown_job"
                     fail_message = FailJobMessage(
                         job_id=job_id_str,
                         worker_id=self.worker_id,
                         error=error_msg
                     )
-                    
-                    # Add detailed logging to verify the message is being sent
-                    fail_message_json = fail_message.model_dump_json()
-                    logger.error(f"[base_worker.py handle_job_assigned()]: SENDING FAIL_JOB MESSAGE FOR NORMAL FAILURE: {fail_message_json}")
-                    
-                    # Send the message
-                    await websocket.send(fail_message_json)
-                    logger.error(f"[base_worker.py handle_job_assigned()]: Sent FailJobMessage for job {job_id_str} to be requeued")
+                    await websocket.send(fail_message.model_dump_json())
+                    logger.error(f"[2025-05-25T18:45:00-04:00] Sent failure message for job {job_id}")
                 else:
-                    # Only send 100% completion update for successful jobs
+                    # Job completed successfully
+                    logger.info(f"[2025-05-25T18:45:00-04:00] Job {job_id} completed successfully")
+                    
+                    # Send completion progress update
                     await self.send_progress_update(websocket, job_id, 100, "completed", "Job completed successfully")
                     
-                    # Send job completion message using CompleteJobMessage class only for successful jobs
+                    # Send job completion message
                     job_id_str = str(job_id) if job_id is not None else "unknown_job"
-                    completion_message = CompleteJobMessage(
+                    complete_message = CompleteJobMessage(
                         worker_id=self.worker_id,
                         job_id=job_id_str,
                         result=result
                     )
-                    await websocket.send(completion_message.model_dump_json())
-                
+                    await websocket.send(complete_message.model_dump_json())
+                    logger.info(f"[2025-05-25T18:45:00-04:00] Sent completion message for job {job_id}")
             except Exception as e:
-                logger.error(f"[base_worker.py handle_job_assigned()]: Error processing job {job_id}: {str(e)}")
+                # Log the error
+                error_msg = f"Error processing job {job_id}: {str(e)}"
+                logger.error(f"[2025-05-25T18:45:00-04:00] {error_msg}")
                 
-                # Send job failure message using FailJobMessage
-                # Updated: 2025-04-17T15:15:00-04:00 - Using FailJobMessage with detailed logging
+                # Send error progress update
+                await self.send_progress_update(
+                    websocket, job_id, 0, "error", error_msg
+                )
+                
+                # Send job failed message
                 job_id_str = str(job_id) if job_id is not None else "unknown_job"
                 fail_message = FailJobMessage(
                     job_id=job_id_str,
                     worker_id=self.worker_id,
                     error=str(e)
                 )
-                
-                # Add detailed logging to verify the message is being sent
-                fail_message_json = fail_message.model_dump_json()
-                logger.error(f"[base_worker.py handle_job_assigned()]: SENDING FAIL_JOB MESSAGE: {fail_message_json}")
-                
-                # Send the message
-                await websocket.send(fail_message_json)
-                logger.error(f"[base_worker.py handle_job_assigned()]: Sent FailJobMessage for job {job_id_str} to be requeued")
-            
+                await websocket.send(fail_message.model_dump_json())
+                logger.error(f"[2025-05-25T18:45:00-04:00] Sent failure message for job {job_id}")
             finally:
                 # Reset worker state
                 self.status = WorkerStatus.IDLE
@@ -768,11 +791,22 @@ class BaseWorker:
                     worker_id=self.worker_id,
                     status="idle"
                 )
-                await websocket.send(idle_status.model_dump_json())                
+                
+                # Send idle status update
+                await websocket.send(idle_status.model_dump_json())
+                logger.info(f"[2025-05-25T18:45:00-04:00] Worker status reset to idle after job {job_id}")
         except Exception as e:
-            logger.error(f"[base_worker.py handle_job_assigned()]: Error in handle_job_assigned: {str(e)}")
+            # Log the error
+            logger.error(f"[2025-05-25T18:45:00-04:00] Error handling job assignment: {str(e)}")
             
-            # Reset worker state if we have an error at the top level
+            # Try to send job failed message if possible
+            try:
+                if job_id:
+                    await self.send_job_failed(websocket, job_id, f"Internal error: {str(e)}")
+            except Exception as nested_e:
+                logger.error(f"[2025-05-25T18:45:00-04:00] Error sending job failure: {str(nested_e)}")
+            
+            # Reset worker state
             self.status = WorkerStatus.IDLE
             self.current_job_id = None
     

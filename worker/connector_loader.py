@@ -352,6 +352,19 @@ async def get_worker_capabilities(connectors: Dict[str, ConnectorInterface]) -> 
     # Get supported job types
     supported_job_types = get_supported_job_types(connectors)
     
+    # [2025-05-25T22:45:00-04:00] Added detailed debug logging for job type registration
+    logger.info(f"[connector_loader.py get_worker_capabilities DEBUG] Registering supported job types: {supported_job_types}")
+    
+    # Log the connector_id for each connector to verify it matches the job type
+    for job_type, connector in connectors.items():
+        try:
+            connector_id = connector.connector_id
+            logger.info(f"[connector_loader.py get_worker_capabilities DEBUG] Connector for job_type '{job_type}' has connector_id='{connector_id}'")
+            if job_type != connector_id:
+                logger.warning(f"[connector_loader.py get_worker_capabilities DEBUG] MISMATCH: job_type '{job_type}' doesn't match connector_id '{connector_id}'")
+        except Exception as e:
+            logger.error(f"[connector_loader.py get_worker_capabilities DEBUG] Error getting connector_id for job_type '{job_type}': {e}")
+    
     # Base capabilities
     capabilities = {
         "version": "1.0.0",

@@ -53,16 +53,25 @@ class A1111Connector(RESTSyncConnector):
         self.base_url = os.environ.get("WORKER_A1111_URL", "http://localhost:7860")
         super().__init__()
         
-        # [2025-05-25T15:25:00-04:00] Set job_type explicitly to avoid None attribute errors
-        self.job_type = "a1111"
+        # [2025-05-26T00:15:00-04:00] Set job_type to match connector_id for consistency
+        # This ensures the job type registered with the worker matches the connector_id
+        self.job_type = self.connector_id
         
         # Override REST API connection settings with A1111-specific ones
         self.host = os.environ.get("WORKER_A1111_HOST", "localhost")
         self.port = os.environ.get("WORKER_A1111_PORT", "3001")
         self.base_url = f"http://{self.host}:{self.port}"
         self.api_prefix = "/sdapi/v1"
-        # Use the connector name for job_type
-        self.job_type = os.environ.get("WORKER_A1111_JOB_TYPE", os.environ.get("A1111_JOB_TYPE", "a1111"))
+        
+        # Check if job_type is overridden by environment variables
+        env_job_type = os.environ.get("WORKER_A1111_JOB_TYPE", os.environ.get("A1111_JOB_TYPE", None))
+        if env_job_type:
+            # Log a warning if the environment job type doesn't match connector_id
+            if env_job_type != self.connector_id:
+                logger.warning(f"[2025-05-26T00:15:00-04:00] Environment job type '{env_job_type}' doesn't match connector_id '{self.connector_id}'. This may cause job matching issues.")
+            self.job_type = env_job_type
+            
+        logger.info(f"[2025-05-26T00:15:00-04:00] A1111Connector initialized with job_type='{self.job_type}' and connector_id='{self.connector_id}'")
         
         # Authentication settings - use ComfyUI environment variables
         self.username = os.environ.get("WORKER_COMFYUI_USERNAME", os.environ.get("COMFYUI_USERNAME"))
@@ -98,20 +107,45 @@ class A1111Connector(RESTSyncConnector):
             logger.error(f"[a1111_connector.py health_check] Health check failed: {str(e)}")
             return False
     
+    async def check_health(self) -> bool:
+        """Check if the A1111 service is running and accessible
+        
+        Returns:
+            bool: True if the service is healthy, False otherwise
+        """
+        # [2025-05-25T18:45:00-04:00] Added health check method for A1111 service
+        try:
+            # Try to connect to the A1111 API
+            logger.info(f"[2025-05-25T18:45:00-04:00] Checking A1111 health at {self.base_url}{self.api_prefix}/progress")
+            
+            async with self.session.get(f"{self.base_url}{self.api_prefix}/progress", timeout=5) as response:
+                if response.status == 200:
+                    logger.info(f"[2025-05-25T18:45:00-04:00] A1111 service is healthy (status code: 200)")
+                    return True
+                else:
+                    logger.warning(f"[2025-05-25T18:45:00-04:00] A1111 service returned status code: {response.status}")
+                    return False
+        except aiohttp.ClientConnectorError as e:
+            logger.error(f"[2025-05-25T18:45:00-04:00] A1111 service connection error: {e}")
+            return False
+        except asyncio.TimeoutError:
+            logger.error(f"[2025-05-25T18:45:00-04:00] A1111 service connection timeout")
+            return False
+        except Exception as e:
+            logger.error(f"[2025-05-25T18:45:00-04:00] A1111 health check error: {e}")
+            return False
+    
     async def initialize(self) -> bool:
         """Initialize the connector
         
         Returns:
             bool: True if initialization was successful, False otherwise
         """
-        # [2025-05-25T22:40:00-04:00] Added detailed debug logging for A1111 initialization
-        logger.info(f"[a1111_connector.py initialize DEBUG] Initializing A1111 connector")
-        logger.info(f"[a1111_connector.py initialize DEBUG] Configuration: base_url={self.base_url}, api_prefix={self.api_prefix}")
-        logger.info(f"[a1111_connector.py initialize DEBUG] Job type: {self.job_type}")
+        # [2025-05-25T18:45:00-04:00] Enhanced initialization with health check
+        logger.info(f"[2025-05-25T18:45:00-04:00] Initializing A1111 connector with base URL: {self.base_url}")
         
-        # Perform health check
-        health_status = await self.health_check()
-        logger.info(f"[a1111_connector.py initialize DEBUG] Health check result: {health_status}")
+        # Set up session
+        self.session = aiohttp.ClientSession()
         
         # Always return True for now to allow the connector to be used even if A1111 is not running
         # This allows the worker to accept A1111 jobs and queue them until A1111 is available
@@ -123,7 +157,10 @@ class A1111Connector(RESTSyncConnector):
         Returns:
             str: The job type string
         """
-        return self.job_type
+        # [2025-05-26T00:15:00-04:00] Added debug logging for job type
+        job_type = self.job_type
+        logger.debug(f"[2025-05-26T00:15:00-04:00] A1111Connector.get_job_type() returning: '{job_type}'")
+        return job_type
     
     def get_capabilities(self) -> Dict[str, Any]:
         """Get connector-specific capabilities
