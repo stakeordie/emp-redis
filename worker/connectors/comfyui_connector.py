@@ -494,7 +494,7 @@ class ComfyUIConnector(WebSocketConnector):
                         if msg_type != 'progress':
                             # Format the message to be more readable
                             message_data = data.get('data', {})
-                            logger.info(f"COMFYUI → {msg_type.upper()}: {message_data}")
+                            logger.debug(f"COMFYUI → {msg_type.upper()}: {message_data}")
                         
                         # Handle different message types
                         if msg_type == 'progress':
@@ -512,15 +512,15 @@ class ComfyUIConnector(WebSocketConnector):
                                 await send_progress_update(job_id, int(avg_progress), "processing", f"Progress across {len(node_progress)} nodes")
                                 # Only log progress updates every 10%
                                 if int(avg_progress) % 10 == 0:
-                                    logger.info(f"COMFYUI → PROGRESS: {int(avg_progress)}% complete across {len(node_progress)} nodes")
+                                    logger.debug(f"COMFYUI → PROGRESS: {int(avg_progress)}% complete across {len(node_progress)} nodes")
                                 
                         elif msg_type == 'executing' and data.get('data', {}).get('node') == None:
                             job_completed = True
                             final_result = data.get('data', {})
-                            logger.info(f"COMFYUI → COMPLETED: Workflow execution completed after {message_count} messages")
+                            logger.debug(f"COMFYUI → COMPLETED: Workflow execution completed after {message_count} messages")
                             # Show the final data in a more readable format
                             final_data = data.get('data', {})
-                            logger.info(f"COMFYUI → RESULT: {final_data}")
+                            logger.debug(f"COMFYUI → RESULT: {final_data}")
                             await send_progress_update(job_id, 100, "finalizing", "Workflow execution completed")
                             break
                             
@@ -581,7 +581,7 @@ class ComfyUIConnector(WebSocketConnector):
         # 2025-04-17-19:46 - Removed reference to undefined monitoring_start_time
         # Calculate time since the beginning of the method using last_message_time as reference
         total_time = time.time() - last_message_time
-        logger.info(f"[comfyui_connector.py _monitor_service_progress] COMFYUI_STATUS: Monitoring completed successfully after {total_time:.1f}s with {message_count} messages")
+        logger.debug(f"[comfyui_connector.py _monitor_service_progress] COMFYUI_STATUS: Monitoring completed successfully after {total_time:.1f}s with {message_count} messages")
         
         return final_result or {}
     
@@ -616,12 +616,12 @@ class ComfyUIConnector(WebSocketConnector):
         """
         # 2025-04-25-18:00 - Updated to better handle connection failures
         process_start_time = time.time()
-        logger.info(f"[comfyui_connector.py _process_service_job] COMFYUI_STATUS: Processing ComfyUI job {job_id}")
+        logger.debug(f"[comfyui_connector.py _process_service_job] COMFYUI_STATUS: Processing ComfyUI job {job_id}")
         
         # Log payload size but not full content which could be large
         if isinstance(payload, dict) and 'prompt' in payload:
             node_count = len(payload.get('prompt', {}))
-            logger.info(f"[comfyui_connector.py _process_service_job] COMFYUI_STATUS: Job payload contains {node_count} nodes")
+            logger.debug(f"[comfyui_connector.py _process_service_job] COMFYUI_STATUS: Job payload contains {node_count} nodes")
         
         try:
             # Check for existing connection errors before even trying to connect
@@ -634,9 +634,9 @@ class ComfyUIConnector(WebSocketConnector):
             # Test the connection before processing the job - will raise exception if connection fails
             # 2025-04-25-18:00 - validate_connection() now raises exceptions on connection failures
             try:
-                logger.info(f"[comfyui_connector.py _process_service_job] COMFYUI_STATUS: Validating connection to ComfyUI server at {self.host}:{self.port}")
+                logger.debug(f"[comfyui_connector.py _process_service_job] COMFYUI_STATUS: Validating connection to ComfyUI server at {self.host}:{self.port}")
                 await self.validate_connection()
-                logger.info(f"[comfyui_connector.py _process_service_job] COMFYUI_STATUS: Connection validation successful")
+                logger.debug(f"[comfyui_connector.py _process_service_job] COMFYUI_STATUS: Connection validation successful")
             except Exception as e:
                 error_msg = f"Connection validation failed: {str(e)}"
                 logger.error(f"[comfyui_connector.py _process_service_job] COMFYUI_STATUS: {error_msg}")
@@ -657,7 +657,7 @@ class ComfyUIConnector(WebSocketConnector):
                 raise Exception(error_msg)
             
             # Log connection state before sending workflow
-            logger.info(f"[comfyui_connector.py _process_service_job] COMFYUI_STATUS: Connection state before sending: connected={self.connected}, ws_closed={self.ws.closed if self.ws else True}")
+            logger.debug(f"[comfyui_connector.py _process_service_job] COMFYUI_STATUS: Connection state before sending: connected={self.connected}, ws_closed={self.ws.closed if self.ws else True}")
             
             # [2025-05-24T13:40:00-04:00] Broadcast the workflow request content to clients and monitors
             # This allows monitoring of what's being sent to ComfyUI
@@ -667,7 +667,7 @@ class ComfyUIConnector(WebSocketConnector):
             # 2025-04-25-17:55 - Updated to use a shorter timeout (5 seconds) for sending workflows
             # This ensures we fail fast if the server is unreachable
             # 2025-04-25-18:05 - Added eye-catching log entry for workflow sending attempt
-            logger.info(f"""[comfyui_connector.py _process_service_job] 
+            logger.debug(f"""[comfyui_connector.py _process_service_job] 
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║ COMFYUI SENDING WORKFLOW                                                    ║
 ║ Host: {self.host}:{self.port}                                                ║
@@ -714,7 +714,7 @@ class ComfyUIConnector(WebSocketConnector):
                 raise Exception(error_msg)
             
             # 2025-04-25-18:05 - Added eye-catching log entry for successful workflow sending
-            logger.info(f"""[comfyui_connector.py _process_service_job] 
+            logger.debug(f"""[comfyui_connector.py _process_service_job] 
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║ COMFYUI WORKFLOW SENT SUCCESSFULLY!!! ✓✓✓                                    ║
 ║ Host: {self.host}:{self.port}                                                ║
@@ -738,12 +738,12 @@ class ComfyUIConnector(WebSocketConnector):
                 raise Exception(error_msg)
             
             # Call monitor_progress to enable heartbeats and progress tracking
-            logger.info(f"[comfyui_connector.py _process_service_job] COMFYUI_STATUS: Starting progress monitoring for job {job_id}")
+            logger.debug(f"[comfyui_connector.py _process_service_job] COMFYUI_STATUS: Starting progress monitoring for job {job_id}")
             result = await self.monitor_progress(job_id, send_progress_update)
             
             # Calculate total processing time
             process_duration = time.time() - process_start_time
-            logger.info(f"[comfyui_connector.py _process_service_job] COMFYUI_STATUS: Job {job_id} completed in {process_duration:.2f}s")
+            logger.debug(f"[comfyui_connector.py _process_service_job] COMFYUI_STATUS: Job {job_id} completed in {process_duration:.2f}s")
             
             return result
         except Exception as e:
@@ -775,10 +775,10 @@ class ComfyUIConnector(WebSocketConnector):
             # Close the connection after job completion if keep_connection_open is False
             # Updated: 2025-04-07T15:57:00-04:00 - Added connection management after job completion
             if not self.keep_connection_open:
-                logger.info(f"[comfyui_connector.py _process_service_job] COMFYUI_STATUS: Closing connection after job {job_id} completion")
+                logger.debug(f"[comfyui_connector.py _process_service_job] COMFYUI_STATUS: Closing connection after job {job_id} completion")
                 await self._disconnect()
             else:
-                logger.info(f"[comfyui_connector.py _process_service_job] COMFYUI_STATUS: Keeping connection open after job {job_id} completion")
+                logger.debug(f"[comfyui_connector.py _process_service_job] COMFYUI_STATUS: Keeping connection open after job {job_id} completion")
     
     async def _on_disconnect(self) -> None:
         """Handle ComfyUI-specific disconnection steps"""

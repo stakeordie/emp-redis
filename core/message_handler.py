@@ -717,7 +717,7 @@ class MessageHandler(MessageHandlerInterface):
         # 2025-04-26-21:30 - Added method to handle job cancellation requests
         
         # Log the cancellation request
-        logger.info(f"[message_handler.py handle_cancel_job()]: Client {client_id} requested cancellation of job {job_id} with reason: {reason}")
+        logger.debug(f"[message_handler.py handle_cancel_job()]: Client {client_id} requested cancellation of job {job_id} with reason: {reason}")
         
         # Cancel the job in Redis
         success = self.redis_service.cancel_job(job_id, reason)
@@ -736,7 +736,7 @@ class MessageHandler(MessageHandlerInterface):
             # Also notify any subscribers to this job
             await self.connection_manager.send_job_update(job_id, response)
             
-            logger.info(f"[message_handler.py handle_cancel_job()]: Successfully cancelled job {job_id}")
+            logger.debug(f"[message_handler.py handle_cancel_job()]: Successfully cancelled job {job_id}")
         else:
             # Create an error message
             error_message = ErrorMessage(error=f"Failed to cancel job {job_id}. Job may not exist or is already in a terminal state.")
@@ -759,7 +759,7 @@ class MessageHandler(MessageHandlerInterface):
             job_id: ID of the job to force retry
         """
         # Log the force retry request
-        logger.info(f"[message_handler.py handle_force_retry_job()]: Client {client_id} requested force retry of job {job_id}")
+        logger.debug(f"[message_handler.py handle_force_retry_job()]: Client {client_id} requested force retry of job {job_id}")
         
         # Get the job status from Redis to verify it exists
         job_data = self.redis_service.get_job_status(job_id)
@@ -860,7 +860,7 @@ class MessageHandler(MessageHandlerInterface):
             # The fail_job method in redis_service already handles the requeuing logic
             # by marking the job as failed and publishing a job update
             
-            logger.info(f"[message_handler.py handle_fail_job()]: Job {job_id} marked as failed and requeued")
+            logger.debug(f"[message_handler.py handle_fail_job()]: Job {job_id} marked as failed and requeued")
             
             # Broadcast pending jobs to idle workers
             await self.broadcast_pending_jobs_to_idle_workers()

@@ -49,13 +49,32 @@ class A1111Connector(RESTSyncConnector):
     
     def __init__(self):
         """Initialize the A1111 connector"""
+        # [2025-05-25T20:40:00-04:00] Set job_type BEFORE calling super().__init__()
+        # This ensures the job type is set before any initialization happens
+        self.job_type = 'a1111'  # Explicitly set to match connector_id
+        
+        # Log the job type for debugging
+        logger.debug(f"[a1111_connector.py __init__()] Initializing A1111 connector with job_type='{self.job_type}'")
+        
         # Base URL for the A1111 API
         self.base_url = os.environ.get("WORKER_A1111_URL", "http://localhost:7860")
+        
+        # Check if job type is overridden by environment variable
+        env_job_type = os.environ.get("WORKER_A1111_JOB_TYPE", None)
+        if env_job_type and env_job_type != self.job_type:
+            logger.debug(f"[a1111_connector.py __init__()] WARNING: Environment variable WORKER_A1111_JOB_TYPE='{env_job_type}' overrides default job_type='{self.job_type}'")
+            self.job_type = env_job_type
+            
+        # Call parent constructor after setting job_type
         super().__init__()
         
-        # [2025-05-26T00:15:00-04:00] Set job_type to match connector_id for consistency
-        # This ensures the job type registered with the worker matches the connector_id
-        self.job_type = self.connector_id
+        # Verify job_type after initialization
+        logger.debug(f"[a1111_connector.py __init__()] A1111 connector initialized with job_type='{self.job_type}', connector_id='{self.connector_id}'")
+        
+        # Ensure job_type matches connector_id for consistency
+        if self.job_type != self.connector_id:
+            logger.error(f"[a1111_connector.py __init__()] WARNING: job_type='{self.job_type}' doesn't match connector_id='{self.connector_id}'")
+            logger.error(f"[a1111_connector.py __init__()] This may cause job assignment issues!")
         
         # Override REST API connection settings with A1111-specific ones
         self.host = os.environ.get("WORKER_A1111_HOST", "localhost")
@@ -68,10 +87,10 @@ class A1111Connector(RESTSyncConnector):
         if env_job_type:
             # Log a warning if the environment job type doesn't match connector_id
             if env_job_type != self.connector_id:
-                logger.warning(f"[2025-05-26T00:15:00-04:00] Environment job type '{env_job_type}' doesn't match connector_id '{self.connector_id}'. This may cause job matching issues.")
+                logger.error(f"[2025-05-26T00:15:00-04:00] Environment job type '{env_job_type}' doesn't match connector_id '{self.connector_id}'. This may cause job matching issues.")
             self.job_type = env_job_type
             
-        logger.info(f"[2025-05-26T00:15:00-04:00] A1111Connector initialized with job_type='{self.job_type}' and connector_id='{self.connector_id}'")
+        logger.debug(f"[2025-05-26T00:15:00-04:00] A1111Connector initialized with job_type='{self.job_type}' and connector_id='{self.connector_id}'")
         
         # Authentication settings - use ComfyUI environment variables
         self.username = os.environ.get("WORKER_COMFYUI_USERNAME", os.environ.get("COMFYUI_USERNAME"))
@@ -98,11 +117,20 @@ class A1111Connector(RESTSyncConnector):
             bool: True if the API is available, False otherwise
         """
         # [2025-05-25T22:40:00-04:00] Added detailed debug logging for A1111 health check
-        logger.info(f"[a1111_connector.py health_check DEBUG] Performing health check for A1111 API")
-        logger.info(f"[a1111_connector.py health_check DEBUG] Health check URL: {self.base_url}/healthz")
+        # [2025-05-25T21:35:00-04:00] Fixed type errors by adding proper None handling
+        logger.debug(f"[a1111_connector.py health_check DEBUG] Performing health check for A1111 API")
+        logger.debug(f"[a1111_connector.py health_check DEBUG] Health check URL: {self.base_url}/healthz")
         try:
+            # Make sure self.session is not None
+            if self.session is None:
+                logger.error(f"[a1111_connector.py health_check] Session is None, cannot perform health check")
+                return False
+                
             async with self.session.get(f"{self.base_url}/healthz", headers=self._get_headers()) as response:
-                return response.status == 200
+                # [2025-05-25T21:55:00-04:00] Explicitly cast to bool to fix type error
+                status_code = response.status
+                is_healthy = status_code == 200
+                return bool(is_healthy)  # Explicit cast to bool
         except Exception as e:
             logger.error(f"[a1111_connector.py health_check] Health check failed: {str(e)}")
             return False
@@ -114,17 +142,25 @@ class A1111Connector(RESTSyncConnector):
             bool: True if the service is healthy, False otherwise
         """
         # [2025-05-25T18:45:00-04:00] Added health check method for A1111 service
+        # [2025-05-25T21:40:00-04:00] Fixed type errors by adding proper None handling
         try:
+            # Make sure self.session is not None
+            if self.session is None:
+                logger.error(f"[2025-05-25T21:40:00-04:00] Session is None, cannot perform health check")
+                return False
+                
             # Try to connect to the A1111 API
-            logger.info(f"[2025-05-25T18:45:00-04:00] Checking A1111 health at {self.base_url}{self.api_prefix}/progress")
+            logger.debug(f"[2025-05-25T18:45:00-04:00] Checking A1111 health at {self.base_url}{self.api_prefix}/progress")
             
             async with self.session.get(f"{self.base_url}{self.api_prefix}/progress", timeout=5) as response:
-                if response.status == 200:
-                    logger.info(f"[2025-05-25T18:45:00-04:00] A1111 service is healthy (status code: 200)")
-                    return True
+                # [2025-05-25T21:57:00-04:00] Explicitly handle the response status to ensure bool return type
+                status_code = response.status
+                if status_code == 200:
+                    logger.debug(f"[2025-05-25T18:45:00-04:00] A1111 service is healthy (status code: 200)")
+                    return bool(True)  # Explicit cast to bool
                 else:
-                    logger.warning(f"[2025-05-25T18:45:00-04:00] A1111 service returned status code: {response.status}")
-                    return False
+                    logger.warning(f"[2025-05-25T18:45:00-04:00] A1111 service returned status code: {status_code}")
+                    return bool(False)  # Explicit cast to bool
         except aiohttp.ClientConnectorError as e:
             logger.error(f"[2025-05-25T18:45:00-04:00] A1111 service connection error: {e}")
             return False
@@ -132,7 +168,8 @@ class A1111Connector(RESTSyncConnector):
             logger.error(f"[2025-05-25T18:45:00-04:00] A1111 service connection timeout")
             return False
         except Exception as e:
-            logger.error(f"[2025-05-25T18:45:00-04:00] A1111 health check error: {e}")
+            # [2025-05-25T21:40:00-04:00] Added general exception handling to ensure we always return a boolean
+            logger.error(f"[2025-05-25T21:40:00-04:00] Unexpected error during A1111 health check: {str(e)}")
             return False
     
     async def initialize(self) -> bool:
@@ -141,15 +178,27 @@ class A1111Connector(RESTSyncConnector):
         Returns:
             bool: True if initialization was successful, False otherwise
         """
-        # [2025-05-25T18:45:00-04:00] Enhanced initialization with health check
-        logger.info(f"[2025-05-25T18:45:00-04:00] Initializing A1111 connector with base URL: {self.base_url}")
-        
-        # Set up session
-        self.session = aiohttp.ClientSession()
-        
-        # Always return True for now to allow the connector to be used even if A1111 is not running
-        # This allows the worker to accept A1111 jobs and queue them until A1111 is available
-        return True
+        # [2025-05-25T21:50:00-04:00] Fixed type error by ensuring the method always returns a boolean value
+        try:
+            # [2025-05-25T18:45:00-04:00] Enhanced initialization with health check
+            logger.debug(f"[2025-05-25T18:45:00-04:00] Initializing A1111 connector with base URL: {self.base_url}")
+            
+            # Set up session
+            self.session = aiohttp.ClientSession()
+            
+            # Check if the A1111 service is available
+            is_healthy = await self.check_health()
+            if not is_healthy:
+                logger.warning(f"[2025-05-25T21:50:00-04:00] A1111 service is not available, but connector will be initialized anyway")
+            
+            # Always return True for now to allow the connector to be used even if A1111 is not running
+            # This allows the worker to accept A1111 jobs and queue them until A1111 is available
+            return True
+        except Exception as e:
+            logger.error(f"[2025-05-25T21:50:00-04:00] Error initializing A1111 connector: {str(e)}")
+            # Still return True to allow the connector to be used
+            # The health check will fail when jobs are assigned if A1111 is not available
+            return True
     
     def get_job_type(self) -> str:
         """Get the job type that this connector handles
@@ -169,7 +218,7 @@ class A1111Connector(RESTSyncConnector):
             Dict[str, Any]: Capabilities dictionary to be merged with worker capabilities
         """
         # [2025-05-25T22:40:00-04:00] Added detailed debug logging for A1111 capabilities
-        logger.info(f"[a1111_connector.py get_capabilities DEBUG] Getting A1111 capabilities")
+        logger.debug(f"[a1111_connector.py get_capabilities DEBUG] Getting A1111 capabilities")
         return {
             "a1111_version": self.VERSION,
             "supports_synchronous": True,
@@ -196,9 +245,9 @@ class A1111Connector(RESTSyncConnector):
             Dict[str, Any]: Job result
         """
         # [2025-05-25T22:40:00-04:00] Added detailed debug logging for A1111 job processing
-        logger.info(f"[a1111_connector.py process_job DEBUG] Starting to process A1111 job: {job_id}")
-        logger.info(f"[a1111_connector.py process_job DEBUG] Job payload: {json.dumps(payload)[:500]}...")
-        logger.info(f"[a1111_connector.py process_job DEBUG] Connection status: base_url={self.base_url}, api_prefix={self.api_prefix}")
+        logger.debug(f"[a1111_connector.py process_job DEBUG] Starting to process A1111 job: {job_id}")
+        logger.debug(f"[a1111_connector.py process_job DEBUG] Job payload: {json.dumps(payload)[:500]}...")
+        logger.debug(f"[a1111_connector.py process_job DEBUG] Connection status: base_url={self.base_url}, api_prefix={self.api_prefix}")
         # [2025-05-20T12:02:05-04:00] Add a flag to track job completion
         # This helps prevent sending progress updates after the job is completed
         job_completed = False
@@ -366,7 +415,7 @@ class A1111Connector(RESTSyncConnector):
                                     # [2025-05-20T12:02:05-04:00] Stop polling when job is completed
                                     # This prevents the final 10% progress update from being sent after job completion
                                     if progress_data_dict.get('completed', False):
-                                        logger.info(f"[a1111_connector.py poll_progress] A1111 job completed, stopping progress polling")
+                                        logger.debug(f"[a1111_connector.py poll_progress] A1111 job completed, stopping progress polling")
                                         return  # Exit the polling function completely instead of just breaking the loop
                         except Exception as e:
                             logger.error(f"[a1111_connector.py poll_progress] Error polling progress: {str(e)}")

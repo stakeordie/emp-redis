@@ -27,14 +27,14 @@ from core.redis_service import RedisService
 
 from core.utils.logger import logger
 
-logger.info("IT WORKS")
+logger.debug("IT WORKS")
 
 # Define consistent size limits as environment variables with defaults
 # [2025-05-23T09:48:00-04:00] Added standardized WebSocket message size configuration
 MAX_WS_MESSAGE_SIZE_MB = int(os.environ.get('MAX_WS_MESSAGE_SIZE_MB', 100))  # 100MB default
 MAX_WS_MESSAGE_SIZE_BYTES = MAX_WS_MESSAGE_SIZE_MB * 1024 * 1024
 
-logger.info(f"[2025-05-23T09:48:15-04:00] Configured WebSocket message size limit: {MAX_WS_MESSAGE_SIZE_MB}MB ({MAX_WS_MESSAGE_SIZE_BYTES} bytes)")
+logger.debug(f"[2025-05-23T09:48:15-04:00] Configured WebSocket message size limit: {MAX_WS_MESSAGE_SIZE_MB}MB ({MAX_WS_MESSAGE_SIZE_BYTES} bytes)")
 
 # Custom WebSocket class with increased message size limit
 # [2025-05-23T09:48:30-04:00] Added custom WebSocket class with increased message size limit
@@ -44,7 +44,7 @@ class LargeMessageWebSocket(WebSocket):
         super().__init__(scope, receive, send)
         # Increase message size limit for WebSocket messages
         self._max_message_size = MAX_WS_MESSAGE_SIZE_BYTES
-        logger.info(f"[2025-05-23T09:48:45-04:00] Created LargeMessageWebSocket with max_message_size={MAX_WS_MESSAGE_SIZE_MB}MB")
+        logger.debug(f"[2025-05-23T09:48:45-04:00] Created LargeMessageWebSocket with max_message_size={MAX_WS_MESSAGE_SIZE_MB}MB")
 
 # Global reference to message broker for access from endpoints
 global_message_broker = None
@@ -206,7 +206,7 @@ async def submit_job(job_data: JobSubmitRequest = Body(...)):
             raise HTTPException(status_code=500, detail="Failed to add job to queue")
         
         # Log job submission
-        logger.info(f"[2025-05-20T11:34:47-04:00] REST API job submitted: {job_id}, type: {job_data.job_type}, wait: {job_data.wait}")
+        logger.debug(f"[2025-05-20T11:34:47-04:00] REST API job submitted: {job_id}, type: {job_data.job_type}, wait: {job_data.wait}")
         
         # [2025-05-20T13:22:38-04:00] Trigger immediate job broadcast to match WebSocket behavior
         # This ensures REST API jobs are claimed as quickly as WebSocket jobs
@@ -215,7 +215,7 @@ async def submit_job(job_data: JobSubmitRequest = Body(...)):
             if global_message_broker and global_message_broker.message_handler:
                 # Create a background task to broadcast pending jobs
                 asyncio.create_task(global_message_broker.message_handler.broadcast_pending_jobs_to_idle_workers())
-                logger.info(f"[2025-05-20T13:22:38-04:00] Triggered immediate job broadcast for REST API job {job_id}")
+                logger.debug(f"[2025-05-20T13:22:38-04:00] Triggered immediate job broadcast for REST API job {job_id}")
             else:
                 logger.warning(f"[2025-05-20T13:22:38-04:00] Could not trigger job broadcast - message broker not initialized")
         except Exception as e:
@@ -230,7 +230,7 @@ async def submit_job(job_data: JobSubmitRequest = Body(...)):
             }
         
         # If wait=True, poll for job completion
-        logger.info(f"[2025-05-20T11:34:47-04:00] Waiting for job {job_id} to complete (timeout: {job_data.timeout}s)")
+        logger.debug(f"[2025-05-20T11:34:47-04:00] Waiting for job {job_id} to complete (timeout: {job_data.timeout}s)")
         
         # Set start time for timeout calculation
         start_time = time.time()
@@ -325,7 +325,7 @@ async def get_job_status(job_id: str):
             raise HTTPException(status_code=404, detail=f"Job with ID {job_id} not found")
         
         # Log job status request
-        logger.info(f"[2025-05-20T11:34:47-04:00] REST API job status requested: {job_id}, status: {job_data.get('status', 'unknown')}")
+        logger.debug(f"[2025-05-20T11:34:47-04:00] REST API job status requested: {job_id}, status: {job_data.get('status', 'unknown')}")
         
         # Convert job_data to JobStatusResponse model
         # This ensures we only return the fields defined in the model

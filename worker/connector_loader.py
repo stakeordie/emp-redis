@@ -318,11 +318,23 @@ async def load_connectors() -> Dict[str, ConnectorInterface]:
                 logger.error(f"[connector_loader.py load_connectors() ERROR] Failed to initialize connector: {connector_name}")
                 continue
             
-            # Get job type from connector
+            # [2025-05-25T20:38:00-04:00] Modified connector registration to use connector_id consistently
+            # Get connector_id from the connector instance
+            connector_id = connector.connector_id if hasattr(connector, 'connector_id') else connector.get_job_type()
+            
+            # Get job_type from connector (may be different from connector_id)
             job_type = connector.get_job_type()
             
-            # Add connector to dictionary
-            connectors[job_type] = connector #### THIS IS WHERE CONNECTORS ARE ADDED TO THE DICTIONARY
+            # Log the connector registration details for debugging
+            logger.debug(f"[connector_loader.py load_connectors()] Registering connector: connector_id='{connector_id}', job_type='{job_type}'")
+            
+            # If job_type doesn't match connector_id, log a warning
+            if job_type != connector_id:
+                logger.error(f"[connector_loader.py load_connectors()] WARNING: job_type ('{job_type}') doesn't match connector_id ('{connector_id}')")
+                logger.debug(f"[connector_loader.py load_connectors()] Using connector_id ('{connector_id}') as the key for consistency")
+            
+            # Always use connector_id as the key in the connectors dictionary for consistency
+            connectors[connector_id] = connector #### THIS IS WHERE CONNECTORS ARE ADDED TO THE DICTIONARY
         
         except Exception as e:
             logger.error(f"[connector_loader.py load_connectors() EXCEPTION] Error loading connector {connector_name}: {str(e)}")
@@ -353,13 +365,13 @@ async def get_worker_capabilities(connectors: Dict[str, ConnectorInterface]) -> 
     supported_job_types = get_supported_job_types(connectors)
     
     # [2025-05-25T22:45:00-04:00] Added detailed debug logging for job type registration
-    logger.info(f"[connector_loader.py get_worker_capabilities DEBUG] Registering supported job types: {supported_job_types}")
+    logger.debug(f"[connector_loader.py get_worker_capabilities DEBUG] Registering supported job types: {supported_job_types}")
     
     # Log the connector_id for each connector to verify it matches the job type
     for job_type, connector in connectors.items():
         try:
             connector_id = connector.connector_id
-            logger.info(f"[connector_loader.py get_worker_capabilities DEBUG] Connector for job_type '{job_type}' has connector_id='{connector_id}'")
+            logger.debug(f"[connector_loader.py get_worker_capabilities DEBUG] Connector for job_type '{job_type}' has connector_id='{connector_id}'")
             if job_type != connector_id:
                 logger.warning(f"[connector_loader.py get_worker_capabilities DEBUG] MISMATCH: job_type '{job_type}' doesn't match connector_id '{connector_id}'")
         except Exception as e:

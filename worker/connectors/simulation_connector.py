@@ -39,16 +39,16 @@ class SimulationConnector(ConnectorInterface):
         self.steps = int(os.environ.get("WORKER_SIMULATION_STEPS", os.environ.get("SIMULATION_STEPS", "5")))
         
         # Log which variables we're using
-        logger.info(f"[SIMULATION] Using environment variables:")
-        logger.info(f"[SIMULATION] WORKER_SIMULATION_JOB_TYPE/SIMULATION_JOB_TYPE: {self.job_type}")
-        logger.info(f"[SIMULATION] WORKER_SIMULATION_PROCESSING_TIME/SIMULATION_PROCESSING_TIME: {self.processing_time}")
-        logger.info(f"[SIMULATION] WORKER_SIMULATION_STEPS/SIMULATION_STEPS: {self.steps}")
+        logger.debug(f"[SIMULATION] Using environment variables:")
+        logger.debug(f"[SIMULATION] WORKER_SIMULATION_JOB_TYPE/SIMULATION_JOB_TYPE: {self.job_type}")
+        logger.debug(f"[SIMULATION] WORKER_SIMULATION_PROCESSING_TIME/SIMULATION_PROCESSING_TIME: {self.processing_time}")
+        logger.debug(f"[SIMULATION] WORKER_SIMULATION_STEPS/SIMULATION_STEPS: {self.steps}")
         
         # Log configuration
-        logger.info(f"[SIMULATION] Connector configuration:")
-        logger.info(f"[SIMULATION] Job type: {self.job_type}")
-        logger.info(f"[SIMULATION] Processing time: {self.processing_time} seconds")
-        logger.info(f"[SIMULATION] Steps: {self.steps}")
+        logger.debug(f"[SIMULATION] Connector configuration:")
+        logger.debug(f"[SIMULATION] Job type: {self.job_type}")
+        logger.debug(f"[SIMULATION] Processing time: {self.processing_time} seconds")
+        logger.debug(f"[SIMULATION] Steps: {self.steps}")
         
         # Job tracking
         self.current_job_id = None
@@ -59,10 +59,10 @@ class SimulationConnector(ConnectorInterface):
         Returns:
             bool: True if initialization was successful, False otherwise
         """
-        logger.info(f"[SIMULATION] Initializing simulation connector")
-        logger.info(f"[SIMULATION] Job type: {self.job_type}")
-        logger.info(f"[SIMULATION] Processing time: {self.processing_time} seconds")
-        logger.info(f"[SIMULATION] Steps: {self.steps}")
+        logger.debug(f"[SIMULATION] Initializing simulation connector")
+        logger.debug(f"[SIMULATION] Job type: {self.job_type}")
+        logger.debug(f"[SIMULATION] Processing time: {self.processing_time} seconds")
+        logger.debug(f"[SIMULATION] Steps: {self.steps}")
         return True
     
     def get_job_type(self) -> str:
@@ -130,7 +130,7 @@ class SimulationConnector(ConnectorInterface):
         try:
             # Set current job ID for tracking
             self.current_job_id = job_id
-            logger.info(f"[SIMULATION] Processing job {job_id}")
+            logger.debug(f"[SIMULATION] Processing job {job_id}")
             
             # Send initial progress update with version information
             version_message = f"Starting {self.job_type} job [version: {self.VERSION}]"
@@ -157,7 +157,7 @@ class SimulationConnector(ConnectorInterface):
                     await send_progress_update(job_id, -1, "heartbeat", version_message)
             
             # Return result
-            logger.info(f"[SIMULATION] Job {job_id} completed successfully")
+            logger.debug(f"[SIMULATION] Job {job_id} completed successfully")
             return {
                 "status": "success",
                 "output": {
@@ -177,11 +177,11 @@ class SimulationConnector(ConnectorInterface):
             }
         finally:
             # Clear current job ID when done
-            logger.info(f"[SIMULATION] Completed job {job_id}")
+            logger.debug(f"[SIMULATION] Completed job {job_id}")
             self.current_job_id = None
     
     async def shutdown(self) -> None:
         """Clean up resources when worker is shutting down"""
-        logger.info("[SIMULATION] Shutting down simulation connector")
+        logger.debug("[SIMULATION] Shutting down simulation connector")
         # No resources to clean up
-        logger.info("[SIMULATION] Simulation connector shut down")
+        logger.debug("[SIMULATION] Simulation connector shut down")

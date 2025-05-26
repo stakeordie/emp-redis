@@ -113,7 +113,7 @@ class RESTSyncConnector(ConnectorInterface):
                     url = f"{self.base_url}{health_endpoint}"
                     async with self.session.get(url, headers=self._get_headers()) as response:
                         if response.status == 200:
-                            logger.info(f"[rest_sync_connector.py initialize] Successfully connected to REST API at {url}")
+                            logger.debug(f"[rest_sync_connector.py initialize] Successfully connected to REST API at {url}")
                         else:
                             logger.error(f"[rest_sync_connector.py initialize] Health check failed with status {response.status}")
                 except Exception as e:
@@ -321,4 +321,4 @@ class RESTSyncConnector(ConnectorInterface):
         if self.session:
             await self.session.close()
             self.session = None
-        logger.info(f"[rest_sync_connector.py shutdown] REST sync connector shut down")
+        logger.debug(f"[rest_sync_connector.py shutdown] REST sync connector shut down")

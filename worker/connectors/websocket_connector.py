@@ -108,7 +108,7 @@ class WebSocketConnector(ConnectorInterface):
             self.connection_start_time = time.time()
             
             # 2025-04-25-18:02 - Added eye-catching log entries for connection attempts
-            logger.info(f"""[connectors/websocket_connector.py connect()] 
+            logger.debug(f"""[connectors/websocket_connector.py connect()] 
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║ WEBSOCKET CONNECTION ATTEMPT #{self.connection_attempts}                                  ║
 ║ URL: {self.ws_url}                                                           ║
@@ -126,7 +126,7 @@ class WebSocketConnector(ConnectorInterface):
                     sock_read=60.0  # Default read timeout
                 )
                 self.session = aiohttp.ClientSession(timeout=timeout)
-                logger.info(f"[connectors/websocket_connector.py connect()] WEBSOCKET_STATUS: Created new aiohttp session with timeout settings: connect={connection_timeout}s, sock_connect={connection_timeout}s, sock_read=60.0s")
+                logger.debug(f"[connectors/websocket_connector.py connect()] WEBSOCKET_STATUS: Created new aiohttp session with timeout settings: connect={connection_timeout}s, sock_connect={connection_timeout}s, sock_read=60.0s")
             
             # Get connection URL and headers
             self.ws_url = self._get_connection_url()
@@ -142,7 +142,7 @@ class WebSocketConnector(ConnectorInterface):
                 
                 connection_start = time.time()
                 # [2025-05-23T09:50:15-04:00] Added max_msg_size parameter to increase message size limit
-                logger.info(f"[2025-05-23T09:50:15-04:00] Using WebSocket message size limit: {MAX_WS_MESSAGE_SIZE_MB}MB ({MAX_WS_MESSAGE_SIZE_BYTES} bytes)")
+                logger.debug(f"[2025-05-23T09:50:15-04:00] Using WebSocket message size limit: {MAX_WS_MESSAGE_SIZE_MB}MB ({MAX_WS_MESSAGE_SIZE_BYTES} bytes)")
                 
                 self.ws = await asyncio.wait_for(
                     self.session.ws_connect(
@@ -159,7 +159,7 @@ class WebSocketConnector(ConnectorInterface):
                 )
                 
                 connection_time = time.time() - connection_start
-                logger.info(f"[connectors/websocket_connector.py connect()] WEBSOCKET_STATUS: Connection established in {connection_time:.2f} seconds")
+                logger.debug(f"[connectors/websocket_connector.py connect()] WEBSOCKET_STATUS: Connection established in {connection_time:.2f} seconds")
                 logger.debug(f"[connectors/websocket_connector.py connect()] WEBSOCKET_STATUS: WebSocket connection details: {self.ws}")
                 
                 # Set up event handlers for the WebSocket if available
@@ -184,7 +184,7 @@ class WebSocketConnector(ConnectorInterface):
                 self.last_message_received_time = time.time()
                 self.last_message_sent_time = time.time()
                 # 2025-04-25-18:02 - Added eye-catching log entry for successful connection
-                logger.info(f"""[connectors/websocket_connector.py connect()] 
+                logger.debug(f"""[connectors/websocket_connector.py connect()] 
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║ WEBSOCKET CONNECTION SUCCESS!!! ✓✓✓                                          ║
 ║ URL: {self.ws_url}                                                           ║
@@ -368,7 +368,7 @@ class WebSocketConnector(ConnectorInterface):
     
     async def monitor_progress(self, job_id: str, send_progress_update: Callable) -> Dict[str, Any]:
         # Log monitoring start with connection details
-        logger.info(f"[connectors/websocket_connector.py monitor_progress] WEBSOCKET_STATUS: Starting progress monitoring for job {job_id}")
+        logger.debug(f"[connectors/websocket_connector.py monitor_progress] WEBSOCKET_STATUS: Starting progress monitoring for job {job_id}")
         logger.debug(f"[connectors/websocket_connector.py monitor_progress] WEBSOCKET_STATUS: Connection state: connected={self.connected}, last_message_received={self.last_message_received_time}, last_message_sent={self.last_message_sent_time}")
         """Monitor job progress with heartbeat mechanism and connection monitoring
         
@@ -524,19 +524,19 @@ class WebSocketConnector(ConnectorInterface):
         try:
             # Set current job ID for tracking
             self.current_job_id = job_id
-            logger.info(f"[connectors/websocket_connector.py process_job] Starting job {job_id} for {self.get_job_type()} service")
+            logger.debug(f"[connectors/websocket_connector.py process_job] Starting job {job_id} for {self.get_job_type()} service")
             
             # Reset connection error before starting
             self.connection_error = None
             
             # Connect to the WebSocket service if not already connected
             if not self.connected:
-                logger.info(f"[connectors/websocket_connector.py process_job] Connecting to {self.get_job_type()} service with timeout {self.connection_timeout}s")
+                logger.debug(f"[connectors/websocket_connector.py process_job] Connecting to {self.get_job_type()} service with timeout {self.connection_timeout}s")
                 try:
                     # 2025-04-25-17:45 - connect() now always raises exceptions on failure
                     await self.connect()
                     # If we get here, connection was successful
-                    logger.info(f"[connectors/websocket_connector.py process_job] Successfully connected to {self.get_job_type()} service")
+                    logger.debug(f"[connectors/websocket_connector.py process_job] Successfully connected to {self.get_job_type()} service")
                 except Exception as e:
                     # Catch and report any connection errors
                     error_type = type(e).__name__
@@ -603,7 +603,7 @@ class WebSocketConnector(ConnectorInterface):
                 }
             
             # Process the job using service-specific implementation
-            logger.info(f"[connectors/websocket_connector.py process_job] Calling service-specific job processing for {job_id}")
+            logger.debug(f"[connectors/websocket_connector.py process_job] Calling service-specific job processing for {job_id}")
             try:
                 result = await self._process_service_job(websocket, job_id, payload, send_progress_update)
                 
@@ -617,7 +617,7 @@ class WebSocketConnector(ConnectorInterface):
                     result["status"] = "completed"
                     
                 # Log the final result status
-                logger.info(f"[connectors/websocket_connector.py process_job] Completed job {job_id} with status: {result.get('status')}")
+                logger.debug(f"[connectors/websocket_connector.py process_job] Completed job {job_id} with status: {result.get('status')}")
                 
                 # Return the result
                 return result
@@ -652,7 +652,7 @@ class WebSocketConnector(ConnectorInterface):
             }
         finally:
             # Clear current job ID when done
-            logger.info(f"[connectors/websocket_connector.py process_job] Completed job {job_id} for {self.get_job_type()} service")
+            logger.debug(f"[connectors/websocket_connector.py process_job] Completed job {job_id} for {self.get_job_type()} service")
             self.current_job_id = None
     
     async def _prepare_job(self, job_id: str, payload: Dict[str, Any]) -> None:
@@ -712,9 +712,9 @@ class WebSocketConnector(ConnectorInterface):
     
     async def shutdown(self) -> None:
         """Clean up resources when worker is shutting down"""
-        logger.info(f"[connectors/websocket_connector.py shutdown] Shutting down {self.get_job_type()} connector")
+        logger.debug(f"[connectors/websocket_connector.py shutdown] Shutting down {self.get_job_type()} connector")
         await self._disconnect()
-        logger.info(f"[connectors/websocket_connector.py shutdown] {self.get_job_type()} connector shut down")
+        logger.debug(f"[connectors/websocket_connector.py shutdown] {self.get_job_type()} connector shut down")
     
     def get_connection_status(self) -> Dict[str, Any]:
         """Get the current connection status of the connector
