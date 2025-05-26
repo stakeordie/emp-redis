@@ -11,7 +11,8 @@ from enum import Enum, auto
 from dotenv import load_dotenv
 
 # [2025-05-25T21:15:00-04:00] Added missing imports for message models
-from core.core_types.message_models import (
+# [2025-05-25T21:15:00-04:00] Fixed import path to match actual project structure
+from core.message_models import (
     UpdateJobProgressMessage,
     JobFailedMessage,
     WorkerStatusMessage,
