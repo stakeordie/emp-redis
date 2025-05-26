@@ -19,6 +19,19 @@ All notable changes to the EMP Redis project will be documented in this file.
   - Helps with debugging and understanding what's being requested from services
 
 ### Changed
+- [2025-05-25T21:55:00-04:00] Fixed A1111 connector job type mismatch causing job assignment issues:
+  - Ensured job_type always matches connector_id in A1111Connector
+  - Modified get_job_type() to always return connector_id
+  - Prevented environment variables from causing mismatches
+  - Added safeguards to maintain job_type/connector_id consistency
+  - Fixed critical issue preventing A1111 jobs from being assigned to the worker
+
+- [2025-05-25T21:51:00-04:00] Fixed JobFailedMessage import and usage in base_worker.py:
+  - Changed import from JobFailedMessage to FailJobMessage to match deployment environment
+  - Updated references in send_job_failed method
+  - Fixed critical import error preventing worker startup
+  - Used debug level logging to identify the exact issue
+
 - [2025-05-25T21:45:00-04:00] Fixed worker import paths to match deployment environment structure:
   - Updated import in base_worker.py from `core.core_types.message_models` to `core.message_models`
   - Enhanced diagnostic logging to provide detailed environment information
