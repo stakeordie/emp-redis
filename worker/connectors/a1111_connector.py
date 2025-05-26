@@ -47,21 +47,28 @@ class A1111Connector(RESTSyncConnector):
         """
         return 'a1111'
     
-    def __init__(self):
+    def __init__(self, host: str = None, port: int = None, base_url: str = None, api_prefix: str = None, timeout: int = None):
         """Initialize the A1111 connector"""
         # [2025-05-25T23:53:00-04:00] Call parent constructor first
         # The parent constructor will set job_type to 'rest'
         super().__init__()
         
-        # Initialize with parent constructor
+        # Get host and port from environment variables first
+        self.host = os.environ.get('WORKER_A1111_HOST', host or 'localhost')
+        self.port = int(os.environ.get('WORKER_A1111_PORT', port or 7860))
         
-        # Base URL for the A1111 API
-        self.base_url = os.environ.get("WORKER_A1111_URL", "http://localhost:7860")
+        # Construct base_url from host and port
+        self.base_url = base_url or f"http://{self.host}:{self.port}"
+        self.api_prefix = api_prefix or "/api/v1/"
+        self.timeout = timeout or 60
+        self.session = None
         
-        # [2025-05-25T23:53:00-04:00] CRITICAL FIX: Force job_type to match connector_id
-        # This must happen AFTER super().__init__() which sets job_type to 'rest'
-        # This is critical for job assignment to work correctly
-        self.job_type = self.connector_id
+        # [2025-05-26T15:10:00-04:00] Only show debug logs when explicitly enabled
+        if os.environ.get('A1111_DEBUG_LOGS', 'FALSE').upper() == 'TRUE':
+            logger.debug(f"A1111 connector initialized with host={self.host}, port={self.port}, base_url={self.base_url}")
+        
+        # Force job_type to match connector_id
+        self.job_type = "a1111"
         
         # Check if job type is overridden by environment variable
         env_job_type = os.environ.get("WORKER_A1111_JOB_TYPE", None)
@@ -77,27 +84,6 @@ class A1111Connector(RESTSyncConnector):
         if self.job_type != self.connector_id:
             logger.error(f"[a1111_connector.py] WARNING: job_type='{self.job_type}' doesn't match connector_id='{self.connector_id}'. This may cause job assignment issues!")
         
-        # Override REST API connection settings with A1111-specific ones
-        self.host = os.environ.get("WORKER_A1111_HOST", "localhost")
-        self.port = os.environ.get("WORKER_A1111_PORT", "3001")
-        self.base_url = f"http://{self.host}:{self.port}"
-        self.api_prefix = "/sdapi/v1"
-        
-        # [2025-05-25T23:53:00-04:00] CRITICAL FIX: Force job_type to match connector_id
-        # This is critical for job assignment to work correctly
-        self.job_type = self.connector_id
-        
-        # Check if job_type is overridden by environment variables
-        env_job_type = os.environ.get("WORKER_A1111_JOB_TYPE", os.environ.get("A1111_JOB_TYPE", None))
-        if env_job_type:
-            # Only use environment variable if it matches connector_id
-            if env_job_type == self.connector_id:
-                self.job_type = env_job_type
-            else:
-                logger.error(f"[a1111_connector.py] Environment job type '{env_job_type}' doesn't match connector_id '{self.connector_id}'. Using connector_id.")
-                # CRITICAL: Always use connector_id for job_type
-                self.job_type = self.connector_id
-            
         # Authentication settings - use ComfyUI environment variables
         self.username = os.environ.get("WORKER_COMFYUI_USERNAME", os.environ.get("COMFYUI_USERNAME"))
         self.password = os.environ.get("WORKER_COMFYUI_PASSWORD", os.environ.get("COMFYUI_PASSWORD"))
@@ -122,23 +108,57 @@ class A1111Connector(RESTSyncConnector):
         Returns:
             bool: True if the API is available, False otherwise
         """
-        # [2025-05-25T22:40:00-04:00] Added detailed debug logging for A1111 health check
-        # [2025-05-25T21:35:00-04:00] Fixed type errors by adding proper None handling
-        logger.debug(f"[a1111_connector.py health_check DEBUG] Performing health check for A1111 API")
-        logger.debug(f"[a1111_connector.py health_check DEBUG] Health check URL: {self.base_url}/healthz")
+        # Check if we're using the mock service
+        # If A1111_MOCK_SERVICE is set to TRUE, we'll bypass the actual health check
+        is_mock_service = os.environ.get('A1111_MOCK_SERVICE', 'FALSE').upper() == 'TRUE'
+        
+        if is_mock_service:
+            logger.info(f"Using mock A1111 service with host={self.host}, port={self.port}")
+            
+            # Initialize the session if it doesn't exist
+            if self.session is None:
+                self.session = aiohttp.ClientSession(timeout=self.request_timeout)
+            
+            # Always return True when using the mock service
+            return True
+        
+        # When not using the mock service, perform the actual health check
         try:
             # Make sure self.session is not None
             if self.session is None:
-                logger.error(f"[a1111_connector.py health_check] Session is None, cannot perform health check")
+                logger.error("Health check error: Session is None or not initialized")
                 return False
-                
-            async with self.session.get(f"{self.base_url}/healthz", headers=self._get_headers()) as response:
-                # [2025-05-25T21:55:00-04:00] Explicitly cast to bool to fix type error
+            
+            # Get the headers for the request
+            headers = self._get_headers()
+            
+            # Use the correct healthz endpoint with the base_url
+            health_check_url = f"{self.base_url}/healthz"
+            logger.debug(f"Checking A1111 health at URL: {health_check_url}")
+            
+            async with self.session.get(health_check_url, headers=headers) as response:
                 status_code = response.status
+                
+                # Log appropriate messages based on status
+                if status_code == 200:
+                    # [2025-05-26T15:10:00-04:00] Only show debug logs when explicitly enabled
+                    if os.environ.get('A1111_DEBUG_LOGS', 'FALSE').upper() == 'TRUE':
+                        logger.debug(f"A1111 is healthy (status {status_code})")
+                else:
+                    # If not healthy, try to get the response body for debugging
+                    try:
+                        body = await response.text()
+                        logger.error(f"A1111 health check failed with status {status_code}: {body}")
+                    except Exception as e:
+                        logger.error(f"A1111 health check failed with status {status_code}, could not read body: {str(e)}")
+                
                 is_healthy = status_code == 200
-                return bool(is_healthy)  # Explicit cast to bool
+                return bool(is_healthy)
         except Exception as e:
-            logger.error(f"[a1111_connector.py health_check] Health check failed: {str(e)}")
+            logger.error(f"Health check failed with exception: {type(e).__name__} - {str(e)}")
+            # Log the full exception traceback for critical errors
+            import traceback
+            logger.error(f"Health check traceback: {traceback.format_exc()}")
             return False
     
     async def check_health(self) -> bool:
@@ -147,64 +167,96 @@ class A1111Connector(RESTSyncConnector):
         Returns:
             bool: True if the service is healthy, False otherwise
         """
-        # [2025-05-25T18:45:00-04:00] Added health check method for A1111 service
-        # [2025-05-25T21:40:00-04:00] Fixed type errors by adding proper None handling
         try:
-            # Make sure self.session is not None
             if self.session is None:
-                logger.error(f"[2025-05-25T21:40:00-04:00] Session is None, cannot perform health check")
+                logger.error("Session is None, cannot perform health check")
                 return False
                 
-            # Try to connect to the A1111 API
-            logger.debug(f"[2025-05-25T18:45:00-04:00] Checking A1111 health at {self.base_url}{self.api_prefix}/progress")
+            # Use the correct URL for health checks
+            health_check_url = f"{self.base_url}/healthz"
             
-            async with self.session.get(f"{self.base_url}{self.api_prefix}/progress", timeout=5) as response:
-                # [2025-05-25T21:57:00-04:00] Explicitly handle the response status to ensure bool return type
-                status_code = response.status
-                if status_code == 200:
-                    logger.debug(f"[2025-05-25T18:45:00-04:00] A1111 service is healthy (status code: 200)")
-                    return bool(True)  # Explicit cast to bool
+            logger.debug(f"Checking A1111 health at URL: {health_check_url}")
+            
+            async with self.session.get(health_check_url, headers=self._get_headers()) as response:
+                if response.status == 200:
+                    # [2025-05-26T15:10:00-04:00] Only show debug logs when explicitly enabled
+                    if os.environ.get('A1111_DEBUG_LOGS', 'FALSE').upper() == 'TRUE':
+                        logger.debug("A1111 service is healthy (status code: 200)")
                 else:
-                    logger.warning(f"[2025-05-25T18:45:00-04:00] A1111 service returned status code: {status_code}")
-                    return bool(False)  # Explicit cast to bool
+                    logger.warning(f"A1111 service returned status code: {response.status}")
+                return response.status == 200
         except aiohttp.ClientConnectorError as e:
-            logger.error(f"[2025-05-25T18:45:00-04:00] A1111 service connection error: {e}")
+            logger.error(f"A1111 service connection error: {e}")
             return False
         except asyncio.TimeoutError:
-            logger.error(f"[2025-05-25T18:45:00-04:00] A1111 service connection timeout")
+            logger.error("A1111 service connection timeout")
             return False
         except Exception as e:
-            # [2025-05-25T21:40:00-04:00] Added general exception handling to ensure we always return a boolean
-            logger.error(f"[2025-05-25T21:40:00-04:00] Unexpected error during A1111 health check: {str(e)}")
+            logger.error(f"Unexpected error during A1111 health check: {str(e)}")
             return False
     
     async def initialize(self) -> bool:
-        """Initialize the connector
+        """Initialize the A1111 connector
         
         Returns:
             bool: True if initialization was successful, False otherwise
         """
+        # Check if we're using the mock service
+        # If A1111_MOCK_SERVICE is set to TRUE, we'll bypass the actual initialization
+        is_mock_service = os.environ.get('A1111_MOCK_SERVICE', 'FALSE').upper() == 'TRUE'
+        
+        if is_mock_service:
+            logger.info(f"Initializing A1111 connector with mock service at {self.base_url}")
+            
+            # Initialize the session if it doesn't exist
+            if self.session is None:
+                self.session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=self.timeout))
+            
+            # Always return True when using the mock service
+            return True
+        
         # [2025-05-25T21:50:00-04:00] Fixed type error by ensuring the method always returns a boolean value
         try:
             # [2025-05-25T18:45:00-04:00] Enhanced initialization with health check
-            logger.debug(f"[2025-05-25T18:45:00-04:00] Initializing A1111 connector with base URL: {self.base_url}")
+            logger.debug(f"Initializing A1111 connector with base URL: {self.base_url}")
             
-            # Set up session
-            self.session = aiohttp.ClientSession()
+            # Always initialize the session
+            if self.session is None:
+                # [2025-05-26T15:10:00-04:00] Only show debug logs when explicitly enabled
+                if os.environ.get('A1111_DEBUG_LOGS', 'FALSE').upper() == 'TRUE':
+                    logger.debug(f"Creating new aiohttp session for A1111 connector")
+                self.session = aiohttp.ClientSession(timeout=self.request_timeout)
             
-            # Check if the A1111 service is available
-            is_healthy = await self.check_health()
-            if not is_healthy:
-                logger.warning(f"[2025-05-25T21:50:00-04:00] A1111 service is not available, but connector will be initialized anyway")
+            # Always return True when using the mock service
+            if is_mock_service:
+                return True
             
-            # Always return True for now to allow the connector to be used even if A1111 is not running
-            # This allows the worker to accept A1111 jobs and queue them until A1111 is available
-            return True
+            # [2025-05-25T21:50:00-04:00] Fixed type error by ensuring the method always returns a boolean value
+            try:
+                # [2025-05-25T18:45:00-04:00] Enhanced initialization with health check
+                # [2025-05-26T15:10:00-04:00] Only show debug logs when explicitly enabled
+                if os.environ.get('A1111_DEBUG_LOGS', 'FALSE').upper() == 'TRUE':
+                    logger.debug(f"Initializing A1111 connector with base URL: {self.base_url}")
+                
+                # Set up session
+                # self.session = aiohttp.ClientSession()
+                
+                # Check if the A1111 service is available
+                is_healthy = await self.check_health()
+                if not is_healthy:
+                    logger.warning(f"A1111 service is not available, but connector will be initialized anyway")
+                
+                # Always return True for now to allow the connector to be used even if A1111 is not running
+                # This allows the worker to accept A1111 jobs and queue them until A1111 is available
+                return True
+            except Exception as e:
+                logger.error(f"Error initializing A1111 connector: {str(e)}")
+                # Still return True to allow the connector to be used
+                # The health check will fail when jobs are assigned if A1111 is not available
+                return True
         except Exception as e:
-            logger.error(f"[2025-05-25T21:50:00-04:00] Error initializing A1111 connector: {str(e)}")
-            # Still return True to allow the connector to be used
-            # The health check will fail when jobs are assigned if A1111 is not available
-            return True
+            logger.error(f"Error initializing A1111 connector: {str(e)}")
+            return False
     
     def get_job_type(self) -> str:
         """Get the job type that this connector handles
@@ -212,16 +264,15 @@ class A1111Connector(RESTSyncConnector):
         Returns:
             str: The job type string that matches connector_id
         """
-        # [2025-05-25T21:55:00-04:00] Always return connector_id for proper job assignment
-        # This ensures that the worker can receive jobs that match the connector_id
         job_type = self.connector_id
         
-        # Update self.job_type to match connector_id for consistency
-        if self.job_type != job_type:
-            logger.debug(f"[2025-05-25T21:55:00-04:00] Fixing job_type mismatch: '{self.job_type}' -> '{job_type}'")
+        # Handle potential mismatch between job_type and connector_id
+        if hasattr(self, "job_type") and self.job_type != job_type:
+            # [2025-05-26T15:10:00-04:00] Only show debug logs when explicitly enabled
+            if os.environ.get('A1111_DEBUG_LOGS', 'FALSE').upper() == 'TRUE':
+                logger.debug(f"Fixing job_type mismatch: '{self.job_type}' -> '{job_type}'")
             self.job_type = job_type
             
-        logger.debug(f"[2025-05-25T21:55:00-04:00] A1111Connector.get_job_type() returning: '{job_type}'")
         return job_type
     
     def get_capabilities(self) -> Dict[str, Any]:
@@ -230,8 +281,6 @@ class A1111Connector(RESTSyncConnector):
         Returns:
             Dict[str, Any]: Capabilities dictionary to be merged with worker capabilities
         """
-        # [2025-05-25T22:40:00-04:00] Added detailed debug logging for A1111 capabilities
-        logger.debug(f"[a1111_connector.py get_capabilities DEBUG] Getting A1111 capabilities")
         return {
             "a1111_version": self.VERSION,
             "supports_synchronous": True,
@@ -241,29 +290,33 @@ class A1111Connector(RESTSyncConnector):
             "supports_custom_endpoints": True
         }
     
-    # [2025-05-25T10:35:00-04:00] Removed the broadcast_service_request method and replaced with direct message sending
-    # This ensures that service request messages are sent using the same mechanism as progress updates
+    # Service request messages are sent directly using the websocket connection
     
     async def process_job(self, websocket, job_id: str, payload: Dict[str, Any], send_progress_update) -> Dict[str, Any]:
         """
-        Process a job using the A1111 REST API
+        Process a job using the A1111 REST API.
         
         Args:
-            websocket: WebSocket connection to the Redis hub
-            job_id: Unique identifier for the job
-            payload: Job payload containing request parameters
+            websocket: WebSocket connection
+            job_id: Job ID
+            payload: Job payload
             send_progress_update: Function to send progress updates
             
         Returns:
             Dict[str, Any]: Job result
         """
-        # [2025-05-25T22:40:00-04:00] Added detailed debug logging for A1111 job processing
-        logger.debug(f"[a1111_connector.py process_job DEBUG] Starting to process A1111 job: {job_id}")
-        logger.debug(f"[a1111_connector.py process_job DEBUG] Job payload: {json.dumps(payload)[:500]}...")
-        logger.debug(f"[a1111_connector.py process_job DEBUG] Connection status: base_url={self.base_url}, api_prefix={self.api_prefix}")
-        # [2025-05-20T12:02:05-04:00] Add a flag to track job completion
+        # Log basic job processing information
+        # [2025-05-26T15:10:00-04:00] Only show debug logs when explicitly enabled
+        if os.environ.get('A1111_DEBUG_LOGS', 'FALSE').upper() == 'TRUE':
+            logger.debug(f"Processing job {job_id} with A1111 connector using {self.base_url}")
+        
+        # Add a flag to track job completion
         # This helps prevent sending progress updates after the job is completed
         job_completed = False
+        
+        # Store the worker_id for service request messages
+        # [2025-05-25T11:15:00-04:00] Added worker_id extraction from payload
+        self.worker_id = payload.get("worker_id", "unknown")
         
         # Wrap the send_progress_update function to check the job_completed flag
         async def safe_send_progress_update(job_id, progress, status, message):
@@ -306,9 +359,9 @@ class A1111Connector(RESTSyncConnector):
             if endpoint.startswith('/'):
                 endpoint = endpoint[1:]
             url = f"{self.base_url}{self.api_prefix}/{endpoint}"
-                        
-            # Send progress update
-            await safe_send_progress_update(job_id, 10, "processing", f"Sending {method.upper()} request to A1111 API")
+            
+            # Send service_request message BEFORE any A1111 API calls
+            # This ensures the message is sent even if health checks or API calls fail
             
             # Prepare request data
             request_data = {
@@ -316,64 +369,101 @@ class A1111Connector(RESTSyncConnector):
                 **request_payload
             }
             
-            # [2025-05-25T11:15:00-04:00] IMPORTANT: Create a service request message that will be broadcast to monitors
+            # Create a service request message that will be broadcast to monitors
+            # [2025-05-26T15:10:00-04:00] Only show debug logs when explicitly enabled
+            if os.environ.get('A1111_DEBUG_LOGS', 'FALSE').upper() == 'TRUE':
+                logger.debug(f"Creating service_request message for job {job_id}")
+            
+            # Get worker and service information
+            worker_id = self.worker_id if hasattr(self, "worker_id") else "unknown"
+            service = self.get_job_type() if hasattr(self, "job_type") else "a1111"
+            request_type = f"a1111_{endpoint}"
+            
+            # Create the content dictionary with all the request details
+            content = {
+                "endpoint": endpoint,
+                "method": method.upper(),
+                "url": url,
+                "host": self.host,
+                "port": self.port,
+                "base_url": self.base_url,
+                "api_prefix": self.api_prefix,
+                "payload": request_payload,
+                "timestamp": time.time(),
+                "mock_service": os.environ.get('A1111_MOCK_SERVICE', 'FALSE').upper() == 'TRUE'
+            }
+            
+            # Create the service_request message dictionary
+            service_request_message = {
+                "type": "service_request",
+                "timestamp": time.time(),
+                "job_id": job_id,
+                "worker_id": worker_id,
+                "service": service,
+                "request_type": request_type,
+                "content": content
+            }
+            
+            # Convert to JSON for sending
+            message_json = json.dumps(service_request_message)
+            message_size = len(message_json)
+            
+            # Log basic information about the service request message
+            # [2025-05-26T15:10:00-04:00] Only show debug logs when explicitly enabled
+            if os.environ.get('A1111_DEBUG_LOGS', 'FALSE').upper() == 'TRUE':
+                logger.debug(f"Sending service_request message for job {job_id} (size: {message_size} bytes)")
+            
+            # Send the message directly using the websocket
             try:
-                # Log with a very distinctive message to ensure we can see it in the logs
-                logger.debug(f"[a1111_connector.py process_job] [2025-05-25T11:15:00-04:00] BROADCASTING SERVICE REQUEST for job {job_id} to endpoint {endpoint}")
+                # Use the appropriate send method based on websocket type
+                if hasattr(websocket, 'send_text'):
+                    await websocket.send_text(message_json)  # For FastAPI WebSocket objects
+                else:
+                    await websocket.send(message_json)  # For ClientConnection objects
                 
-                # Create a message that will be sent directly to the websocket
-                # This bypasses the Hub's message routing and goes directly to the monitor
-                service_request_message = {
-                    "type": "service_request",  # This is a special message type that the monitor will recognize
-                    "timestamp": time.time(),
-                    "job_id": job_id,
-                    "worker_id": self.worker_id if hasattr(self, "worker_id") else "unknown",
-                    "service": self.get_job_type() if hasattr(self, "job_type") else "a1111",
-                    "request_type": f"a1111_{endpoint}",
-                    "content": {
-                        "endpoint": endpoint,
-                        "method": method.upper(),
-                        "url": url,
-                        "payload": request_payload
-                    }
-                }
+                # [2025-05-26T15:10:00-04:00] Only show debug logs when explicitly enabled
+                if os.environ.get('A1111_DEBUG_LOGS', 'FALSE').upper() == 'TRUE':
+                    logger.debug(f"Successfully sent service_request message for job {job_id}")
                 
-                # Convert to JSON for sending
-                message_json = json.dumps(service_request_message)
-                message_size = len(message_json)
+                # Add a short delay to ensure the message is processed
+                await asyncio.sleep(0.1)
                 
-                # Log the message details with very distinctive timestamps
-                logger.debug(f"[a1111_connector.py process_job] [2025-05-25T11:15:00-04:00] Sending service request message (size: {message_size} bytes)")
-                logger.debug(f"[a1111_connector.py process_job] [2025-05-25T11:15:00-04:00] Message structure: {list(service_request_message.keys())}")
-                
-                # Send the message directly using the websocket
-                # This bypasses the Hub's message routing and goes directly to the monitor
-                await websocket.send(message_json)
-                
-                # [2025-05-25T13:45:00-04:00] Send a progress update message directly
-                # A1111Connector doesn't inherit from BaseWorker, so we can't use self.send_progress_update
-                progress_message = {
-                    "type": "update_job_progress",
-                    "job_id": job_id,
-                    "worker_id": self.worker_id if hasattr(self, "worker_id") else "unknown",
-                    "progress": 10,
-                    "status": "processing",
-                    "message": f"Sending {method.upper()} request to A1111 API",
-                    "timestamp": time.time()
-                }
-                
-                # Convert to JSON and send directly
-                progress_json = json.dumps(progress_message)
-                await websocket.send(progress_json)
-                
-                # Log success with very distinctive timestamp
-                logger.debug(f"[a1111_connector.py process_job] [2025-05-25T11:15:00-04:00] Successfully sent service request message for job {job_id}")
-                
+                # [2025-05-26T15:10:00-04:00] Only show debug logs when explicitly enabled
+                if os.environ.get('A1111_DEBUG_LOGS', 'FALSE').upper() == 'TRUE':
+                    logger.debug(f"Continued after sending service_request message")
             except Exception as e:
-                # Log but don't fail the job if broadcasting fails
-                error_type = type(e).__name__
-                logger.error(f"[a1111_connector.py process_job] [2025-05-25T11:15:00-04:00] FAILED to send service request: {error_type} - {str(e)}")
-                # Continue with the job processing
+                logger.error(f"Error sending service_request message: {str(e)}")
+            
+            # Now continue with the regular job processing
+            # Send progress update
+            await safe_send_progress_update(job_id, 10, "processing", f"Sending {method.upper()} request to A1111 API")
+            
+            # Also create a progress message
+            progress_message = {
+                "type": "update_job_progress",
+                "job_id": job_id,
+                "worker_id": self.worker_id if hasattr(self, "worker_id") else "unknown",
+                "progress": 10,
+                "status": "processing",
+                "message": f"Sending {method.upper()} request to A1111 API",
+                "timestamp": time.time()
+            }
+            
+            # Convert to JSON and send directly
+            progress_message_json = json.dumps(progress_message)
+            
+            try:
+                # Check what type of websocket object we have and use the appropriate method
+                if hasattr(websocket, 'send_text'):
+                    await websocket.send_text(progress_message_json)  # For FastAPI WebSocket objects
+                else:
+                    await websocket.send(progress_message_json)  # For ClientConnection objects
+                
+                # [2025-05-26T15:10:00-04:00] Only show debug logs when explicitly enabled
+                if os.environ.get('A1111_DEBUG_LOGS', 'FALSE').upper() == 'TRUE':
+                    logger.debug(f"Successfully sent progress message for job {job_id}")
+            except Exception as e:
+                logger.error(f"Error sending progress message: {str(e)}")
             
             # [2025-05-19T21:30:00-04:00] Implement progress polling for A1111 jobs
             # This allows us to show progress during long-running image generation and prevent timeouts
@@ -393,7 +483,7 @@ class A1111Connector(RESTSyncConnector):
                         try:
                             # [2025-05-25T15:25:00-04:00] Added null check for session to prevent attribute errors
                             if not hasattr(self, 'session') or self.session is None:
-                                logger.error(f"[2025-05-25T15:25:00-04:00] Session is None or not initialized in poll_progress")
+                                logger.error(f"[2025-05-26T13:57:00-04:00] HEALTH CHECK ERROR: Session is None or not initialized")
                                 break
                                 
                             async with self.session.get(progress_url, headers=self._get_headers()) as progress_response:
@@ -428,7 +518,9 @@ class A1111Connector(RESTSyncConnector):
                                     # [2025-05-20T12:02:05-04:00] Stop polling when job is completed
                                     # This prevents the final 10% progress update from being sent after job completion
                                     if progress_data_dict.get('completed', False):
-                                        logger.debug(f"[a1111_connector.py poll_progress] A1111 job completed, stopping progress polling")
+                                        # Debug logging reduced [2025-05-26T13:57:00-04:00]
+                                        if os.environ.get('A1111_DEBUG_LOGS', 'FALSE').upper() == 'TRUE':
+                                            logger.debug(f"[a1111_connector.py poll_progress] A1111 job completed, stopping progress polling")
                                         return  # Exit the polling function completely instead of just breaking the loop
                         except Exception as e:
                             logger.error(f"[a1111_connector.py poll_progress] Error polling progress: {str(e)}")

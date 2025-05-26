@@ -2,6 +2,7 @@
 # Implementation of the MessageHandlerInterface
 import asyncio
 import json
+import os
 import time
 import uuid
 from typing import Dict, Any, Optional, Callable, Awaitable, List
@@ -235,7 +236,9 @@ class MessageHandler(MessageHandlerInterface):
         )
 
         # Debug logging for job addition
-        logger.debug(f"[message_handler.py  handle_submit_job() {job_id}] Job added to Redis")
+        # [2025-05-26T15:15:00-04:00] Only show debug logs when explicitly enabled
+        if os.environ.get('DEBUG_LOGS', 'FALSE').upper() == 'TRUE':
+            logger.debug(f"[message_handler.py  handle_submit_job() {job_id}] Job added to Redis")
 
         # Send confirmation response
         # Note: We're not directly notifying workers here anymore
@@ -257,7 +260,9 @@ class MessageHandler(MessageHandlerInterface):
         else:
             position = job.get('position', -1)
 
-        logger.debug(f"[message_handler.py  handle_submit_job() {job_id}] Job position is: {position}")
+        # [2025-05-26T15:15:00-04:00] Only show debug logs when explicitly enabled
+        if os.environ.get('DEBUG_LOGS', 'FALSE').upper() == 'TRUE':
+            logger.debug(f"[message_handler.py  handle_submit_job() {job_id}] Job position is: {position}")
 
         response = JobAcceptedMessage(
             job_id=job_id,
@@ -378,38 +383,37 @@ class MessageHandler(MessageHandlerInterface):
             message_data: Message data
             websocket: WebSocket connection
         """
-        # [2025-05-26T13:30:00-04:00] Added comprehensive debug logging for all worker messages
-        # Log the raw message type and key fields without the full content which might be large
+        # Log basic information about the message for debugging purposes
         message_size = len(str(message_data))
         job_id = message_data.get('job_id', 'N/A')
         
-        # Create a safe summary of the message content
-        message_summary = {
-            'type': message_type,
-            'worker_id': worker_id,
-            'job_id': job_id,
-            'message_size': message_size,
-            'keys': list(message_data.keys())
-        }
-        
-        # Add status if present
-        if 'status' in message_data:
-            message_summary['status'] = message_data['status']
+        if logger.isEnabledFor(logging.DEBUG):
+            # Only construct the detailed message summary if debug logging is enabled
+            # Create a safe summary of the message content
+            message_summary = {
+                'type': message_type,
+                'worker_id': worker_id,
+                'job_id': job_id,
+                'message_size': message_size
+            }
             
-        # Add progress if present
-        if 'progress' in message_data:
-            message_summary['progress'] = message_data['progress']
+            # Add status and progress if present
+            if 'status' in message_data:
+                message_summary['status'] = message_data['status']
+            if 'progress' in message_data:
+                message_summary['progress'] = message_data['progress']
+                
+            # Add service and request_type for service_request messages
+            if message_type == 'service_request':
+                message_summary['service'] = message_data.get('service', 'unknown')
+                message_summary['request_type'] = message_data.get('request_type', 'unknown')
+                if 'content' in message_data:
+                    message_summary['endpoint'] = message_data.get('content', {}).get('endpoint', 'unknown')
             
-        # Add service and request_type for service_request messages
-        if message_type == 'service_request':
-            message_summary['service'] = message_data.get('service', 'unknown')
-            message_summary['request_type'] = message_data.get('request_type', 'unknown')
-            if 'content' in message_data:
-                message_summary['content_keys'] = list(message_data['content'].keys())
-                message_summary['endpoint'] = message_data.get('content', {}).get('endpoint', 'unknown')
-        
-        # Log the message summary
-        logger.debug(f"[2025-05-26T13:30:00-04:00] [message_handler.py handle_worker_message] RECEIVED MESSAGE: {json.dumps(message_summary)}")
+            # Log the message summary
+            # [2025-05-26T15:15:00-04:00] Only show debug logs when explicitly enabled
+            if os.environ.get('DEBUG_LOGS', 'FALSE').upper() == 'TRUE':
+                logger.debug(f"Received worker message: {json.dumps(message_summary)}")
         
         # Parse message using the models
         message_obj = self.message_models.parse_message(message_data)
@@ -428,6 +432,32 @@ class MessageHandler(MessageHandlerInterface):
                 # This ensures proper type validation while maintaining the original data
                 register_message = RegisterWorkerMessage(**message_obj.dict())
                 await self.handle_register_worker(worker_id, register_message)
+                
+            # [2025-05-26T14:45:00-04:00] Updated service_request handler to use the new ServiceRequestMessage model
+            case "service_request":
+                # Extract key information for logging
+                job_id = message_data.get('job_id', 'unknown')
+                service = message_data.get('service', 'unknown')
+                request_type = message_data.get('request_type', 'unknown')
+                content = message_data.get('content', {})
+                
+                # Log basic information about the service request
+                # [2025-05-26T15:15:00-04:00] Only show debug logs when explicitly enabled
+                if os.environ.get('DEBUG_LOGS', 'FALSE').upper() == 'TRUE':
+                    logger.debug(f"Processing service_request - job_id: {job_id}, service: {service}, type: {request_type}")
+                
+                # Create a properly formatted ServiceRequestMessage
+                service_request = self.message_models.create_service_request_message(
+                    job_id=job_id,
+                    worker_id=worker_id,
+                    service=service,
+                    request_type=request_type,
+                    content=content
+                )
+                
+                # Broadcast the service_request message to all monitors
+                # This is critical for ensuring the monitor interface can display API calls
+                await self.connection_manager.broadcast_to_monitors(service_request)
             case "update_job_progress":
                 # Cast message to the expected type for type checking
                 # Create a properly typed message object
@@ -511,18 +541,35 @@ class MessageHandler(MessageHandlerInterface):
             # The subscribe_job_notifications case has been removed
             # This functionality is now handled by the register_worker message
             case _:
-                # [2025-05-26T13:32:00-04:00] Added detailed logging for unsupported message types
-                logger.debug(f"[2025-05-26T13:32:00-04:00] [message_handler.py] UNSUPPORTED MESSAGE TYPE: {message_type} from worker {worker_id}")
+                # Log unsupported message types
+                # [2025-05-26T15:15:00-04:00] Only show debug logs when explicitly enabled
+                if os.environ.get('DEBUG_LOGS', 'FALSE').upper() == 'TRUE':
+                    logger.debug(f"Unsupported message type: {message_type} from worker {worker_id}")
                 
-                # For service_request messages, log additional details
+                # We should no longer reach this code for service_request messages
+                # since we added a specific case handler above
                 if message_type == "service_request":
                     service = message_data.get('service', 'unknown')
                     request_type = message_data.get('request_type', 'unknown')
                     endpoint = message_data.get('content', {}).get('endpoint', 'unknown')
-                    logger.debug(f"[2025-05-26T13:32:00-04:00] [message_handler.py] SERVICE REQUEST DETAILS: service={service}, request_type={request_type}, endpoint={endpoint}")
+                    logger.warning(f"[2025-05-26T14:46:00-04:00] Unhandled service_request message detected in default handler: service={service}, request_type={request_type}, endpoint={endpoint}")
                     
-                    # Check if message was already broadcast to monitors
-                    logger.debug(f"[2025-05-26T13:32:00-04:00] [message_handler.py] Note: This message may have already been broadcast to monitors by the connection manager")
+                    # Create a properly formatted ServiceRequestMessage as a fallback
+                    job_id = message_data.get('job_id', 'unknown')
+                    content = message_data.get('content', {})
+                    
+                    # Create a properly formatted ServiceRequestMessage
+                    service_request = self.message_models.create_service_request_message(
+                        job_id=job_id,
+                        worker_id=worker_id,
+                        service=service,
+                        request_type=request_type,
+                        content=content
+                    )
+                    
+                    # Attempt to broadcast the message to monitors as a fallback
+                    logger.warning(f"[2025-05-26T14:46:00-04:00] Attempting fallback broadcast of service_request message to monitors")
+                    await self.connection_manager.broadcast_to_monitors(service_request)
                 
                 # Handle unrecognized message type
                 error_message = ErrorMessage(error=f"Unsupported message type: {message_type}")
@@ -537,7 +584,9 @@ class MessageHandler(MessageHandlerInterface):
             message: Worker registration message
         """
         # Register worker in ConnectionManager (in-memory)
-        logger.debug(f"[2025-05-26T00:15:00-04:00] [message_handler.py] Registering worker {worker_id} with capabilities: {message.capabilities}")
+        # [2025-05-26T15:15:00-04:00] Only show debug logs when explicitly enabled
+        if os.environ.get('DEBUG_LOGS', 'FALSE').upper() == 'TRUE':
+            logger.debug(f"[2025-05-26T00:15:00-04:00] [message_handler.py] Registering worker {worker_id} with capabilities: {message.capabilities}")
         success = self.connection_manager.register_worker(worker_id, message.capabilities)
         
         if success:
@@ -761,7 +810,9 @@ class MessageHandler(MessageHandlerInterface):
         # 2025-04-26-21:30 - Added method to handle job cancellation requests
         
         # Log the cancellation request
-        logger.debug(f"[message_handler.py handle_cancel_job()]: Client {client_id} requested cancellation of job {job_id} with reason: {reason}")
+        # [2025-05-26T15:15:00-04:00] Only show debug logs when explicitly enabled
+        if os.environ.get('DEBUG_LOGS', 'FALSE').upper() == 'TRUE':
+            logger.debug(f"[message_handler.py handle_cancel_job()]: Client {client_id} requested cancellation of job {job_id} with reason: {reason}")
         
         # Cancel the job in Redis
         success = self.redis_service.cancel_job(job_id, reason)
@@ -780,7 +831,9 @@ class MessageHandler(MessageHandlerInterface):
             # Also notify any subscribers to this job
             await self.connection_manager.send_job_update(job_id, response)
             
-            logger.debug(f"[message_handler.py handle_cancel_job()]: Successfully cancelled job {job_id}")
+            # [2025-05-26T15:15:00-04:00] Only show debug logs when explicitly enabled
+            if os.environ.get('DEBUG_LOGS', 'FALSE').upper() == 'TRUE':
+                logger.debug(f"[message_handler.py handle_cancel_job()]: Successfully cancelled job {job_id}")
         else:
             # Create an error message
             error_message = ErrorMessage(error=f"Failed to cancel job {job_id}. Job may not exist or is already in a terminal state.")
@@ -803,7 +856,9 @@ class MessageHandler(MessageHandlerInterface):
             job_id: ID of the job to force retry
         """
         # Log the force retry request
-        logger.debug(f"[message_handler.py handle_force_retry_job()]: Client {client_id} requested force retry of job {job_id}")
+        # [2025-05-26T15:15:00-04:00] Only show debug logs when explicitly enabled
+        if os.environ.get('DEBUG_LOGS', 'FALSE').upper() == 'TRUE':
+            logger.debug(f"[message_handler.py handle_force_retry_job()]: Client {client_id} requested force retry of job {job_id}")
         
         # Get the job status from Redis to verify it exists
         job_data = self.redis_service.get_job_status(job_id)
@@ -904,7 +959,9 @@ class MessageHandler(MessageHandlerInterface):
             # The fail_job method in redis_service already handles the requeuing logic
             # by marking the job as failed and publishing a job update
             
-            logger.debug(f"[message_handler.py handle_fail_job()]: Job {job_id} marked as failed and requeued")
+            # [2025-05-26T15:15:00-04:00] Only show debug logs when explicitly enabled
+            if os.environ.get('DEBUG_LOGS', 'FALSE').upper() == 'TRUE':
+                logger.debug(f"[message_handler.py handle_fail_job()]: Job {job_id} marked as failed and requeued")
             
             # Broadcast pending jobs to idle workers
             await self.broadcast_pending_jobs_to_idle_workers()

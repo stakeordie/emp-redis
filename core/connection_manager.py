@@ -347,9 +347,26 @@ class ConnectionManager(ConnectionManagerInterface):
                 # Receive message from worker
                 message_text = await websocket.receive_text()
                 
+                # [2025-05-26T13:47:00-04:00] CRITICAL DEBUG: Raw message received from worker
+                message_size = len(message_text)
+                # Only log the first 200 characters to avoid flooding logs
+                preview = message_text[:200] + "..." if len(message_text) > 200 else message_text
+                logger.error(f"[2025-05-26T13:47:00-04:00] CRITICAL DEBUG: Received raw message from worker {worker_id} with size {message_size} bytes: {preview}")
+                
                 # Parse message
                 try:
                     message_data = json.loads(message_text)
+                    
+                    # [2025-05-26T13:47:00-04:00] CRITICAL DEBUG: Check for service_request type
+                    message_type = message_data.get("type", "unknown")
+                    if message_type == "service_request":
+                        logger.error(f"[2025-05-26T13:47:00-04:00] CRITICAL DEBUG: Detected service_request message from worker {worker_id}")
+                        # Log key fields
+                        job_id = message_data.get("job_id", "unknown")
+                        service = message_data.get("service", "unknown")
+                        request_type = message_data.get("request_type", "unknown")
+                        logger.error(f"[2025-05-26T13:47:00-04:00] CRITICAL DEBUG: service_request details - job_id: {job_id}, service: {service}, request_type: {request_type}")
+                    
                     
                     # Process message based on type
                     if self.message_handler is not None:
