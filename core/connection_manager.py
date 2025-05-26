@@ -6,6 +6,7 @@ import logging
 import asyncio
 import hashlib
 import websockets
+import os
 from typing import Dict, List, Any, Optional, Union, Callable, Awaitable, Tuple, cast
 from websockets.exceptions import ConnectionClosed, ConnectionClosedError
 import traceback
