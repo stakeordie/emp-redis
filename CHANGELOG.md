@@ -19,6 +19,13 @@ All notable changes to the EMP Redis project will be documented in this file.
   - Helps with debugging and understanding what's being requested from services
 
 ### Changed
+- [2025-05-25T21:45:00-04:00] Fixed worker import paths to match deployment environment structure:
+  - Updated import in base_worker.py from `core.core_types.message_models` to `core.message_models`
+  - Enhanced diagnostic logging to provide detailed environment information
+  - Added file existence checks and content inspection for key files
+  - Used debug level for diagnostic messages to facilitate cleanup
+  - Fixed critical import error preventing worker startup
+
 - [2025-05-25T22:15:00-04:00] Fixed connector loading with backward compatibility:
   - Simplified connector class finding logic in connector_loader.py
   - Added connector_id property to all connector classes including simulation_connector

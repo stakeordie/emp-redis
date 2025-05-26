@@ -10,9 +10,9 @@ from typing import Dict, List, Any, Optional, Union, cast, TypeVar, Generic
 from enum import Enum, auto
 from dotenv import load_dotenv
 
-# [2025-05-25T21:30:00-04:00] Reverted import path to match deployment package structure
-# The GitHub workflow copies message_models.py to core/core_types/ in the deployed package
-from core.core_types.message_models import (
+# [2025-05-25T21:45:00-04:00] Updated import path to match actual deployment package structure
+# The deployment environment has message_models.py in core/ not in core/core_types/
+from core.message_models import (
     UpdateJobProgressMessage,
     JobFailedMessage,
     WorkerStatusMessage,
