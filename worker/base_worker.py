@@ -11,7 +11,6 @@ from enum import Enum, auto
 from dotenv import load_dotenv
 
 # [2025-05-25T21:45:00-04:00] Updated import path to match actual deployment package structure
-# core/core_types is correct!!!!!!!!
 from core.message_models import (
     UpdateJobProgressMessage,
     FailJobMessage,
