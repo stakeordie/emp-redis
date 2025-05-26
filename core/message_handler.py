@@ -478,12 +478,45 @@ class MessageHandler(MessageHandlerInterface):
                     # Send error back to worker
                     error_message = ErrorMessage(error=f"Error processing ConnectorWebSocketStatusMessage: {str(e)}")
                     await self.connection_manager.send_to_worker(worker_id, error_message)
+                    
+            # [2025-05-26T16:22:00-04:00] Added handler for service_request messages
+            case "service_request":
+                # Forward service request messages to monitors
+                # This allows monitors to see API calls made by connectors
+                from core.message_models import ServiceRequestMessage
+                
+                # Only show debug logs when explicitly enabled
+                if os.environ.get('DEBUG_LOGS', 'FALSE').upper() == 'TRUE':
+                    logger.debug(f"[2025-05-26T16:22:00-04:00] [message_handler.py] Received service_request message from worker {worker_id}")
+                
+                try:
+                    # Ensure we have a properly typed message object
+                    if not isinstance(message_obj, ServiceRequestMessage):
+                        service_request_message = ServiceRequestMessage(**message_obj.model_dump())
+                    else:
+                        service_request_message = message_obj
+                        
+                    # Forward the service request message to monitors
+                    # This uses the same mechanism as progress updates
+                    await self.connection_manager.broadcast_to_monitors(service_request_message)
+                    
+                    # Only show debug logs when explicitly enabled
+                    if os.environ.get('DEBUG_LOGS', 'FALSE').upper() == 'TRUE':
+                        logger.debug(f"[2025-05-26T16:22:00-04:00] [message_handler.py] Forwarded service_request to monitors: {service_request_message.request_type}")
+                    
+                except Exception as e:
+                    # Send error back to worker
+                    error_message = ErrorMessage(error=f"Error processing ServiceRequestMessage: {str(e)}")
+                    await self.connection_manager.send_to_worker(worker_id, error_message)
+                    logger.error(f"[2025-05-26T16:22:00-04:00] [message_handler.py] Error processing service_request: {str(e)}")
             # The subscribe_job_notifications case has been removed
             # This functionality is now handled by the register_worker message
             case _:
                 # Handle unrecognized message type
                 error_message = ErrorMessage(error=f"Unsupported message type: {message_type}")
                 await self.connection_manager.send_to_worker(worker_id, error_message)
+                # [2025-05-26T16:22:00-04:00] Added error logging for unsupported message types
+                logger.error(f"[2025-05-26T16:22:00-04:00] [message_handler.py] Unsupported message type: {message_type} from worker {worker_id}")
 
     async def handle_register_worker(self, worker_id: str, message: RegisterWorkerMessage) -> None:
         """
