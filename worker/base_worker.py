@@ -518,7 +518,7 @@ class BaseWorker:
                 logger.debug(f"[2025-05-26T01:15:00-04:00] Ignoring job notification - worker is busy. Status: {self.status}")
                 return
                 
-            # Extract job details safely with fallbacks
+            # [2025-05-26T00:20:00-04:00] Enhanced job detail extraction to handle different message object types
             job_id = None
             job_type = 'unknown'
             priority = 0
@@ -531,14 +531,43 @@ class BaseWorker:
                 job_type = message_obj.get('job_type', 'unknown')
                 priority = message_obj.get('priority', 0)
                 last_failed_worker = message_obj.get('last_failed_worker')
+            elif hasattr(message_obj, 'job_id'):
+                # It has direct attributes (like a Pydantic model)
+                job_id = message_obj.job_id
+                job_type = getattr(message_obj, 'job_type', 'unknown')
+                priority = getattr(message_obj, 'priority', 0)
+                last_failed_worker = getattr(message_obj, 'last_failed_worker', None)
+                
+            # Debug log the message object type
+            logger.debug(f"[2025-05-26T00:20:00-04:00] [base_worker.py] Message object type: {type(message_obj)}")
             
             # Log job notification with timestamp for tracking
-            logger.debug(f"[2025-05-26T01:15:00-04:00] Processing job notification. Job ID: {job_id}, Job Type: {job_type}, Priority: {priority}")
+            logger.debug(f"[2025-05-26T00:20:00-04:00] [base_worker.py] Processing job notification. Job ID: {job_id}, Job Type: {job_type}, Priority: {priority}")
             
             # Check if job ID is present
             if not job_id:
-                logger.error(f"[2025-05-26T01:15:00-04:00] Missing job ID in job notification message: {message_obj}")
-                return
+                logger.error(f"[2025-05-26T00:20:00-04:00] [base_worker.py] Missing job ID in job notification message: {message_obj}")
+                # Try one more approach - direct attribute access if the object has a string representation with job_id
+                if hasattr(message_obj, '__str__'):
+                    msg_str = str(message_obj)
+                    if 'job_id' in msg_str:
+                        logger.debug(f"[2025-05-26T00:20:00-04:00] [base_worker.py] Attempting to extract job_id from string representation")
+                        import re
+                        job_id_match = re.search(r"job_id='([^']+)'|job_id=\"([^\"]+)\"", msg_str)
+                        if job_id_match:
+                            job_id = job_id_match.group(1) or job_id_match.group(2)
+                            logger.debug(f"[2025-05-26T00:20:00-04:00] [base_worker.py] Extracted job_id from string: {job_id}")
+                            
+                            # Also try to extract job_type
+                            job_type_match = re.search(r"job_type='([^']+)'|job_type=\"([^\"]+)\"", msg_str)
+                            if job_type_match:
+                                job_type = job_type_match.group(1) or job_type_match.group(2)
+                                logger.debug(f"[2025-05-26T00:20:00-04:00] [base_worker.py] Extracted job_type from string: {job_type}")
+                
+                # If still no job_id, return
+                if not job_id:
+                    logger.error(f"[2025-05-26T00:20:00-04:00] [base_worker.py] Failed to extract job_id using all methods")
+                    return
             
             # [2025-05-25T20:45:00-04:00] Enhanced debug logging for connector matching
             # [2025-05-25T21:05:00-04:00] Added None check for self.connectors to fix type errors
