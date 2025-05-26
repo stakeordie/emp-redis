@@ -429,22 +429,25 @@ class BaseWorker:
             match(message_type):
                 case MessageType.CONNECTION_ESTABLISHED:
                     logger.debug(f"[base_worker.py handle_message()]: Connection established: {getattr(message_obj, 'message', '')}")
-                # case MessageType.JOB_AVAILABLE:
-                #     # Ensure we have a JobAvailableMessage or compatible dict
-                #     if hasattr(message_obj, 'job_id') and hasattr(message_obj, 'job_type'):
-                #         await self.handle_job_notification(websocket, cast(Any, message_obj))
-                #     else:
-                #         logger.warning(f"[base_worker.py handle_message()]: Received JOB_AVAILABLE message with invalid format")
+                case MessageType.JOB_AVAILABLE:
+                    # [2025-05-26T00:15:00-04:00] Uncommented and enhanced JOB_AVAILABLE handling
+                    logger.debug(f"[2025-05-26T00:15:00-04:00] [base_worker.py] Received JOB_AVAILABLE message: {message_obj}")
+                    # Ensure we have a JobAvailableMessage or compatible dict
+                    if hasattr(message_obj, 'job_id') and hasattr(message_obj, 'job_type'):
+                        logger.debug(f"[2025-05-26T00:15:00-04:00] [base_worker.py] Processing job notification for job {message_obj.job_id} of type {message_obj.job_type}")
+                        await self.handle_job_notification(websocket, cast(Any, message_obj))
+                    else:
+                        logger.warning(f"[2025-05-26T00:15:00-04:00] [base_worker.py] Received JOB_AVAILABLE message with invalid format: {message_obj}")
                 case MessageType.JOB_ASSIGNED:
                     await self.handle_job_assigned(websocket, cast(Any, message_obj))
                 
-                # case MessageType.WORKER_HEARTBEAT:
-                #     # Acknowledge heartbeat from server with detailed logging
-                #     logger.debug(f"[base_worker.py handle_message()]: HEARTBEAT RESPONSE RECEIVED from server for worker {self.worker_id}")
+                case MessageType.WORKER_HEARTBEAT:
+                    # Acknowledge heartbeat from server with detailed logging
+                    logger.debug(f"[base_worker.py handle_message()]: HEARTBEAT RESPONSE RECEIVED from server for worker {self.worker_id}")
                 
-                # case MessageType.WORKER_HEARTBEAT_ACK:
-                #     # Handle heartbeat acknowledgment from server
-                #     logger.debug(f"[base_worker.py handle_message()]: HEARTBEAT ACK RECEIVED from server for worker {self.worker_id}")
+                case MessageType.WORKER_HEARTBEAT_ACK:
+                    # Handle heartbeat acknowledgment from server
+                    logger.debug(f"[base_worker.py handle_message()]: HEARTBEAT ACK RECEIVED from server for worker {self.worker_id}")
                 case MessageType.JOB_COMPLETED_ACK:
                     # Handle job completion acknowledgment from the server
                     if hasattr(message_obj, 'job_id'):
