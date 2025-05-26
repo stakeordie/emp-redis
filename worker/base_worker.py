@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 
 # [2025-05-25T21:45:00-04:00] Updated import path to match actual deployment package structure
 # core/core_types is correct!!!!!!!!
-from core.core_types.message_models import (
+from core.message_models import (
     UpdateJobProgressMessage,
     FailJobMessage,
     WorkerStatusMessage,
@@ -91,12 +91,18 @@ if not import_success:
     logger.error(f"[base_worker.py] {error_msg}")
     raise ImportError(error_msg)
 
-from core.message_models import (
+# [2025-05-26T16:05:00-04:00] Fixed import structure to avoid circular imports
+# Import base_messages directly from core.core_types
+from core.core_types.base_messages import (
     MessageType,
+    BaseMessage
+)
+
+# Import message models from core.message_models
+from core.message_models import (
     WorkerHeartbeatMessage,
     WorkerStatusMessage,
     CompleteJobMessage,
-    BaseMessage,
     ClaimJobMessage,
     JobAvailableMessage,
     UpdateJobProgressMessage,
