@@ -167,6 +167,11 @@ class A1111Connector(RESTSyncConnector):
         Returns:
             bool: True if the service is healthy, False otherwise
         """
+        # [2025-05-26T15:45:00-04:00] First check if we're using the mock service
+        if os.environ.get('A1111_MOCK_SERVICE', 'FALSE').upper() == 'TRUE':
+            logger.info("[2025-05-26T15:45:00-04:00] Using mock A1111 service, health check automatically passes")
+            return True
+            
         try:
             if self.session is None:
                 logger.error("Session is None, cannot perform health check")
@@ -175,7 +180,9 @@ class A1111Connector(RESTSyncConnector):
             # Use the correct URL for health checks
             health_check_url = f"{self.base_url}/healthz"
             
-            logger.debug(f"Checking A1111 health at URL: {health_check_url}")
+            # [2025-05-26T15:10:00-04:00] Only show debug logs when explicitly enabled
+            if os.environ.get('A1111_DEBUG_LOGS', 'FALSE').upper() == 'TRUE':
+                logger.debug(f"Checking A1111 health at URL: {health_check_url}")
             
             async with self.session.get(health_check_url, headers=self._get_headers()) as response:
                 if response.status == 200:
