@@ -670,6 +670,13 @@ class ConnectionManager(ConnectionManagerInterface):
             
             # No message size limit for client communications
             
+            # [2025-05-26T17:55:00-04:00] Check if the WebSocket is in the process of closing
+            # This prevents "Cannot call 'send' once a close message has been sent" errors
+            connection_id = id(websocket)
+            if connection_id in self._closing_connections:
+                logger.debug(f"[2025-05-26T17:55:00-04:00] [connection_manager.py] Cannot send message to client {client_id}: WebSocket is closing")
+                return False
+            
             # Send the original message
             await websocket.send_text(message_text)            
             # [2025-05-20T19:23:00-04:00] Check message type - we no longer need to send complete_job messages here
@@ -781,6 +788,13 @@ class ConnectionManager(ConnectionManagerInterface):
             # Only log a warning for extremely large messages (over 10MB) for monitoring purposes
             if msg_size > 10000000:  # 10MB warning threshold
                 logger.warning(f"[connection_manager.py send_to_worker()] Very large message being sent: {msg_size} bytes. This may cause performance issues.")
+            
+            # [2025-05-26T17:55:00-04:00] Check if the WebSocket is in the process of closing
+            # This prevents "Cannot call 'send' once a close message has been sent" errors
+            connection_id = id(websocket)
+            if connection_id in self._closing_connections:
+                logger.debug(f"[2025-05-26T17:55:00-04:00] [connection_manager.py] Cannot send message to worker {worker_id}: WebSocket is closing")
+                return False
                 
             # Actually send the message
             await websocket.send_text(message_text)
@@ -1568,6 +1582,10 @@ class ConnectionManager(ConnectionManagerInterface):
             
         print(f"🔍🔍🔍 END MONITOR SUBSCRIPTION REQUEST 🔍🔍🔍\n\n")
     
+    # [2025-05-26T17:50:00-04:00] Added connection state tracking to prevent duplicate close attempts
+    # This dictionary tracks which WebSocket connections are in the process of closing
+    _closing_connections = set()
+    
     async def _close_websocket(self, websocket: WebSocket, reason: str) -> None:
         """Gracefully close a WebSocket connection with error handling
         
@@ -1575,18 +1593,34 @@ class ConnectionManager(ConnectionManagerInterface):
             websocket: The WebSocket connection to close
             reason: The reason for closing the connection
         """
+        # Generate a unique identifier for this WebSocket connection
+        # This allows us to track which connections are already being closed
+        connection_id = id(websocket)
+        
+        # Check if this connection is already being closed
+        if connection_id in self._closing_connections:
+            logger.debug(f"[2025-05-26T17:50:00-04:00] [connection_manager.py] WebSocket already being closed: {reason}")
+            return
+            
+        # Mark this connection as being closed
+        self._closing_connections.add(connection_id)
+        
         try:
             # Use a standard WebSocket close code (1000 = normal closure)
             await websocket.close(code=1000, reason=reason)
         except RuntimeError as e:
             # Handle specific runtime errors like "WebSocket is not connected"
             if "WebSocket is not connected" in str(e) or "Connection is closed" in str(e):
-                logger.error(f"WebSocket already closed: {reason}")
+                logger.debug(f"[2025-05-26T17:50:00-04:00] [connection_manager.py] WebSocket already closed: {reason}")
             else:
-                logger.error(f"Runtime error while closing WebSocket: {str(e)}")
+                logger.error(f"[2025-05-26T17:50:00-04:00] [connection_manager.py] Runtime error while closing WebSocket: {str(e)}")
         except Exception as e:
             # Handle any other unexpected errors
-            logger.error(f"Error while closing WebSocket: {str(e)}, type: {type(e).__name__}")
+            logger.error(f"[2025-05-26T17:50:00-04:00] [connection_manager.py] Error while closing WebSocket: {str(e)}, type: {type(e).__name__}")
+        finally:
+            # Always remove the connection from the closing set, even if an error occurred
+            # This ensures we don't permanently block closing this connection
+            self._closing_connections.discard(connection_id)
     
     async def notify_job_update(self, job_id: str, update: Dict[str, Any]) -> bool:
         """Notify subscribers about a job update.
@@ -1646,6 +1680,13 @@ class ConnectionManager(ConnectionManagerInterface):
                 message_text = str(message)
             
             # No message size limit for monitor communications
+            
+            # [2025-05-26T17:55:00-04:00] Check if the WebSocket is in the process of closing
+            # This prevents "Cannot call 'send' once a close message has been sent" errors
+            connection_id = id(websocket)
+            if connection_id in self._closing_connections:
+                logger.debug(f"[2025-05-26T17:55:00-04:00] [connection_manager.py] Cannot send message to monitor {monitor_id}: WebSocket is closing")
+                return False
             
             # Send the serialized message
             await websocket.send_text(message_text)
