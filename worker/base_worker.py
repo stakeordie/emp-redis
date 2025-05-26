@@ -456,7 +456,9 @@ class BaseWorker:
             message_hash = chunk_data.get("message_hash")
             original_type = chunk_data.get("original_type")
             job_id = chunk_data.get("job_id")
-            chunk_content = chunk_data.get("content", "")
+            
+            # [2025-05-26T19:20:00-04:00] Handle both content and chunk_data fields for compatibility
+            chunk_content = chunk_data.get("content", chunk_data.get("chunk_data", ""))
             
             # Validate chunk metadata
             if not all([chunk_id is not None, total_chunks, message_id, message_hash, original_type]):

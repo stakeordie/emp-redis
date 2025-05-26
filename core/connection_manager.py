@@ -766,7 +766,8 @@ class ConnectionManager(ConnectionManagerInterface):
                     "message_hash": message_hash,
                     "original_type": msg_type,
                     "job_id": msg_id,
-                    "chunk_data": chunk
+                    # [2025-05-26T19:25:00-04:00] Use 'content' instead of 'chunk_data' for consistency with BaseWorker
+                    "content": chunk
                 }
                 
                 chunks.append(chunk_metadata)
