@@ -378,11 +378,41 @@ class MessageHandler(MessageHandlerInterface):
             message_data: Message data
             websocket: WebSocket connection
         """
+        # [2025-05-26T13:30:00-04:00] Added comprehensive debug logging for all worker messages
+        # Log the raw message type and key fields without the full content which might be large
+        message_size = len(str(message_data))
+        job_id = message_data.get('job_id', 'N/A')
+        
+        # Create a safe summary of the message content
+        message_summary = {
+            'type': message_type,
+            'worker_id': worker_id,
+            'job_id': job_id,
+            'message_size': message_size,
+            'keys': list(message_data.keys())
+        }
+        
+        # Add status if present
+        if 'status' in message_data:
+            message_summary['status'] = message_data['status']
+            
+        # Add progress if present
+        if 'progress' in message_data:
+            message_summary['progress'] = message_data['progress']
+            
+        # Add service and request_type for service_request messages
+        if message_type == 'service_request':
+            message_summary['service'] = message_data.get('service', 'unknown')
+            message_summary['request_type'] = message_data.get('request_type', 'unknown')
+            if 'content' in message_data:
+                message_summary['content_keys'] = list(message_data['content'].keys())
+                message_summary['endpoint'] = message_data.get('content', {}).get('endpoint', 'unknown')
+        
+        # Log the message summary
+        logger.debug(f"[2025-05-26T13:30:00-04:00] [message_handler.py handle_worker_message] RECEIVED MESSAGE: {json.dumps(message_summary)}")
+        
         # Parse message using the models
         message_obj = self.message_models.parse_message(message_data)
-
-        # logger.debug(f"[HANDLING-WORKER-MESSAGE] From worker {worker_id}: {message_obj}")
-
 
         if not message_obj:
             # logger.error(f"Invalid message received from worker {worker_id}")
@@ -481,6 +511,19 @@ class MessageHandler(MessageHandlerInterface):
             # The subscribe_job_notifications case has been removed
             # This functionality is now handled by the register_worker message
             case _:
+                # [2025-05-26T13:32:00-04:00] Added detailed logging for unsupported message types
+                logger.debug(f"[2025-05-26T13:32:00-04:00] [message_handler.py] UNSUPPORTED MESSAGE TYPE: {message_type} from worker {worker_id}")
+                
+                # For service_request messages, log additional details
+                if message_type == "service_request":
+                    service = message_data.get('service', 'unknown')
+                    request_type = message_data.get('request_type', 'unknown')
+                    endpoint = message_data.get('content', {}).get('endpoint', 'unknown')
+                    logger.debug(f"[2025-05-26T13:32:00-04:00] [message_handler.py] SERVICE REQUEST DETAILS: service={service}, request_type={request_type}, endpoint={endpoint}")
+                    
+                    # Check if message was already broadcast to monitors
+                    logger.debug(f"[2025-05-26T13:32:00-04:00] [message_handler.py] Note: This message may have already been broadcast to monitors by the connection manager")
+                
                 # Handle unrecognized message type
                 error_message = ErrorMessage(error=f"Unsupported message type: {message_type}")
                 await self.connection_manager.send_to_worker(worker_id, error_message)
