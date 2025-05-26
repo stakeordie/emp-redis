@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 # The deployment environment has message_models.py in core/ not in core/core_types/
 from core.message_models import (
     UpdateJobProgressMessage,
-    JobFailedMessage,
+    FailJobMessage,
     WorkerStatusMessage,
     RegisterWorkerMessage
 )
@@ -305,8 +305,8 @@ class BaseWorker:
         """
         # [2025-05-25T21:10:00-04:00] Added missing send_job_failed method to fix type errors
         try:
-            # Create job failed message using JobFailedMessage class
-            job_failed_message = JobFailedMessage(
+            # Create job failed message using FailJobMessage class
+            job_failed_message = FailJobMessage(
                 job_id=job_id,
                 worker_id=self.worker_id,
                 error=error_message
