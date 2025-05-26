@@ -124,6 +124,17 @@ class JobFailedAckMessage(BaseMessage):
     error: Optional[str] = None
     timestamp: float = Field(default_factory=time.time)
 
+# [2025-05-26T16:20:00-04:00] Added ServiceRequestMessage class for handling service requests
+class ServiceRequestMessage(BaseMessage):
+    """Message for broadcasting service requests from workers to monitors"""
+    type: str = MessageType.SERVICE_REQUEST
+    job_id: str
+    worker_id: str
+    service: str
+    request_type: str
+    content: Dict[str, Any]
+    timestamp: float = Field(default_factory=time.time)
+
 
 # Worker Heartbeat and Status Messages
 class WorkerHeartbeatMessage(BaseMessage):
@@ -615,6 +626,20 @@ class MessageModels(MessageModelsInterface):
                     lambda: ForceRetryJobMessage(
                         type=MessageType.FORCE_RETRY_JOB,
                         job_id=data.get("job_id", ""),
+                        timestamp=data.get("timestamp", time.time())
+                    ),
+                    message_type
+                )
+            # [2025-05-26T16:25:00-04:00] Added SERVICE_REQUEST message type handling
+            case MessageType.SERVICE_REQUEST:
+                return self._try_parse_message(
+                    lambda: ServiceRequestMessage(
+                        type=MessageType.SERVICE_REQUEST,
+                        job_id=data.get("job_id", ""),
+                        worker_id=data.get("worker_id", ""),
+                        service=data.get("service", ""),
+                        request_type=data.get("request_type", ""),
+                        content=data.get("content", {}),
                         timestamp=data.get("timestamp", time.time())
                     ),
                     message_type

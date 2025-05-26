@@ -90,6 +90,10 @@ class MessageType:
     #CLIENT_FORCE_RETRY_JOB_REQUEST_TO_SERVER
     FORCE_RETRY_JOB = "force_retry_job"             # Client → Server: Requests to force retry a job by clearing its failure history
     
+    # [2025-05-26T16:15:00-04:00] Added service request message type
+    #WORKER_SEND_SERVICE_REQUEST_INFO_TO_MONITOR
+    SERVICE_REQUEST = "service_request"             # Worker → Monitor: Sends information about a request made to an external service
+    
     #SERVER_SEND_JOB_FAILURE_ACK_TO_WORKER
     JOB_FAILED_ACK = "job_failed_ack"               # Server → Worker: Acknowledges receipt of a job failure message
 
