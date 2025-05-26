@@ -333,8 +333,7 @@ class A1111Connector(RESTSyncConnector):
                     "content": {
                         "endpoint": endpoint,
                         "method": method.upper(),
-                        "url": url,
-                        "payload": request_payload
+                        "url": url
                     }
                 }
                 

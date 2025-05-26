@@ -5,6 +5,12 @@ All notable changes to the EMP Redis project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- [2025-05-26T17:25:00-04:00] Removed WebSocket message size limits:
+  - Removed hard size limits for all WebSocket communications
+  - Added warning logs for messages over 10MB for monitoring purposes
+  - Fixed "Message too large to send" errors with large service request payloads
+  - Enables proper handling of large model payloads from A1111 connector
+  - Ensures all service requests are properly forwarded regardless of size
 - [2025-05-26T16:25:00-04:00] Added ServiceRequestMessage class and message type:
   - Defined SERVICE_REQUEST message type in MessageType enum
   - Created ServiceRequestMessage class with proper fields
