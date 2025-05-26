@@ -149,6 +149,10 @@ class MessageType:
     
     # CONNECTOR_SEND_WS_STATUS_TO_SERVER
     CONNECTOR_WS_STATUS = "connector_ws_status"    # Connector → Server → Monitor: Reports the status of a connector's WebSocket connection
+    
+    # [2025-05-26T14:42:00-04:00] Added service_request message type for external API calls
+    # WORKER_SEND_SERVICE_REQUEST_TO_SERVER
+    SERVICE_REQUEST = "service_request"    # Worker → Server → Monitor: Reports an external API call made by a connector
 
 # Base message class for all messages
 class BaseMessage(BaseModel):

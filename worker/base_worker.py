@@ -43,7 +43,6 @@ import_success = False
 
 # Approach 1: Try importing from worker package (best practice)
 try:
-    logger.debug("[base_worker.py] Attempting to import from worker package")
     from worker import ConnectorInterface as WorkerConnectorInterface
     from worker import load_connectors as worker_load_connectors
     from worker import get_worker_capabilities as worker_get_capabilities
@@ -52,15 +51,13 @@ try:
     load_connectors = worker_load_connectors
     get_worker_capabilities = worker_get_capabilities
     
-    logger.debug("[base_worker.py] Successfully imported from worker package")
     import_success = True
 except ImportError as e:
-    logger.debug(f"[base_worker.py] Failed to import from worker package: {str(e)}")
+    logger.error(f"[base_worker.py] Failed to import from worker package: {str(e)}")
 
 # Approach 2: Try direct imports (for Docker container)
 if not import_success:
     try:
-        logger.debug("[base_worker.py] Attempting direct imports")
         from connector_interface import ConnectorInterface as DirectConnectorInterface
         from connector_loader import load_connectors as direct_load_connectors
         from connector_loader import get_worker_capabilities as direct_get_capabilities
@@ -69,15 +66,13 @@ if not import_success:
         load_connectors = direct_load_connectors
         get_worker_capabilities = direct_get_capabilities
         
-        logger.debug("[base_worker.py] Successfully imported directly")
         import_success = True
     except ImportError as e2:
-        logger.debug(f"[base_worker.py] Failed direct imports: {str(e2)}")
+        logger.error(f"[base_worker.py] Failed direct imports: {str(e2)}")
 
 # Approach 3: Try emp-redis-worker specific imports (for new Docker structure)
 if not import_success:
     try:
-        logger.debug("[base_worker.py] Attempting emp-redis-worker specific imports")
         from emp_redis_worker.worker import ConnectorInterface as EmpConnectorInterface
         from emp_redis_worker.worker import load_connectors as emp_load_connectors
         from emp_redis_worker.worker import get_worker_capabilities as emp_get_capabilities
@@ -86,10 +81,9 @@ if not import_success:
         load_connectors = emp_load_connectors
         get_worker_capabilities = emp_get_capabilities
         
-        logger.debug("[base_worker.py] Successfully imported from emp_redis_worker.worker")
         import_success = True
     except ImportError as e3:
-        logger.debug(f"[base_worker.py] Failed emp-redis-worker imports: {str(e3)}")
+        logger.error(f"[base_worker.py] Failed emp-redis-worker imports: {str(e3)}")
 
 # Check if any import approach succeeded
 if not import_success:
@@ -194,9 +188,6 @@ class BaseWorker:
         # Load connectors
         self.connectors = await load_connectors()   # Load connectors           
         
-        # Initialize connectors
-        logger.debug(f"[base_worker.py async_init()] Initializing connectors...{self.connectors}")
-        
         # Check if get_worker_capabilities is callable
         if get_worker_capabilities is None or not callable(get_worker_capabilities):
             error_msg = f"get_worker_capabilities is not callable: {type(get_worker_capabilities)}"
@@ -205,9 +196,7 @@ class BaseWorker:
             
         # Worker capabilities
         self.capabilities = await get_worker_capabilities(self.connectors)
-        
-        logger.debug(f"[base_worker.py async_init()] Worker capabilities: {self.capabilities}")
-        
+   
         return self
     
     def get_connector_statuses(self) -> Dict[str, Any]:
@@ -257,7 +246,6 @@ class BaseWorker:
             
             # Send status message
             await websocket.send(status_message.model_dump_json())
-            logger.debug(f"[base_worker.py send_status_update()]: Sent status update with connector statuses")
         except Exception as e:
             logger.error(f"[base_worker.py send_status_update()]: Error sending status update: {str(e)}")
     
@@ -427,31 +415,31 @@ class BaseWorker:
             message_type = message_obj.type            
             # Handle message based on type
             match(message_type):
-                case MessageType.CONNECTION_ESTABLISHED:
-                    logger.debug(f"[base_worker.py handle_message()]: Connection established: {getattr(message_obj, 'message', '')}")
+                # case MessageType.CONNECTION_ESTABLISHED:
+                #     logger.debug(f"[base_worker.py handle_message()]: Connection established: {getattr(message_obj, 'message', '')}")
                 case MessageType.JOB_AVAILABLE:
                     # Ensure we have a JobAvailableMessage or compatible dict
                     if hasattr(message_obj, 'job_id') and hasattr(message_obj, 'job_type'):
                         await self.handle_job_notification(websocket, cast(Any, message_obj))
-                    else:
-                        logger.warning(f"[base_worker.py handle_message()]: Received JOB_AVAILABLE message with invalid format")
+                    # else:
+                    #     logger.warning(f"[base_worker.py handle_message()]: Received JOB_AVAILABLE message with invalid format")
                 case MessageType.JOB_ASSIGNED:
                     await self.handle_job_assigned(websocket, cast(Any, message_obj))
                 
-                case MessageType.WORKER_HEARTBEAT:
-                    # Acknowledge heartbeat from server with detailed logging
-                    logger.debug(f"[base_worker.py handle_message()]: HEARTBEAT RESPONSE RECEIVED from server for worker {self.worker_id}")
+                # case MessageType.WORKER_HEARTBEAT:
+                #     # Acknowledge heartbeat from server with detailed logging
+                #     logger.debug(f"[base_worker.py handle_message()]: HEARTBEAT RESPONSE RECEIVED from server for worker {self.worker_id}")
                 
-                case MessageType.WORKER_HEARTBEAT_ACK:
-                    # Handle heartbeat acknowledgment from server
-                    logger.debug(f"[base_worker.py handle_message()]: HEARTBEAT ACK RECEIVED from server for worker {self.worker_id}")
-                case MessageType.JOB_COMPLETED_ACK:
-                    # Handle job completion acknowledgment from the server
-                    if hasattr(message_obj, 'job_id'):
-                        job_id = message_obj.job_id
-                        logger.debug(f"[base_worker.py handle_message()]: Job completion acknowledged by server: {job_id}")
-                    else:
-                        logger.warning(f"[base_worker.py handle_message()]: Received JOB_COMPLETED_ACK message with invalid format")
+                # case MessageType.WORKER_HEARTBEAT_ACK:
+                #     # Handle heartbeat acknowledgment from server
+                #     logger.debug(f"[base_worker.py handle_message()]: HEARTBEAT ACK RECEIVED from server for worker {self.worker_id}")
+                # case MessageType.JOB_COMPLETED_ACK:
+                #     # Handle job completion acknowledgment from the server
+                #     if hasattr(message_obj, 'job_id'):
+                #         job_id = message_obj.job_id
+                #         logger.debug(f"[base_worker.py handle_message()]: Job completion acknowledged by server: {job_id}")
+                #     else:
+                #         logger.warning(f"[base_worker.py handle_message()]: Received JOB_COMPLETED_ACK message with invalid format")
                 
                 case MessageType.JOB_FAILED_ACK:
                     # 2025-04-17-16:01 - Added handler for JOB_FAILED_ACK message
@@ -469,11 +457,11 @@ class BaseWorker:
                     else:
                         logger.error(f"[base_worker.py handle_message()]: Received JOB_FAILED_ACK message with invalid format")
                 
-                case MessageType.WORKER_REGISTERED:
-                    # Handle worker registration confirmation
-                    worker_id = getattr(message_obj, 'worker_id', self.worker_id)
-                    logger.debug(f"[base_worker.py handle_message()]: Worker registration confirmed: {worker_id}")
-                    # No further action needed, this is just an acknowledgment
+                # case MessageType.WORKER_REGISTERED:
+                #     # Handle worker registration confirmation
+                #     worker_id = getattr(message_obj, 'worker_id', self.worker_id)
+                #     logger.debug(f"[base_worker.py handle_message()]: Worker registration confirmed: {worker_id}")
+                #     # No further action needed, this is just an acknowledgment
                 case MessageType.ERROR:
                     # Handle error messages from the server
                     error_text = getattr(message_obj, 'error', 'Unknown error')
@@ -507,12 +495,9 @@ class BaseWorker:
             message_obj: The message object
         """
         try:
-            # [2025-05-26T01:15:00-04:00] Enhanced debug logging for job notification handling
-            logger.debug(f"[2025-05-26T01:15:00-04:00] Received job notification: {message_obj}")
-            
+            # [2025-05-26T01:15:00-04:00] Enhanced debug logging for job notification handling            
             # First check if worker is idle before proceeding
             if self.status != WorkerStatus.IDLE:
-                logger.debug(f"[2025-05-26T01:15:00-04:00] Ignoring job notification - worker is busy. Status: {self.status}")
                 return
                 
             # Extract job details safely with fallbacks
@@ -534,10 +519,7 @@ class BaseWorker:
                 job_type = getattr(message_obj, 'job_type', 'unknown')
                 priority = getattr(message_obj, 'priority', 0)
                 last_failed_worker = getattr(message_obj, 'last_failed_worker', None)
-            
-            # Log job notification with timestamp for tracking
-            logger.debug(f"[base_worker.py handle_job_notification()]: Processing job notification. Job ID: {job_id}, Job Type: {job_type}, Priority: {priority}")
-            
+                   
             # Check if job ID is present
             if not job_id:
                 # Try one more approach - direct attribute access if the object has a string representation with job_id
@@ -566,20 +548,15 @@ class BaseWorker:
                 return
                 
             available_connectors = list(self.connectors.keys())
-            logger.debug(f"[2025-05-25T20:45:00-04:00] Checking if job type '{job_type}' is in available connectors: {available_connectors}")
             
             # Check each connector's job_type and connector_id for debugging
             for connector_key, connector in self.connectors.items():
                 try:
                     connector_id = connector.connector_id if hasattr(connector, 'connector_id') else 'unknown'
                     connector_job_type = connector.get_job_type() if hasattr(connector, 'get_job_type') else 'unknown'
-                    logger.debug(f"[2025-05-25T20:45:00-04:00] Connector key='{connector_key}', connector_id='{connector_id}', job_type='{connector_job_type}'")
                 except Exception as e:
                     logger.error(f"[2025-05-25T20:45:00-04:00] Error getting connector info: {e}")
             
-            # First try exact match on job_type
-            if job_type in self.connectors:
-                logger.debug(f"[2025-05-25T20:45:00-04:00] Found exact match for job_type '{job_type}' in connectors")
             else:
                 # If not found, try to find a connector with matching connector_id
                 logger.error(f"[2025-05-25T20:45:00-04:00] Job type '{job_type}' not found in connector keys. Checking connector_id values...")
@@ -589,19 +566,9 @@ class BaseWorker:
                     try:
                         if hasattr(connector, 'connector_id') and connector.connector_id == job_type:
                             matching_connector_key = connector_key
-                            logger.debug(f"[2025-05-25T20:45:00-04:00] Found connector with connector_id '{job_type}' under key '{connector_key}'")
                             break
                     except Exception as e:
                         logger.error(f"[2025-05-25T20:45:00-04:00] Error checking connector_id: {e}")
-                
-                # If we found a matching connector by connector_id, use that key
-                if matching_connector_key:
-                    logger.debug(f"[2025-05-25T20:45:00-04:00] Using connector key '{matching_connector_key}' for job type '{job_type}' based on connector_id match")
-                    # No need to modify self.connectors here, just continue with the job notification
-                else:
-                    # No matching connector found by job_type or connector_id
-                    logger.error(f"[2025-05-25T20:45:00-04:00] Unsupported job type: '{job_type}'. Available connectors: {available_connectors}")
-                    return
             
             # At this point, we've either found an exact match or a connector_id match
             # Continue with job notification processing
@@ -644,18 +611,12 @@ class BaseWorker:
             # Check if we can handle this job type
             if self.connectors is not None:
                 # Log available connectors and their types
-                connector_types = list(self.connectors.keys())
-                logger.debug(f"[base_worker.py handle_job_notification() DEBUG] Available connectors: {connector_types}")
-                logger.debug(f"[base_worker.py handle_job_notification() DEBUG] Received job notification with job_type: '{job_type}'")
-                
+                connector_types = list(self.connectors.keys())                
                 # Check if job_type is in our connectors
                 if job_type not in self.connectors:
                     logger.error(f"[base_worker.py handle_job_notification()]: Received job notification for unsupported job type: '{job_type}'")
                     logger.error(f"[base_worker.py handle_job_notification() DEBUG] Job type '{job_type}' not in available connectors: {connector_types}")
-                    return
-                else:
-                    logger.debug(f"[base_worker.py handle_job_notification() DEBUG] Job type '{job_type}' is supported by this worker")
-            
+                    return            
             # [2025-05-25T22:37:00-04:00] Added detailed debug logging for job claiming
             # Claim the job using ClaimJobMessage class
             claim_message = ClaimJobMessage(
@@ -665,11 +626,7 @@ class BaseWorker:
             
             # Log the claim message for debugging
             claim_message_json = claim_message.model_dump_json()
-            logger.debug(f"[base_worker.py handle_job_notification() DEBUG] Claiming job {job_id} of type '{job_type}' with message: {claim_message_json}")
-                        
             await websocket.send(claim_message_json)
-            logger.debug(f"[base_worker.py handle_job_notification() DEBUG] Sent claim message for job {job_id}")
-            
             # Note: We don't update worker state here - we'll wait for JOB_ASSIGNED message
             # This matches the behavior in main.bk.py
         except Exception as e:
@@ -691,10 +648,7 @@ class BaseWorker:
         payload = None
         connector = None
         
-        try:
-            # Enhanced debug logging for job assignment
-            logger.debug(f"[2025-05-25T18:45:00-04:00] Received job assignment message: {message_obj}")
-            
+        try:         
             # Extract job details safely with fallbacks
             if isinstance(message_obj, dict):
                 # It's a dictionary
@@ -718,9 +672,6 @@ class BaseWorker:
                 except (AttributeError, TypeError):
                     payload = {}
             
-            # Log job assignment with timestamp for tracking
-            logger.debug(f"[2025-05-25T18:45:00-04:00] Processing job assignment. Job ID: {job_id}, Job Type: {job_type}")
-            
             # Check if job ID is present
             if not job_id:
                 logger.error(f"[2025-05-25T18:45:00-04:00] Missing job ID in job assigned message: {message_obj}")
@@ -740,14 +691,12 @@ class BaseWorker:
                 
             # Enhanced debug logging for connector matching
             available_connectors = list(self.connectors.keys())
-            logger.debug(f"[2025-05-25T18:45:00-04:00] Checking if job type '{job_type}' is in available connectors: {available_connectors}")
             
             # Check each connector's job_type and connector_id for debugging
             for connector_key, connector_instance in self.connectors.items():
                 try:
                     connector_id = connector_instance.connector_id if hasattr(connector_instance, 'connector_id') else 'unknown'
                     connector_job_type = connector_instance.get_job_type() if hasattr(connector_instance, 'get_job_type') else 'unknown'
-                    logger.debug(f"[2025-05-25T18:45:00-04:00] Connector key='{connector_key}', connector_id='{connector_id}', job_type='{connector_job_type}'")
                 except Exception as e:
                     logger.error(f"[2025-05-25T18:45:00-04:00] Error getting connector info: {e}")
             
@@ -760,7 +709,6 @@ class BaseWorker:
             # First try exact match on job_type
             connector_key = None
             if job_type in connectors_dict:
-                logger.debug(f"[2025-05-25T20:55:00-04:00] Found exact match for job_type '{job_type}' in connectors")
                 connector_key = job_type
             else:
                 # If not found, try to find a connector with matching connector_id
@@ -770,7 +718,6 @@ class BaseWorker:
                     try:
                         if hasattr(connector, 'connector_id') and connector.connector_id == job_type:
                             connector_key = key
-                            logger.debug(f"[2025-05-25T20:55:00-04:00] Found connector with connector_id '{job_type}' under key '{key}'")
                             break
                     except Exception as e:
                         logger.error(f"[2025-05-25T20:55:00-04:00] Error checking connector_id: {e}")
@@ -781,9 +728,6 @@ class BaseWorker:
                 logger.error(f"[2025-05-25T20:55:00-04:00] {error_msg}. Available connectors: {available_connectors}")
                 await self.send_job_failed(websocket, job_id, error_msg)
                 return
-            
-            # Log the selected connector
-            logger.debug(f"[2025-05-25T20:55:00-04:00] Using connector '{connector_key}' for job type '{job_type}'")
             
             # Get the connector instance
             # [2025-05-25T21:30:00-04:00] Use the type-safe connectors_dict to avoid type errors
@@ -799,14 +743,14 @@ class BaseWorker:
                 status="busy",
                 capabilities={"job_id": job_id}
             )
-            await websocket.send(busy_status.model_dump_json())
-            logger.debug(f"[2025-05-25T18:45:00-04:00] Sent busy status update for job {job_id}")
-            
+            await websocket.send(busy_status.model_dump_json())            
             # [2025-05-25T21:00:00-04:00] We already have the connector instance from the enhanced job type matching logic above
             # No need to check connectors again or look up the connector by job_type
             
             # Check if the connector is healthy before processing the job
-            logger.debug(f"[2025-05-25T21:00:00-04:00] Checking health of connector '{connector_key}' before processing job {job_id}")
+            # [2025-05-26T15:15:00-04:00] Only show debug logs when explicitly enabled
+            if os.environ.get('WORKER_DEBUG_LOGS', 'FALSE').upper() == 'TRUE':
+                logger.debug(f"[2025-05-25T21:00:00-04:00] Checking health of connector '{connector_key}' before processing job {job_id}")
             
             # Check if the connector has a health check method
             if hasattr(connector, 'check_health') and callable(connector.check_health):
@@ -825,19 +769,25 @@ class BaseWorker:
                         await self.send_job_failed(websocket, job_id, error_msg)
                         return
                     else:
-                        logger.debug(f"[2025-05-25T21:00:00-04:00] Connector '{connector_key}' health check passed")
+                        # [2025-05-26T15:15:00-04:00] Only show debug logs when explicitly enabled
+                        if os.environ.get('WORKER_DEBUG_LOGS', 'FALSE').upper() == 'TRUE':
+                            logger.debug(f"[2025-05-25T21:00:00-04:00] Connector '{connector_key}' health check passed")
                 except Exception as e:
-                    logger.warning(f"[2025-05-25T21:00:00-04:00] Error during connector health check: {e}")
+                    logger.error(f"[2025-05-25T21:00:00-04:00] Error during connector health check: {e}")
                     # Continue despite health check error - the job might still succeed
             else:
                 logger.error(f"[2025-05-25T21:00:00-04:00] Connector '{connector_key}' does not support health checks")
                 
             # Log the connector that will be used
-            logger.debug(f"[2025-05-25T18:45:00-04:00] Using connector {type(connector).__name__} for job type '{job_type}'")
+            # [2025-05-26T15:15:00-04:00] Only show debug logs when explicitly enabled
+            if os.environ.get('WORKER_DEBUG_LOGS', 'FALSE').upper() == 'TRUE':
+                logger.debug(f"[2025-05-25T18:45:00-04:00] Using connector {type(connector).__name__} for job type '{job_type}'")
             
             # Log the job parameters
             try:
-                logger.debug(f"[2025-05-25T18:45:00-04:00] Job parameters: {payload}")
+                # [2025-05-26T15:15:00-04:00] Only show debug logs when explicitly enabled
+                if os.environ.get('WORKER_DEBUG_LOGS', 'FALSE').upper() == 'TRUE':
+                    logger.debug(f"[2025-05-25T18:45:00-04:00] Job parameters: {payload}")
             except Exception as e:
                 logger.error(f"[2025-05-25T18:45:00-04:00] Error logging job parameters: {e}")
                 
@@ -848,10 +798,7 @@ class BaseWorker:
             )
             
             # Process the job with the connector
-            try:
-                # Process the job with the connector
-                logger.debug(f"[2025-05-25T18:45:00-04:00] Processing job {job_id} with connector {type(connector).__name__}")
-                
+            try:                
                 # Call the process_job method on the connector
                 result = await connector.process_job(
                     websocket, job_id, payload, 
@@ -875,10 +822,7 @@ class BaseWorker:
                     )
                     await websocket.send(fail_message.model_dump_json())
                     logger.error(f"[2025-05-25T18:45:00-04:00] Sent failure message for job {job_id}")
-                else:
-                    # Job completed successfully
-                    logger.debug(f"[2025-05-25T18:45:00-04:00] Job {job_id} completed successfully")
-                    
+                else:                    
                     # Send completion progress update
                     await self.send_progress_update(websocket, job_id, 100, "completed", "Job completed successfully")
                     
@@ -890,7 +834,6 @@ class BaseWorker:
                         result=result
                     )
                     await websocket.send(complete_message.model_dump_json())
-                    logger.debug(f"[2025-05-25T18:45:00-04:00] Sent completion message for job {job_id}")
             except Exception as e:
                 # Log the error
                 error_msg = f"Error processing job {job_id}: {str(e)}"
@@ -923,7 +866,9 @@ class BaseWorker:
                 
                 # Send idle status update
                 await websocket.send(idle_status.model_dump_json())
-                logger.debug(f"[2025-05-25T18:45:00-04:00] Worker status reset to idle after job {job_id}")
+                # [2025-05-26T15:15:00-04:00] Only show debug logs when explicitly enabled
+                if os.environ.get('WORKER_DEBUG_LOGS', 'FALSE').upper() == 'TRUE':
+                    logger.debug(f"[2025-05-25T18:45:00-04:00] Worker status reset to idle after job {job_id}")
         except Exception as e:
             # Log the error
             logger.error(f"[2025-05-25T18:45:00-04:00] Error handling job assignment: {str(e)}")
@@ -945,19 +890,14 @@ class BaseWorker:
         Args:
             websocket: The WebSocket connection to the Redis Hub
         """
-        try:
-            # Debug logging before registration
-            logger.debug(f"[base_worker.py register_worker()]: Worker capabilities before registration: {self.capabilities}")
-            
+        try:            
             # Ensure capabilities is a proper dictionary
             capabilities_dict = dict(self.capabilities) if self.capabilities else {}
             
             # Make sure supported_job_types is included
             if "supported_job_types" not in capabilities_dict and self.connectors:
                 capabilities_dict["supported_job_types"] = list(self.connectors.keys())
-                
-            logger.debug(f"[base_worker.py register_worker()]: Prepared capabilities for registration: {capabilities_dict}")
-            
+                            
             # Create registration message using RegisterWorkerMessage class
             registration_message = RegisterWorkerMessage(
                 worker_id=self.worker_id,
@@ -967,18 +907,13 @@ class BaseWorker:
             )
             
             # Log the actual message being sent
-            message_json = registration_message.model_dump_json()
-            logger.debug(f"[base_worker.py register_worker()]: Registration message JSON: {message_json}")
-            
+            message_json = registration_message.model_dump_json()            
             # Verify the message contains capabilities
             import json
             parsed_message = json.loads(message_json)
-            logger.debug(f"[base_worker.py register_worker()]: Parsed message capabilities: {parsed_message.get('capabilities')}")
             
             # Send registration message
             await websocket.send(message_json)
-            logger.debug(f"Registered worker with ID: {self.worker_id}")
-            logger.debug(f"Capabilities: {self.capabilities}")
         except Exception as e:
             logger.error(f"Error registering worker: {str(e)}")
     
@@ -996,18 +931,13 @@ class BaseWorker:
         """Run the worker"""
         try:
             # Connect to Redis Hub
-            logger.debug(f"Connecting to Redis Hub at {self.redis_ws_url}")
-            async with websockets.connect(self.redis_ws_url) as websocket:
-                logger.debug("Connected to Redis Hub")
-                
+            async with websockets.connect(self.redis_ws_url) as websocket:                
                 # Register worker
                 await self.register_worker(websocket)
                 
                 # Start heartbeat task
                 heartbeat_task = asyncio.create_task(self.send_heartbeat(websocket))
-                
-                logger.debug(f"[base_worker.py run()]: after heartbeat task setup {self.worker_id} {heartbeat_task}")
-                
+                                
                 # Note: WebSocket monitoring has been removed in favor of job-specific heartbeats
                 # Each connector now handles its own connection lifecycle and sends heartbeats during active jobs
                 connector_ws_monitor_tasks: list[asyncio.Task] = []  # Keep empty list for compatibility
@@ -1030,13 +960,19 @@ class BaseWorker:
     
     async def start(self):
         """Start the worker"""
-        logger.debug(f"Starting worker with ID: {self.worker_id}")
+        # [2025-05-26T15:15:00-04:00] Only show debug logs when explicitly enabled
+        if os.environ.get('WORKER_DEBUG_LOGS', 'FALSE').upper() == 'TRUE':
+            logger.debug(f"Starting worker with ID: {self.worker_id}")
         
             # Debug: Check current event loop
         try:
             current_loop = asyncio.get_running_loop()
-            logger.debug(f"Current event loop: {current_loop}")
+            # [2025-05-26T15:15:00-04:00] Only show debug logs when explicitly enabled
+            if os.environ.get('WORKER_DEBUG_LOGS', 'FALSE').upper() == 'TRUE':
+                logger.debug(f"Current event loop: {current_loop}")
         except RuntimeError:
-            logger.debug("No running event loop found")
+            # [2025-05-26T15:15:00-04:00] Only show debug logs when explicitly enabled
+            if os.environ.get('WORKER_DEBUG_LOGS', 'FALSE').upper() == 'TRUE':
+                logger.debug("No running event loop found")
         
         await self.run()

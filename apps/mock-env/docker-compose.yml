@@ -16,6 +16,25 @@ services:
     # Volumes removed - rebuild containers when code changes
     profiles:
       - local
+      - local-1
+
+  # Mock A1111 Service
+  # [2025-05-26T14:25:00-04:00] Added mock A1111 service for testing
+  mock-a1111:
+    container_name: mock-a1111
+    build:
+      context: ./mock-a1111
+      dockerfile: Dockerfile
+    ports:
+      - "7860:7860" # A1111 API
+    environment:
+      - HOST=0.0.0.0
+      - PORT=7860
+    networks:
+      - redis-network
+    profiles:
+      - local
+      - local-1
 
   # Worker Containers
   worker1:
@@ -30,21 +49,27 @@ services:
       - WORKER_USE_SSL=FALSE
       - WORKER_HEARTBEAT_INTERVAL=20
       - WORKER_LOG_LEVEL=INFO
-      - WORKER_CONNECTORS=simulation,comfyui
+      - WORKER_CONNECTORS=simulation,comfyui,a1111
       - WORKER_SIMULATION_PROCESSING_TIME=5
       - WORKER_SIMULATION_STEPS=25
       - WORKER_COMFYUI_HOST=142.170.86.88
       - WORKER_COMFYUI_PORT=25883
       - WORKER_COMFYUI_USERNAME=sd
       - WORKER_COMFYUI_PASSWORD=UbjpkE6kw
+      # [2025-05-26T14:35:00-04:00] Updated A1111 host to point to mock service
+      - WORKER_A1111_HOST=mock-a1111
+      - WORKER_A1111_PORT=7860
+      - A1111_MOCK_SERVICE=TRUE
       - PYTHONPATH=/app # Ensure core modules can be imported/
     networks:
       - redis-network
     depends_on:
       - hub
+      - mock-a1111
     # Volumes removed - rebuild containers when code changes
     profiles:
       - local
+      - local-1
 
   worker2:
     container_name: worker2

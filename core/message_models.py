@@ -161,6 +161,20 @@ class ConnectorWebSocketStatusMessage(BaseMessage):
     last_ping: Optional[float] = None  # Timestamp of the last successful ping
     timestamp: float = Field(default_factory=time.time)
 
+# [2025-05-26T14:43:00-04:00] Added Service Request Message
+class ServiceRequestMessage(BaseMessage):
+    """
+    Message for reporting an external API call made by a connector to a service
+    Used to display API calls in the monitor interface
+    """
+    type: str = MessageType.SERVICE_REQUEST
+    job_id: str
+    worker_id: str
+    service: str
+    request_type: str
+    content: Dict[str, Any]
+    timestamp: float = Field(default_factory=time.time)
+
 # SubscribeJobNotificationsMessage has been removed
 # Its functionality is now part of RegisterWorkerMessage
     
@@ -615,6 +629,20 @@ class MessageModels(MessageModelsInterface):
                     lambda: ForceRetryJobMessage(
                         type=MessageType.FORCE_RETRY_JOB,
                         job_id=data.get("job_id", ""),
+                        timestamp=data.get("timestamp", time.time())
+                    ),
+                    message_type
+                )
+            # Handle service request messages
+            case MessageType.SERVICE_REQUEST:
+                return self._try_parse_message(
+                    lambda: ServiceRequestMessage(
+                        type=MessageType.SERVICE_REQUEST,
+                        job_id=data.get("job_id", ""),
+                        worker_id=data.get("worker_id", ""),
+                        service=data.get("service", ""),
+                        request_type=data.get("request_type", ""),
+                        content=data.get("content", {}),
                         timestamp=data.get("timestamp", time.time())
                     ),
                     message_type
@@ -1076,4 +1104,29 @@ class MessageModels(MessageModelsInterface):
             last_ping=last_ping,
             timestamp=time.time()
         )
-
+        
+    # [2025-05-26T14:44:00-04:00] Added method to create service request messages
+    def create_service_request_message(self, job_id: str, worker_id: str,
+                                      service: str, request_type: str,
+                                      content: Dict[str, Any]) -> ServiceRequestMessage:
+        """
+        Create a service request message for external API calls.
+        
+        Args:
+            job_id: ID of the job making the request
+            worker_id: ID of the worker that owns the connector
+            service: Name of the external service (e.g., "a1111")
+            request_type: Type of request (e.g., "a1111_txt2img")
+            content: Request content including endpoint, payload, etc.
+            
+        Returns:
+            ServiceRequestMessage: Service request message model
+        """
+        return ServiceRequestMessage(
+            job_id=job_id,
+            worker_id=worker_id,
+            service=service,
+            request_type=request_type,
+            content=content,
+            timestamp=time.time()
+        )
