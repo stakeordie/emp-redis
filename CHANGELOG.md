@@ -5,6 +5,61 @@ All notable changes to the EMP Redis project will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- [2025-05-26T23:40:47-04:00] Reverted monitor.js to stable version from previous commit to resolve UI issues:
+  - Removed recent changes that were causing TypeError exceptions
+  - Restored stable job tracking and worker status handling
+  - Simplified progress bar display to ensure reliability
+  - Returned to proven implementation for job-worker relationship tracking
+- [2025-05-26T23:45:00-04:00] Fixed progress bar display and worker status tracking issues:
+  - Enhanced job progress handling to ensure numeric progress values
+  - Fixed worker status not updating properly after job completion
+  - Added proper type conversion for progress values
+  - Improved job status transitions between states
+  - Ensured completed jobs always show 100% progress
+  - Fixed worker status synchronization with job status
+  - Added detailed logging for job and worker state changes
+
+- [2025-05-26T23:30:00-04:00] Fixed TypeError exceptions in monitor UI when accessing undefined values:
+  - Added null checks to all substring() calls throughout the codebase
+  - Improved error handling for job ID display in the UI
+  - Fixed job progress display to handle undefined job IDs gracefully
+  - Enhanced error message formatting to handle various error types
+  - Prevented UI errors when processing chunked messages with missing IDs
+
+- [2025-05-26T23:25:00-04:00] Implemented comprehensive job-worker linking system to fix persistent job status issues:
+  - Added intelligent job assignment for busy workers with no explicit job ID
+  - Implemented automatic linking of pending jobs to busy workers
+  - Enhanced worker status handler to properly update job states
+  - Added detailed job state transition logging for debugging
+  - Fixed edge cases where workers showed busy but jobs remained in queue
+  - Added bidirectional job-worker relationship enforcement
+  - Ensured processingStartedAt timestamp is properly set for all jobs
+  - Implemented job state reconciliation for inconsistent states
+
+- [2025-05-26T23:20:00-04:00] Fixed job queue display issue where jobs remained in queue despite worker being busy:
+  - Enhanced job queue filtering to handle all queue status variations ('pending', 'queued', 'accepted')
+  - Added worker assignment check to remove jobs from queue when assigned to a worker
+  - Improved active jobs detection to include any job with a worker_id assigned
+  - Added detailed state logging for job assignments to track status transitions
+  - Fixed inconsistency between worker busy state and job queue display
+  - Ensured jobs with status 'accepted' are properly handled in the UI
+
+- [2025-05-26T22:35:00-04:00] Improved job state tracking and debugging in monitor UI:
+  - Removed excessive console logs to reduce noise and improve performance
+  - Added focused job state tracking logs with consistent format
+  - Added clear job state change indicators with before/after state information
+  - Implemented job state summary logging for easier debugging
+  - Added job-worker link tracking to diagnose assignment issues
+  - Improved readability of console output for easier troubleshooting
+
+- [2025-05-26T21:45:00-04:00] Fixed job status updates not reflecting correctly in monitor UI:
+  - Added explicit handler for job_assigned messages in monitor.js
+  - Implemented proper job-worker linking when jobs are assigned
+  - Fixed issue where jobs remained in queue instead of showing as processing
+  - Added detailed logging for job assignment events
+  - Ensured worker status is updated to 'busy' when assigned a job
+  - Fixed worker's current_job_id tracking to properly link jobs to workers
+
 - [2025-05-26T21:25:00-04:00] Fixed critical connection issues in hub and worker services:
   - Added missing 'os' and 'time' module imports in connection_manager.py
   - Added missing 'time' module import in base_worker.py
