@@ -55,6 +55,19 @@ const CONNECTION_URLS = {
 
 // [2025-05-19T17:53:00-04:00] Default payloads for different job types
 const DEFAULT_PAYLOADS = {
+    // [2025-05-26T20:15:00-04:00] Chunked message test job type
+    "chunked_test": JSON.stringify({
+        "test_name": "Chunked Message Test",
+        "timestamp": new Date().toISOString(),
+        "description": "This test payload contains a large base64 string to trigger chunked message handling",
+        "large_data": "A".repeat(1500000), // 1.5MB of 'A' characters to force chunking
+        "metadata": {
+            "test_id": "chunk-test-" + Math.floor(Math.random() * 1000000),
+            "expected_chunks": 2, // With 1MB chunk size, this should create 2 chunks
+            "created_by": "Simple Redis Monitor",
+            "purpose": "Testing chunked message handling implementation"
+        }
+    }, null, 2),
     // Simulation job type (default)
     "simulation": JSON.stringify({
         "steps": 20,
@@ -341,6 +354,22 @@ function updateRestApiUrl(websocketUrl) {
     }
     
     console.log(`[2025-05-20T11:30:59-04:00] REST API URL updated to: ${state.restApi.url}`);
+}
+
+/**
+ * Format bytes into human-readable size
+ * @param {number} bytes - The size in bytes
+ * @param {number} decimals - Number of decimal places (default: 2)
+ * @returns {string} Formatted size with unit
+ */
+function formatSize(bytes, decimals = 2) {
+    if (bytes === 0) return '0 Bytes';
+    
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(decimals)) + ' ' + sizes[i];
 }
 
 /**
@@ -872,6 +901,30 @@ function processMessage(data, source) {
         console.log(`Received ${source} message: ${message.type}`)
         try {
             console.log("the messagetype is: ", message.type)
+            
+            // [2025-05-26T20:30:00-04:00] Special handling for chunked messages
+            if (message.type === 'chunked_message') {
+                // Extract chunk information
+                const chunkId = message.chunk_id;
+                const totalChunks = message.total_chunks;
+                const messageId = message.message_id;
+                const messageHash = message.message_hash;
+                
+                // Add log entry with chunk details
+                addLogEntry(`[CHUNKED MESSAGE] Received chunk ${chunkId + 1}/${totalChunks} for message ${messageId.substring(0, 8)}...`, 'info');
+                
+                // Add detailed log in console
+                console.log(`[2025-05-26T20:30:00-04:00] [CHUNKED MESSAGE] Details:`, {
+                    chunk_id: chunkId,
+                    total_chunks: totalChunks,
+                    message_id: messageId,
+                    message_hash: messageHash,
+                    content_length: message.content ? message.content.length : 'unknown'
+                });
+                
+                // No further processing needed for chunks
+                return;
+            }
             // Process the message based on its type
             // [2025-05-20T11:23:31-04:00] Removed cases for unsupported message types
             switch (message.type) {
@@ -1840,6 +1893,187 @@ function handleJobProgress(message, source = 'unknown') {
 }
 
 /**
+ * [2025-05-26T20:35:00-04:00] Special handling for chunked test messages
+ * @param {Object} message - Parsed job progress message
+ * @param {string} source - Source of the message ('monitor' or 'client')
+ */
+function handleJobProgress(message, source) {
+    // Get the job ID
+    const jobId = message.job_id;
+    
+    // [2025-05-26T20:35:00-04:00] Special handling for chunked test messages
+    if (message.job_type === 'chunked_test' && message.payload) {
+        const payload = message.payload;
+        const progress = message.progress || 0;
+        const testId = payload.metadata?.test_id || 'unknown';
+        
+        // Add special log entry for chunked test progress
+        if (progress >= 0.5 && progress < 0.9) {
+            // This indicates the message was received and chunks are being processed
+            addLogEntry(`[CHUNKED TEST] Message chunks received, reassembly in progress for test ID: ${testId}`, 'info');
+        } else if (progress >= 0.9) {
+            // This indicates the message was fully reassembled and processed
+            addLogEntry(`[CHUNKED TEST] Message successfully reassembled and processed! Test ID: ${testId}`, 'success');
+            
+            // Calculate processing time if we have timestamps
+            if (payload.timestamp) {
+                const startTime = new Date(payload.timestamp);
+                const endTime = new Date();
+                const processingTime = (endTime - startTime) / 1000; // in seconds
+                
+                addLogEntry(`[CHUNKED TEST] Total processing time: ${processingTime.toFixed(2)} seconds`, 'info');
+            }
+            
+            // Show data size information
+            if (payload.large_data) {
+                const dataSize = payload.large_data.length;
+                addLogEntry(`[CHUNKED TEST] Successfully processed ${formatSize(dataSize)} of data`, 'info');
+            }
+        }
+    }
+    
+    // Check if we have this job in our state
+    if (!state.jobs[jobId]) {
+        // Create job if it doesn't exist yet
+        state.jobs[jobId] = {
+            id: jobId,
+            status: 'pending',
+            progress: 0,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            source_update: source
+        };
+    }
+    
+    // Update job progress
+    state.jobs[jobId].progress = message.progress || 0;
+    state.jobs[jobId].updated_at = Date.now();
+    state.jobs[jobId].worker_id = message.workerId || message.worker_id;
+    state.jobs[jobId].source_update = source;
+    
+    // Update worker's current_job_id if needed
+    if (message.workerId && state.workers[message.workerId]) {
+        if (state.workers[message.workerId].current_job_id !== jobId) {
+            console.log(`[DEBUG] Updating worker ${message.workerId} current_job_id to ${jobId}`);
+            state.workers[message.workerId].current_job_id = jobId;
+        }
+    }
+    
+    // Log after update
+    console.log(`[DEBUG] After update, job:`, state.jobs[jobId]);
+    
+    // Update the UI
+    updateUI();
+}
+
+/**
+ * [2025-05-26T20:40:00-04:00] Update UI to show chunking progress
+ * @param {string} messageId - The message ID
+ * @param {number} chunkId - The current chunk ID
+ * @param {number} totalChunks - The total number of chunks
+ */
+function updateChunkingProgress(messageId, chunkId, totalChunks) {
+    // Create a unique ID for this chunked message
+    const progressId = `chunk-progress-${messageId.substring(0, 8)}`;
+    
+    // Check if we already have a progress element for this message
+    let progressElement = document.getElementById(progressId);
+    
+    // If not, create one
+    if (!progressElement) {
+        // Create a container for the progress bar
+        const container = document.createElement('div');
+        container.id = progressId;
+        container.className = 'chunk-progress-container';
+        container.style.margin = '10px 0';
+        container.style.padding = '10px';
+        container.style.backgroundColor = '#f0f0f0';
+        container.style.borderRadius = '5px';
+        
+        // Add a title
+        const title = document.createElement('div');
+        title.textContent = `Chunked Message: ${messageId.substring(0, 8)}...`;
+        title.style.marginBottom = '5px';
+        title.style.fontWeight = 'bold';
+        container.appendChild(title);
+        
+        // Create the progress bar
+        const progressBar = document.createElement('div');
+        progressBar.className = 'progress';
+        progressBar.style.height = '20px';
+        progressBar.style.backgroundColor = '#e0e0e0';
+        progressBar.style.borderRadius = '4px';
+        progressBar.style.overflow = 'hidden';
+        
+        // Create the progress indicator
+        const progress = document.createElement('div');
+        progress.className = 'progress-bar';
+        progress.style.height = '100%';
+        progress.style.backgroundColor = '#4CAF50';
+        progress.style.width = `${((chunkId + 1) / totalChunks) * 100}%`;
+        progress.style.transition = 'width 0.3s';
+        progressBar.appendChild(progress);
+        container.appendChild(progressBar);
+        
+        // Create the progress text
+        const progressText = document.createElement('div');
+        progressText.className = 'progress-text';
+        progressText.textContent = `Received ${chunkId + 1} of ${totalChunks} chunks (${Math.round(((chunkId + 1) / totalChunks) * 100)}%)`;
+        progressText.style.marginTop = '5px';
+        progressText.style.textAlign = 'center';
+        container.appendChild(progressText);
+        
+        // Add timestamp
+        const timestamp = document.createElement('div');
+        timestamp.className = 'timestamp';
+        timestamp.textContent = `Last update: ${new Date().toLocaleTimeString()}`;
+        timestamp.style.fontSize = '0.8em';
+        timestamp.style.color = '#666';
+        timestamp.style.marginTop = '5px';
+        timestamp.style.textAlign = 'right';
+        container.appendChild(timestamp);
+        
+        // Add to the log container
+        const logContainer = document.getElementById('log-container');
+        logContainer.prepend(container);
+        
+        progressElement = container;
+    } else {
+        // Update existing progress bar
+        const progressBar = progressElement.querySelector('.progress-bar');
+        progressBar.style.width = `${((chunkId + 1) / totalChunks) * 100}%`;
+        
+        // Update progress text
+        const progressText = progressElement.querySelector('.progress-text');
+        progressText.textContent = `Received ${chunkId + 1} of ${totalChunks} chunks (${Math.round(((chunkId + 1) / totalChunks) * 100)}%)`;
+        
+        // Update timestamp
+        const timestamp = progressElement.querySelector('.timestamp');
+        timestamp.textContent = `Last update: ${new Date().toLocaleTimeString()}`;
+    }
+    
+    // If this is the last chunk, mark as complete
+    if (chunkId === totalChunks - 1) {
+        progressElement.style.backgroundColor = '#e8f5e9';
+        progressElement.querySelector('.progress-bar').style.backgroundColor = '#2E7D32';
+        
+        // Add a completion message
+        const completionMsg = document.createElement('div');
+        completionMsg.textContent = 'All chunks received! Message reassembly in progress...';
+        completionMsg.style.marginTop = '5px';
+        completionMsg.style.fontWeight = 'bold';
+        completionMsg.style.color = '#2E7D32';
+        progressElement.appendChild(completionMsg);
+        
+        // Set a timeout to remove the progress bar after a while
+        setTimeout(() => {
+            progressElement.style.transition = 'opacity 1s';
+            progressElement.style.opacity = '0.5';
+        }, 10000);
+    }
+}
+
+/**
  * Handle worker status update message
  * @param {Object} message - Parsed worker status message
  * @param {string} source - Source of the message ('monitor' or 'client')
@@ -1944,6 +2178,7 @@ function handleWorkerStatus(message, source = 'unknown') {
  * Handle error message
  * @param {Object} message - Parsed error message
  * @param {string} source - Source of the message ('monitor' or 'client')
+ * [2025-05-20T11:23:31-04:00] Special handling for unsupported message types
  */
 function handleErrorMessage(message, source = 'unknown') {
     // Extract error information, handling different message formats
@@ -2745,8 +2980,11 @@ function requestStats() {
 function collectSupportedJobTypes() {
     const jobTypes = new Set();
     
-    // Default job type
+    // Default job types
     jobTypes.add('simulation');
+    
+    // [2025-05-26T20:20:00-04:00] Always include chunked_test job type for testing
+    jobTypes.add('chunked_test');
     
     // Collect job types from all workers
     Object.values(state.workers).forEach(worker => {
@@ -2924,12 +3162,20 @@ function updateUI() {
             } 
             // If no current job found by ID, look for any job assigned to this worker with active status
             else {
-                const activeJobsForWorker = Object.values(state.jobs).filter(job => {
-                    const jobWorkerId = job.worker_id || job.workerId;
-                    const jobStatus = job.status || job.jobStatus;
-                    return jobWorkerId === worker.id && 
-                           (jobStatus === 'active' || jobStatus === 'processing');
-                });
+                const activeJobsForWorker = Object.values(state.jobs)
+                    .filter(job => {
+                        const jobWorkerId = job.worker_id || job.workerId;
+                        const jobStatus = job.status || job.jobStatus;
+                        
+                        const isMatch = jobWorkerId === worker.id && 
+                                       (jobStatus === 'active' || jobStatus === 'processing');
+                        
+                        // Log each active job match attempt
+                        if (jobWorkerId === worker.id) {
+                            console.log(`[DEBUG] Job ${job.id || job.jobId} for worker ${worker.id}: status=${jobStatus}, match=${isMatch}`);
+                        }
+                        return isMatch;
+                    });
                 
                 if (activeJobsForWorker.length > 0) {
                     // Use the job with the most recent update
@@ -2993,7 +3239,7 @@ function updateUI() {
                     const jobStatus = job.status || job.jobStatus;
                     
                     const isMatch = jobWorkerId === worker.id && 
-                                    (jobStatus === 'active' || jobStatus === 'processing');
+                                   (jobStatus === 'active' || jobStatus === 'processing');
                     
                     // Log each active job match attempt
                     if (jobWorkerId === worker.id) {
@@ -3004,10 +3250,6 @@ function updateUI() {
             
             console.log(`[DEBUG] Found ${activeJobs.length} active jobs for worker ${worker.id}`);
                 
-            // [2025-04-06 19:44] Removed recent jobs collection as we now have a dedicated Finished Jobs table
-            // Only use active jobs for the worker card
-            const workerJobs = activeJobs;
-            
             // [2025-04-06 19:51] Create the worker card HTML with compact design and placeholders
             workerCard.innerHTML = `
                 <div class="worker-header">
