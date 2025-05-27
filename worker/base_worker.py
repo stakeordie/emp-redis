@@ -5,6 +5,7 @@ import sys
 import asyncio
 import json
 import uuid
+import time  # [2025-05-26T20:45:00-04:00] Added missing time import
 import websockets
 from typing import Dict, List, Any, Optional, Union, cast, TypeVar, Generic
 from enum import Enum, auto

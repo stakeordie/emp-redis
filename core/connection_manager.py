@@ -5,6 +5,8 @@ import uuid
 import logging
 import asyncio
 import hashlib
+import os  # [2025-05-26T20:35:00-04:00] Added missing os import
+import time  # [2025-05-26T20:40:00-04:00] Added missing time import
 import websockets
 from typing import Dict, List, Any, Optional, Union, Callable, Awaitable, Tuple, cast
 from websockets.exceptions import ConnectionClosed, ConnectionClosedError
@@ -789,10 +791,12 @@ class ConnectionManager(ConnectionManagerInterface):
             True if the message was sent successfully, False otherwise
         """
         # Get the worker's WebSocket connection
-        websocket = self.get_worker_connection(worker_id)
-        if not websocket:
+        # [2025-05-26T20:45:00-04:00] Fixed to directly access worker_connections dictionary
+        if worker_id not in self.worker_connections:
             logger.error(f"[connection_manager.py send_to_worker()] Worker {worker_id} not connected")
             return False
+            
+        websocket = self.worker_connections[worker_id]
         
         try:
             # Convert message to string if it's a dict or BaseMessage

@@ -68,6 +68,39 @@ const DEFAULT_PAYLOADS = {
             "purpose": "Testing chunked message handling implementation"
         }
     }, null, 2),
+    
+    // [2025-05-26T20:50:00-04:00] Special chunked test payload for a1111 (still uses a1111 job type)
+    "a1111_chunked_test": JSON.stringify({
+        "endpoint": "txt2img",
+        "method": "POST",
+        "payload": {
+            "prompt": "a detailed photograph of a cat in a garden" + " with flowers".repeat(10000), // Make prompt very large to force chunking
+            "negative_prompt": "blurry, bad quality, low resolution, poor lighting" + " terrible quality".repeat(5000),
+            "width": 1024,
+            "height": 1024,
+            "steps": 20,
+            "cfg_scale": 7,
+            "sampler_name": "Euler a",
+            "sampler_index": "Euler a",
+            "seed": -1,
+            "batch_size": 1,
+            "n_iter": 1,
+            "override_settings": {
+                "sd_model_checkpoint": "sd_xl_base_1.0_0.9vae.safetensors"
+            },
+            "override_settings_restore_afterwards": true,
+            "send_images": true,
+            "save_images": false,
+            "large_data": "A".repeat(1000000) // 1MB of 'A' characters to force chunking
+        },
+        "test_metadata": {
+            "test_id": "a1111-chunk-test-" + Math.floor(Math.random() * 1000000),
+            "expected_chunks": 2, // With 1MB chunk size, this should create 2 chunks
+            "created_by": "Simple Redis Monitor",
+            "purpose": "Testing chunked message handling with a1111 job type",
+            "timestamp": new Date().toISOString()
+        }
+    }, null, 2),
     // Simulation job type (default)
     "simulation": JSON.stringify({
         "steps": 20,
@@ -2983,8 +3016,8 @@ function collectSupportedJobTypes() {
     // Default job types
     jobTypes.add('simulation');
     
-    // [2025-05-26T20:20:00-04:00] Always include chunked_test job type for testing
-    jobTypes.add('chunked_test');
+    // [2025-05-26T20:50:00-04:00] We don't add special test payloads as job types
+    // They should be selected from the payload template dropdown instead
     
     // Collect job types from all workers
     Object.values(state.workers).forEach(worker => {
@@ -3038,6 +3071,105 @@ function updateJobTypeDropdown() {
 }
 
 /**
+ * [2025-05-26T20:55:00-04:00] Get all available payload templates for a job type
+ * @param {string} jobType - The job type to get templates for
+ * @returns {Object} - Object with template names as keys and payloads as values
+ */
+function getPayloadTemplates(jobType) {
+    const templates = {};
+    
+    // Add the default template
+    if (DEFAULT_PAYLOADS[jobType]) {
+        templates['default'] = DEFAULT_PAYLOADS[jobType];
+    }
+    
+    // Add special templates based on job type
+    if (jobType === 'a1111' && DEFAULT_PAYLOADS['a1111_chunked_test']) {
+        templates['chunked_test'] = DEFAULT_PAYLOADS['a1111_chunked_test'];
+    }
+    
+    // If no templates found, use simulation as fallback
+    if (Object.keys(templates).length === 0) {
+        templates['default'] = DEFAULT_PAYLOADS['simulation'];
+    }
+    
+    return templates;
+}
+
+/**
+ * [2025-05-26T20:55:00-04:00] Update the payload template dropdown based on the selected job type
+ * @param {string} jobType - The selected job type
+ */
+function updatePayloadTemplateDropdown(jobType) {
+    // Create the dropdown if it doesn't exist
+    let templateDropdown = document.getElementById('payload-template-dropdown');
+    
+    if (!templateDropdown) {
+        // Create the dropdown element
+        templateDropdown = document.createElement('select');
+        templateDropdown.id = 'payload-template-dropdown';
+        templateDropdown.className = 'form-control';
+        
+        // Create a label for the dropdown
+        const label = document.createElement('label');
+        label.htmlFor = 'payload-template-dropdown';
+        label.textContent = 'Payload Template:';
+        
+        // Create a container for the dropdown
+        const container = document.createElement('div');
+        container.className = 'form-group';
+        container.appendChild(label);
+        container.appendChild(templateDropdown);
+        
+        // Add the container after the job type dropdown
+        const jobTypeGroup = document.querySelector('select#job-type').closest('.form-group');
+        jobTypeGroup.parentNode.insertBefore(container, jobTypeGroup.nextSibling);
+        
+        // Add event listener to update payload when template changes
+        templateDropdown.addEventListener('change', function() {
+            const selectedTemplate = this.value;
+            const jobType = document.getElementById('job-type').value;
+            const templates = getPayloadTemplates(jobType);
+            
+            if (templates[selectedTemplate]) {
+                document.getElementById('job-payload').value = templates[selectedTemplate];
+            }
+        });
+    }
+    
+    // Get templates for the selected job type
+    const templates = getPayloadTemplates(jobType);
+    
+    // Save current selection if any
+    const currentSelection = templateDropdown.value;
+    
+    // Clear existing options
+    templateDropdown.innerHTML = '';
+    
+    // Add options to dropdown
+    Object.keys(templates).forEach(templateName => {
+        const option = document.createElement('option');
+        option.value = templateName;
+        option.textContent = templateName.charAt(0).toUpperCase() + templateName.slice(1).replace('_', ' ');
+        templateDropdown.appendChild(option);
+    });
+    
+    // Restore previous selection if it exists in the new options
+    if (Object.keys(templates).includes(currentSelection)) {
+        templateDropdown.value = currentSelection;
+    } else if (Object.keys(templates).length > 0) {
+        // Set to first option if previous selection doesn't exist
+        templateDropdown.value = Object.keys(templates)[0];
+    }
+    
+    // Show or hide the dropdown based on whether there are multiple templates
+    templateDropdown.closest('.form-group').style.display = 
+        Object.keys(templates).length > 1 ? 'block' : 'none';
+    
+    console.log(`[2025-05-26T20:55:00-04:00] Updated payload template dropdown with ${Object.keys(templates).length} options`);
+}
+
+/**
  * [2025-05-19T17:54:00-04:00] Update the job payload based on the selected job type
  * @param {string} jobType - The selected job type
  */
@@ -3050,6 +3182,9 @@ function updateJobPayload(jobType) {
     
     // Update the payload textarea
     payloadTextarea.value = defaultPayload;
+    
+    // Update the payload template dropdown
+    updatePayloadTemplateDropdown(jobType);
     
     console.log(`[2025-05-19T17:54:00-04:00] Updated job payload for job type: ${jobType}`);
 }

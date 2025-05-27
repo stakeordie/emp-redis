@@ -4,7 +4,31 @@ All notable changes to the EMP Redis project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- [2025-05-26T21:25:00-04:00] Fixed critical connection issues in hub and worker services:
+  - Added missing 'os' and 'time' module imports in connection_manager.py
+  - Added missing 'time' module import in base_worker.py
+  - Fixed send_to_worker method to directly access worker_connections dictionary
+  - Fixed connector_loader to properly skip base connector classes
+  - Fixed A1111 connector authentication:
+    - Implemented custom _get_headers method for A1111 connector
+    - Added proper UTF-8 encoding for authentication credentials
+    - Enhanced authentication debugging with detailed logging
+    - Added response body and headers logging for authentication failures
+  - Improved exception handling in A1111 health check method
+  - Resolved worker registration errors and connection handling
+  - Fixed chunk cleanup error in BaseWorker
+
 ### Added
+- [2025-05-26T20:55:00-04:00] Enhanced simple Redis monitor with payload template system:
+  - Added payload template dropdown to select between different payloads for the same job type
+  - Created a1111_chunked_test template with oversized payload to trigger chunking
+  - Added dynamic template discovery based on job type
+  - Implemented automatic UI updates when job type changes
+  - Added large prompt and negative prompt fields to force message chunking
+  - Included test metadata for tracking chunked message processing
+  - Designed to test real-world chunked message scenarios with A1111 connector
+
 - [2025-05-26T19:30:00-04:00] Implemented robust chunked message handling system:
   - Added hash-based chunking mechanism for large WebSocket messages
   - Implemented chunk storage and reassembly in BaseWorker

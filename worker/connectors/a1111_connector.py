@@ -98,9 +98,20 @@ class A1111Connector(RESTSyncConnector):
                 # CRITICAL: Always use connector_id for job_type
                 self.job_type = self.connector_id
             
-        # Authentication settings - use ComfyUI environment variables
-        self.username = os.environ.get("WORKER_COMFYUI_USERNAME", os.environ.get("COMFYUI_USERNAME"))
-        self.password = os.environ.get("WORKER_COMFYUI_PASSWORD", os.environ.get("COMFYUI_PASSWORD"))
+        # [2025-05-26T21:00:00-04:00] Fixed authentication to use A1111 credentials instead of ComfyUI
+        self.username = os.environ.get("WORKER_A1111_USERNAME", os.environ.get("A1111_USERNAME"))
+        self.password = os.environ.get("WORKER_A1111_PASSWORD", os.environ.get("A1111_PASSWORD"))
+        
+        # Log authentication settings (without exposing password)
+        if self.username:
+            logger.debug(f"[a1111_connector.py __init__()] Using authentication with username: {self.username}")
+        else:
+            logger.debug(f"[a1111_connector.py __init__()] No authentication credentials provided")
+            
+        # [2025-05-26T21:20:00-04:00] Added debug logging for authentication settings
+        logger.debug(f"[a1111_connector.py __init__()] A1111 authentication configured with username: {self.username or 'None'}")
+        if not self.username or not self.password:
+            logger.warning(f"[a1111_connector.py __init__()] Missing A1111 authentication credentials - API calls may fail")
         
         # Connection timeout settings
         # Updated: 2025-04-17T14:10:00-04:00 - Added configurable connection timeout
@@ -115,6 +126,33 @@ class A1111Connector(RESTSyncConnector):
             "api_prefix": self.api_prefix,
             "connection_timeout": self.connection_timeout
         }
+        
+    # [2025-05-26T21:25:00-04:00] Added custom _get_headers method for A1111 authentication
+    def _get_headers(self) -> Dict[str, str]:
+        """Get headers for A1111 API requests with proper authentication
+        
+        Returns:
+            Dict[str, str]: Headers for A1111 API requests
+        """
+        # Create basic headers
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        }
+        
+        # Add authentication if credentials are provided
+        if self.username and self.password:
+            import base64
+            # Format credentials exactly as expected by nginx Basic Auth
+            credentials = f"{self.username}:{self.password}"
+            # Ensure proper UTF-8 encoding and decoding
+            encoded_credentials = base64.b64encode(credentials.encode('utf-8')).decode('utf-8')
+            headers["Authorization"] = f"Basic {encoded_credentials}"
+            logger.debug(f"[a1111_connector.py _get_headers()] Created auth header for user: {self.username}")
+        else:
+            logger.warning(f"[a1111_connector.py _get_headers()] No authentication credentials provided")
+            
+        return headers
     
     async def health_check(self) -> bool:
         """Check if the A1111 API is available
@@ -150,32 +188,41 @@ class A1111Connector(RESTSyncConnector):
         # [2025-05-25T18:45:00-04:00] Added health check method for A1111 service
         # [2025-05-25T21:40:00-04:00] Fixed type errors by adding proper None handling
         try:
-            # Make sure self.session is not None
-            if self.session is None:
-                logger.error(f"[2025-05-25T21:40:00-04:00] Session is None, cannot perform health check")
-                return False
-                
-            # Try to connect to the A1111 API
-            logger.debug(f"[2025-05-25T18:45:00-04:00] Checking A1111 health at {self.base_url}{self.api_prefix}/progress")
+            # Get the headers and log them for debugging
+            headers = self._get_headers()
+            auth_header = headers.get('Authorization', 'None')
+            # Mask the actual credentials in the logs
+            masked_auth = 'Basic ******' if auth_header.startswith('Basic ') else auth_header
             
-            async with self.session.get(f"{self.base_url}{self.api_prefix}/progress", timeout=5) as response:
-                # [2025-05-25T21:57:00-04:00] Explicitly handle the response status to ensure bool return type
+            logger.debug(f"[a1111_connector.py check_health()] Checking A1111 health at {self.base_url}{self.api_prefix}/progress")
+            logger.debug(f"[a1111_connector.py check_health()] Using authentication header: {masked_auth}")
+            
+            async with self.session.get(f"{self.base_url}{self.api_prefix}/progress", headers=headers, timeout=5) as response:
                 status_code = response.status
                 if status_code == 200:
-                    logger.debug(f"[2025-05-25T18:45:00-04:00] A1111 service is healthy (status code: 200)")
-                    return bool(True)  # Explicit cast to bool
+                    logger.debug(f"[a1111_connector.py check_health()] A1111 service is available")
+                    return True
                 else:
-                    logger.warning(f"[2025-05-25T18:45:00-04:00] A1111 service returned status code: {status_code}")
-                    return bool(False)  # Explicit cast to bool
-        except aiohttp.ClientConnectorError as e:
-            logger.error(f"[2025-05-25T18:45:00-04:00] A1111 service connection error: {e}")
-            return False
+                    # Log more details about the failed response
+                    logger.warning(f"[a1111_connector.py check_health()] A1111 service returned status code: {status_code}")
+                    try:
+                        response_text = await response.text()
+                        logger.warning(f"[a1111_connector.py check_health()] Response body: {response_text[:200]}...")
+                    except Exception as text_error:
+                        logger.warning(f"[a1111_connector.py check_health()] Could not read response body: {str(text_error)}")
+                    
+                    # Log response headers
+                    logger.warning(f"[a1111_connector.py check_health()] Response headers: {dict(response.headers)}")
+                    return False
+        # [2025-05-26T21:20:00-04:00] Fixed exception handling to catch all error types properly
         except asyncio.TimeoutError:
-            logger.error(f"[2025-05-25T18:45:00-04:00] A1111 service connection timeout")
+            logger.error(f"[a1111_connector.py check_health()] A1111 service connection timeout")
             return False
         except Exception as e:
-            # [2025-05-25T21:40:00-04:00] Added general exception handling to ensure we always return a boolean
-            logger.error(f"[2025-05-25T21:40:00-04:00] Unexpected error during A1111 health check: {str(e)}")
+            # [2025-05-26T21:10:00-04:00] Added clear source identification to log messages
+            logger.error(f"[a1111_connector.py check_health()] A1111 service health check error: {e}")
+            # Log the full exception details for debugging
+            logger.debug(f"[a1111_connector.py check_health()] Exception details: {type(e).__name__}: {str(e)}")
             return False
     
     async def initialize(self) -> bool:
@@ -186,22 +233,25 @@ class A1111Connector(RESTSyncConnector):
         """
         # [2025-05-25T21:50:00-04:00] Fixed type error by ensuring the method always returns a boolean value
         try:
-            # [2025-05-25T18:45:00-04:00] Enhanced initialization with health check
-            logger.debug(f"[2025-05-25T18:45:00-04:00] Initializing A1111 connector with base URL: {self.base_url}")
+            # [2025-05-26T21:10:00-04:00] Improved logging with consistent format
+            logger.debug(f"[a1111_connector.py initialize()] Initializing A1111 connector with base URL: {self.base_url}")
+            logger.debug(f"[a1111_connector.py initialize()] Connection details: base_url={self.base_url}, api_prefix={self.api_prefix}")
             
             # Set up session
             self.session = aiohttp.ClientSession()
             
             # Check if the A1111 service is available
             is_healthy = await self.check_health()
+            # A1111 service is not available, but we'll initialize anyway
             if not is_healthy:
-                logger.warning(f"[2025-05-25T21:50:00-04:00] A1111 service is not available, but connector will be initialized anyway")
+                logger.warning(f"[a1111_connector.py initialize()] A1111 service is not available, but connector will be initialized anyway")
             
             # Always return True for now to allow the connector to be used even if A1111 is not running
             # This allows the worker to accept A1111 jobs and queue them until A1111 is available
             return True
         except Exception as e:
-            logger.error(f"[a1111_connector.py initialize] Error initializing A1111 connector: {str(e)}")
+            # [2025-05-26T21:10:00-04:00] Fixed duplicate log message
+            logger.error(f"[a1111_connector.py initialize()] Error initializing A1111 connector: {str(e)}")
             return False
     
     # [2025-05-26T18:10:00-04:00] Add method to strip base64 images from payloads

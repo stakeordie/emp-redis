@@ -282,7 +282,11 @@ async def load_connectors() -> Dict[str, ConnectorInterface]:
                                 logger.debug(f"[connector_loader.py load_connectors()] Found connector class {cls_name} with connector_id='{connector_name}'")
                                 break
                             else:
-                                logger.error(f"[connector_loader.py load_connectors() DEBUG] Class {cls_name} connector_id='{connector_id_value}' doesn't match '{connector_name}'")
+                                logger.error(f"[connector_loader.py load_connectors() ERROR] Class {cls_name} connector_id='{connector_id_value}' doesn't match '{connector_name}'")
+                        except NotImplementedError as base_error:
+                            # [2025-05-26T21:00:00-04:00] Skip base classes that raise NotImplementedError
+                            logger.debug(f"[connector_loader.py load_connectors() DEBUG] Skipping base class {cls_name}: {base_error}")
+                            continue
                         except Exception as prop_error:
                             logger.error(f"[connector_loader.py load_connectors() ERROR] Error accessing connector_id property on {cls_name}: {prop_error}")
                     else:

@@ -31,7 +31,7 @@ services:
       - WORKER_USE_SSL=FALSE
       - WORKER_HEARTBEAT_INTERVAL=20
       - WORKER_LOG_LEVEL=INFO
-      - WORKER_CONNECTORS=simulation,comfyui
+      - WORKER_CONNECTORS=simulation,comfyui,a1111
       - WORKER_SIMULATION_PROCESSING_TIME=5
       - WORKER_SIMULATION_STEPS=25
       - WORKER_COMFYUI_HOST=188.116.34.3
@@ -40,6 +40,8 @@ services:
       - WORKER_A1111_PORT=39680
       - WORKER_COMFYUI_USERNAME=sd
       - WORKER_COMFYUI_PASSWORD=UbjpkE6kw
+      - WORKER_A1111_USERNAME=sd
+      - WORKER_A1111_PASSWORD=UbjpkE6kw
       - PYTHONPATH=/app # Ensure core modules can be imported/
     networks:
       - redis-network
@@ -62,7 +64,7 @@ services:
       - WORKER_USE_SSL=FALSE
       - WORKER_HEARTBEAT_INTERVAL=20
       - WORKER_LOG_LEVEL=INFO
-      - WORKER_CONNECTORS=simulation,comfyui
+      - WORKER_CONNECTORS=simulation,comfyui,a1111
       - WORKER_SIMULATION_PROCESSING_TIME=2
       - WORKER_SIMULATION_STEPS=45
       - WORKER_COMFYUI_HOST=142.170.86.88
